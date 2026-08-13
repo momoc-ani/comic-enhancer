@@ -607,6 +607,8 @@ def test_manganinja_workflow_declares_page_and_reference_inputs():
     assert sampler["inputs"]["width"] == 512
     assert sampler["inputs"]["height"] == 512
     assert sampler["inputs"]["guidance_scale_point"] > 0
+    # The sampler must preprocess ordinary manga panels into lineart itself.
+    assert sampler["inputs"]["is_lineart"] is False
     assert any(
         node.get("_meta", {}).get("title") == "REFERENCE_POINTS"
         for node in workflow.values()

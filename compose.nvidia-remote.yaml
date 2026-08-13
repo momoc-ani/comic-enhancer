@@ -72,6 +72,7 @@ services:
     volumes:
       - comic-enhancer-runtime:/app/runtime
       - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/models
+      - ./workflows:/app/workflows:ro
 
 volumes:
   comic-enhancer-runtime:
