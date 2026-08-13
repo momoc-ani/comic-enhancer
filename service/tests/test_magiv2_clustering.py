@@ -48,6 +48,8 @@ def test_cluster_propagation_requires_an_anchor_and_matching_candidate():
                 "character_id": "anilist:277688",
                 "character_name": "Elymas Edvan",
                 "reference_url": "https://example/elymas.png",
+                "portrait_reference_url": "https://example/elymas-face.png",
+                "full_body_reference_url": "https://example/elymas-full.png",
                 "status": "accepted",
                 "confidence": 0.41,
                 "best_distance": 0.59,
@@ -74,6 +76,8 @@ def test_cluster_propagation_requires_an_anchor_and_matching_candidate():
                 "character_id": "anilist:277688",
                 "character_name": "Elymas Edvan",
                 "reference_url": "https://example/elymas.png",
+                "portrait_reference_url": "https://example/elymas-face.png",
+                "full_body_reference_url": "https://example/elymas-full.png",
                 "best_distance": 0.59,
                 "margin": 0.16,
             }
@@ -83,6 +87,8 @@ def test_cluster_propagation_requires_an_anchor_and_matching_candidate():
                 "character_id": "anilist:277688",
                 "character_name": "Elymas Edvan",
                 "reference_url": "https://example/elymas.png",
+                "portrait_reference_url": "https://example/elymas-face.png",
+                "full_body_reference_url": "https://example/elymas-full.png",
                 "best_distance": 0.678,
                 "margin": 0.16,
             }
@@ -99,6 +105,12 @@ def test_cluster_propagation_requires_an_anchor_and_matching_candidate():
 
     assert propagated[1][0]["status"] == "accepted"
     assert propagated[1][0]["character_id"] == "anilist:277688"
+    assert propagated[1][0]["portrait_reference_url"] == (
+        "https://example/elymas-face.png"
+    )
+    assert propagated[1][0]["full_body_reference_url"] == (
+        "https://example/elymas-full.png"
+    )
     assert propagated[1][0]["reason"] == "accepted by consistent cross-page cluster"
 
 

@@ -141,6 +141,8 @@ class CharacterMatch(BaseModel):
     character_id: str | None = None
     character_name: str = ""
     reference_url: str | None = None
+    portrait_reference_url: str | None = None
+    full_body_reference_url: str | None = None
     status: str = "rejected"
     confidence: float = Field(default=0, ge=0, le=1)
     best_distance: float | None = Field(default=None, ge=0)
@@ -193,6 +195,8 @@ class CharacterBankEntry(BaseModel):
     name: str
     image_url: str
     provider: str = ""
+    portrait_reference_url: str | None = None
+    full_body_reference_url: str | None = None
 
 
 class ChapterAnalysisResult(BaseModel):

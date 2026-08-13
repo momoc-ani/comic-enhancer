@@ -141,6 +141,8 @@ def propagate_cluster_matches(
                         "character_id": None,
                         "character_name": "",
                         "reference_url": None,
+                        "portrait_reference_url": None,
+                        "full_body_reference_url": None,
                         "status": "rejected",
                         "confidence": 0.0,
                         "reason": "cross-page cluster has conflicting candidates",
@@ -168,6 +170,12 @@ def propagate_cluster_matches(
                     "character_id": candidate["character_id"],
                     "character_name": candidate["character_name"],
                     "reference_url": candidate["reference_url"],
+                    "portrait_reference_url": candidate.get(
+                        "portrait_reference_url"
+                    ),
+                    "full_body_reference_url": candidate.get(
+                        "full_body_reference_url"
+                    ),
                     "status": "accepted",
                     "confidence": max(0.0, min(1.0, (1.0 - best_distance) * 0.85)),
                     "reason": "accepted by consistent cross-page cluster",

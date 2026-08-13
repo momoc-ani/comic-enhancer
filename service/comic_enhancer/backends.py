@@ -19,7 +19,7 @@ from .workflows import WorkflowLoader
 
 
 logger = logging.getLogger(__name__)
-REFERENCE_PROCESSING_REVISION = "reference-focus-anchors-v2"
+REFERENCE_PROCESSING_REVISION = "reference-focus-anchors-v3"
 CHARACTER_ANCHOR_FRACTIONS = (0.18, 0.40, 0.65, 0.82)
 
 
@@ -346,9 +346,14 @@ class ComfyUIBackend(InferenceBackend):
                     focus = self._character_focus_region(character, panel)
                     focus_bytes = self._crop_bytes(source, focus)
                     target_points = self._target_points([character], focus)
+                    reference_bytes = self._character_reference(
+                        character,
+                        panel,
+                        assets.character_references,
+                    )
                     reference_board, reference_points = self._reference_board(
                         [character],
-                        assets.character_references,
+                        {character.match.character_id: reference_bytes},
                         anchors_per_character=len(target_points),
                     )
                     generated = self._run_reference_prompt(
@@ -451,6 +456,16 @@ class ComfyUIBackend(InferenceBackend):
             },
             character_instance_ids=[character.instance_id],
         )
+
+    @staticmethod
+    def _character_reference(character, panel, references: dict[str, bytes]) -> bytes:
+        character_id = character.match.character_id
+        width = character.box.x2 - character.box.x1
+        height = character.box.y2 - character.box.y1
+        panel_width = panel.box.x2 - panel.box.x1
+        is_portrait = height / max(1, width) < 1.4 or width / panel_width >= 0.8
+        variant = "portrait" if is_portrait else "full-body"
+        return references.get(f"{character_id}:{variant}") or references[character_id]
 
     @staticmethod
     def _reference_board(

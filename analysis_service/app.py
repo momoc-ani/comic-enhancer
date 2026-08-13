@@ -42,7 +42,7 @@ SAM_CHECKPOINT = Path(
 SAM_MODEL_TYPE = os.environ.get("MAGIV2_SAM_MODEL_TYPE", "vit_b")
 SAM_MIN_SCORE = float(os.environ.get("MAGIV2_SAM_MIN_SCORE", "0.85"))
 ANALYZER_PROFILE = (
-    f"magiv2@{MODEL_REVISION[:12]}+cluster-v1+multi-view-v1+anchor-v2+sam-v1"
+    f"magiv2@{MODEL_REVISION[:12]}+cluster-v1+multi-view-v1+anchor-v2+sam-v1+reference-view-v1"
 )
 
 
@@ -51,6 +51,8 @@ class CharacterBankEntry(BaseModel):
     name: str
     image_url: str
     provider: str = ""
+    portrait_reference_url: str | None = None
+    full_body_reference_url: str | None = None
 
 
 class State:
@@ -320,6 +322,8 @@ def match_characters(character_embeddings, raw_results, bank_arrays, bank):
             "character_id": entry.character_id,
             "character_name": entry.name,
             "reference_url": entry.image_url,
+            "portrait_reference_url": entry.portrait_reference_url,
+            "full_body_reference_url": entry.full_body_reference_url,
             "best_distance": best,
             "second_distance": second,
             "margin": margin,
@@ -331,6 +335,12 @@ def match_characters(character_embeddings, raw_results, bank_arrays, bank):
                 "character_id": entry.character_id if accepted else None,
                 "character_name": entry.name if accepted else "",
                 "reference_url": entry.image_url if accepted else None,
+                "portrait_reference_url": (
+                    entry.portrait_reference_url if accepted else None
+                ),
+                "full_body_reference_url": (
+                    entry.full_body_reference_url if accepted else None
+                ),
                 "status": "accepted" if accepted else "rejected",
                 "confidence": confidence,
                 "best_distance": best,

@@ -28,14 +28,27 @@ def png_bytes():
     return stream.getvalue()
 
 
-def reference_bytes(size, color, *, grayscale=False):
+def reference_bytes(size, color, *, grayscale=False, full_body=False):
     stream = BytesIO()
     mode = "L" if grayscale else "RGB"
     image = Image.new(mode, size, 235 if grayscale else color)
-    stripe_width = max(1, size[0] // 12)
-    fill = 40 if grayscale else (30, 80, 140)
-    for x in range(0, size[0], stripe_width * 2):
-        image.paste(fill, (x, 0, min(size[0], x + stripe_width), size[1]))
+    if full_body:
+        fill = 40 if grayscale else (30, 80, 140)
+        image = Image.new(mode, size, 255 if grayscale else "white")
+        image.paste(
+            fill,
+            (
+                round(size[0] * 0.30),
+                round(size[1] * 0.03),
+                round(size[0] * 0.70),
+                round(size[1] * 0.97),
+            ),
+        )
+    else:
+        stripe_width = max(1, size[0] // 12)
+        fill = 40 if grayscale else (30, 80, 140)
+        for x in range(0, size[0], stripe_width * 2):
+            image.paste(fill, (x, 0, min(size[0], x + stripe_width), size[1]))
     image.save(stream, format="PNG")
     return stream.getvalue()
 
@@ -119,7 +132,7 @@ def test_manganinja_mode_is_valid():
 def test_effective_analyzer_profile_tracks_reference_selection_revision():
     assert effective_analyzer_profile(None) is None
     assert effective_analyzer_profile("magiv2@test") == (
-        "magiv2@test+reference-full-body-v1"
+        "magiv2@test+reference-view-v2"
     )
 
 
@@ -297,11 +310,17 @@ def test_analyze_deduplicates_characters_and_selects_best_color_reference(
         external_ids={"bangumi": "418302", "anilist": "150193"},
     )
     urls = {
-        "bgm-elymas": reference_bytes((1000, 1400), (120, 70, 50)),
+        "bgm-elymas": reference_bytes(
+            (1000, 1400), (120, 70, 50), full_body=True
+        ),
         "ani-elymas": reference_bytes((230, 345), (220, 60, 90)),
-        "bgm-luce": reference_bytes((690, 1050), (100, 80, 180)),
+        "bgm-luce": reference_bytes(
+            (690, 1050), (100, 80, 180), full_body=True
+        ),
         "ani-luce": reference_bytes((230, 345), (230, 30, 100)),
-        "bgm-maris": reference_bytes((700, 1170), (80, 130, 180)),
+        "bgm-maris": reference_bytes(
+            (700, 1170), (80, 130, 180), full_body=True
+        ),
         "ani-maris": reference_bytes((230, 345), 0, grayscale=True),
         "ani-ares": reference_bytes((230, 345), 0, grayscale=True),
     }
@@ -383,6 +402,16 @@ def test_analyze_deduplicates_characters_and_selects_best_color_reference(
     assert {
         entry.character_id for entry in entries if entry.name == "Elymas Edvan"
     } == {"work:heavy-knight:elymas"}
+    assert {
+        entry.portrait_reference_url
+        for entry in entries
+        if entry.name == "Elymas Edvan"
+    } == {"ani-elymas"}
+    assert {
+        entry.full_body_reference_url
+        for entry in entries
+        if entry.name == "Elymas Edvan"
+    } == {"bgm-elymas"}
     assert [entry.name for entry in entries[:3]] == [
         "Elymas Edvan",
         "Luce Rubis",

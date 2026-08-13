@@ -14,7 +14,7 @@ from PIL import Image, ImageFilter, ImageOps, ImageStat
 
 
 logger = logging.getLogger(__name__)
-REFERENCE_SELECTION_REVISION = "reference-full-body-v1"
+REFERENCE_SELECTION_REVISION = "reference-view-v2"
 
 
 @dataclass(frozen=True)

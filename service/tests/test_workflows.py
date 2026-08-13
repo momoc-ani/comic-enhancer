@@ -638,6 +638,42 @@ def test_character_focus_region_clamps_small_character_padding():
     assert focus.box == BoundingBox(x1=0, y1=0, x2=46, y2=58)
 
 
+def test_character_reference_uses_portrait_for_closeup_and_full_body_for_distance():
+    references = {
+        "character": b"default",
+        "character:portrait": b"portrait",
+        "character:full-body": b"full-body",
+    }
+    closeup = CharacterInstance(
+        instance_id="closeup",
+        cluster_id="cluster",
+        box=BoundingBox(x1=0, y1=10, x2=314, y2=548),
+        match=CharacterMatch(character_id="character"),
+    )
+    distance = CharacterInstance(
+        instance_id="distance",
+        cluster_id="cluster",
+        box=BoundingBox(x1=86, y1=257, x2=301, y2=747),
+        match=CharacterMatch(character_id="character"),
+    )
+    shoulder_closeup = CharacterInstance(
+        instance_id="shoulder-closeup",
+        cluster_id="cluster",
+        box=BoundingBox(x1=50, y1=200, x2=250, y2=330),
+        match=CharacterMatch(character_id="character"),
+    )
+    panel = PanelRegion(
+        panel_index=0,
+        box=BoundingBox(x1=0, y1=0, x2=306, y2=762),
+    )
+
+    assert ComfyUIBackend._character_reference(closeup, panel, references) == b"portrait"
+    assert ComfyUIBackend._character_reference(
+        shoulder_closeup, panel, references
+    ) == b"portrait"
+    assert ComfyUIBackend._character_reference(distance, panel, references) == b"full-body"
+
+
 def test_reference_assets_require_character_segmentation_mask():
     assets = reference_assets()
     assets.analysis.characters[0].mask = None

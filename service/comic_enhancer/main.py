@@ -257,15 +257,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         match.status != "accepted"
                         or not match.character_id
                         or not match.reference_url
-                        or match.character_id in character_references
                     ):
                         continue
-                    reference = await asyncio.to_thread(
-                        references.get,
-                        match.reference_url,
-                    )
-                    if reference is not None:
-                        character_references[match.character_id] = reference
+                    reference_urls = {
+                        match.character_id: match.reference_url,
+                        f"{match.character_id}:portrait": (
+                            match.portrait_reference_url
+                        ),
+                        f"{match.character_id}:full-body": (
+                            match.full_body_reference_url
+                        ),
+                    }
+                    for reference_key, reference_url in reference_urls.items():
+                        if reference_key in character_references or not reference_url:
+                            continue
+                        reference = await asyncio.to_thread(
+                            references.get,
+                            reference_url,
+                        )
+                        if reference is not None:
+                            character_references[reference_key] = reference
         return await processor.process(
             image_bytes,
             None,
@@ -374,6 +385,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     provider=str(item["provider"]),
                 ),
             )
+            portrait = max(
+                (item for item in eligible if not item["quality"].full_body),
+                key=lambda item: reference_quality_rank(
+                    item["quality"],
+                    confirmed_source=bool(item["confirmed_source"]),
+                    provider=str(item["provider"]),
+                ),
+                default=None,
+            )
+            full_body = max(
+                (item for item in eligible if item["quality"].full_body),
+                key=lambda item: reference_quality_rank(
+                    item["quality"],
+                    confirmed_source=bool(item["confirmed_source"]),
+                    provider=str(item["provider"]),
+                ),
+                default=None,
+            )
             quality = best["quality"]
             match_views = [item for item in candidates if item["quality"].usable]
             match_views.sort(
@@ -393,6 +422,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             name=str(best["name"]),
                             image_url=str(best["image_url"]),
                             provider=str(view["provider"]),
+                            portrait_reference_url=(
+                                str(portrait["image_url"]) if portrait else None
+                            ),
+                            full_body_reference_url=(
+                                str(full_body["image_url"]) if full_body else None
+                            ),
                         ),
                         view["image_bytes"],
                     )
@@ -403,6 +438,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "character_id": character_id,
                     "name": best["name"],
                     "provider": best["provider"],
+                    "portrait_provider": portrait["provider"] if portrait else None,
+                    "full_body_provider": full_body["provider"] if full_body else None,
                     "size": f"{quality.width}x{quality.height}",
                     "saturation": round(quality.saturation, 1),
                     "alternatives": len(candidates),
