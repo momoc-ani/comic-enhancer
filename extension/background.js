@@ -22,7 +22,16 @@ const SUPPORTED_PAGE_PATTERNS = Object.freeze([
 chrome.runtime.onInstalled.addListener(async () => {
   const stored = await chrome.storage.local.get(null);
   const profile = stored.profile || inferLegacyProfile(stored);
-  await chrome.storage.local.set({ ...DEFAULT_SETTINGS, ...stored, profile });
+  const remoteApiBaseUrl =
+    stored.remoteApiBaseUrl ||
+    (profile.startsWith("remote-") ? stored.apiBaseUrl : "") ||
+    DEFAULT_SETTINGS.remoteApiBaseUrl;
+  await chrome.storage.local.set({
+    ...DEFAULT_SETTINGS,
+    ...stored,
+    profile,
+    remoteApiBaseUrl,
+  });
   await injectIntoOpenMangaTabs();
 });
 
@@ -81,6 +90,14 @@ function inferLegacyProfile(settings) {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "COMIC_ENHANCER_REFRESH_TABS") {
+    refreshOpenMangaTabs(message.settings).then(
+      () => sendResponse({ ok: true }),
+      (error) => sendResponse({ ok: false, error: normalizeError(error) }),
+    );
+    return true;
+  }
+
   if (message?.type === "COMIC_ENHANCER_SETTINGS") {
     chrome.storage.local.get(DEFAULT_SETTINGS).then(sendResponse);
     return true;
@@ -104,6 +121,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return false;
 });
+
+async function refreshOpenMangaTabs(settings) {
+  const tabs = await chrome.tabs.query({ url: [...SUPPORTED_PAGE_PATTERNS] });
+  await Promise.allSettled(
+    tabs.map((tab) =>
+      Number.isInteger(tab.id)
+        ? chrome.tabs.sendMessage(tab.id, {
+            type: "COMIC_ENHANCER_REFRESH_SETTINGS",
+            settings,
+          })
+        : Promise.resolve(),
+    ),
+  );
+}
 
 async function processPage(payload) {
   const settings = await chrome.storage.local.get(DEFAULT_SETTINGS);

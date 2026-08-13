@@ -88,7 +88,10 @@ async function load() {
   elements.enabled.checked = Boolean(stored.enabled);
   elements.profile.value = profile;
   elements.apiToken.value = stored.apiToken || "";
-  elements.remoteApiBaseUrl.value = stored.remoteApiBaseUrl || REMOTE_API_URL;
+  elements.remoteApiBaseUrl.value =
+    raw.remoteApiBaseUrl ||
+    (profile.startsWith("remote-") ? raw.apiBaseUrl : "") ||
+    REMOTE_API_URL;
   elements.customApiBaseUrl.value =
     stored.customApiBaseUrl || (profile === "custom" ? stored.apiBaseUrl : "");
   elements.customMode.value = stored.customMode || stored.mode || "fast";
@@ -144,7 +147,7 @@ async function save() {
   try {
     const current = await chrome.storage.local.get(DEFAULTS);
     const settings = resolveSettings(current);
-    if (!settings.apiBaseUrl) throw new Error("请输入自定义服务地址");
+    if (!settings.apiBaseUrl) throw new Error("请输入漫画增强 API 地址");
     if (!settings.apiToken) throw new Error("请输入 API Token");
 
     const granted = await chrome.permissions.request({
@@ -154,6 +157,18 @@ async function save() {
 
     await chrome.storage.local.set(settings);
     storedSettings = settings;
+    await chrome.runtime.sendMessage({
+      type: "COMIC_ENHANCER_REFRESH_TABS",
+      settings: {
+        enabled: settings.enabled,
+        profile: settings.profile,
+        apiBaseUrl: settings.apiBaseUrl,
+        mode: settings.mode,
+        prefetchPages: settings.prefetchPages,
+        preferWorkAdapter: settings.preferWorkAdapter,
+        allowGenericAdapter: settings.allowGenericAdapter,
+      },
+    });
     await checkService(settings);
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), "failed");

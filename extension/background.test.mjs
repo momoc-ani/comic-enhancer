@@ -11,6 +11,7 @@ globalThis.chrome = {
   tabs: {
     onUpdated: { addListener(listener) { listeners.updated = listener; } },
     async query() { return []; },
+    async sendMessage() {},
   },
   scripting: {
     async insertCSS() {},

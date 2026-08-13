@@ -9,6 +9,7 @@
   let sequence = 0;
   let analysisStarted = false;
   let analysisPromise = null;
+  let scheduler = null;
 
   class CopyMangaAdapter {
     static matches() {
@@ -77,10 +78,10 @@
 
     imageUrl(image) {
       const raw =
-        image.currentSrc ||
         image.dataset.src ||
         image.dataset.original ||
         image.getAttribute("data-lazy-src") ||
+        image.currentSrc ||
         image.src;
       if (!raw || raw.startsWith("data:")) return "";
       try {
@@ -178,6 +179,18 @@
       });
     }
 
+    retryFailed() {
+      for (const image of this.adapter.findImages()) {
+        const entry = entriesByImage.get(image);
+        if (!entry || entry.state !== "failed") continue;
+        entry.state = "idle";
+        const wrapper = ensureWrapper(image);
+        delete wrapper.dataset.state;
+        wrapper.title = "";
+      }
+      this.discover();
+    }
+
     enqueue(image, priority) {
       const entry = entriesByImage.get(image);
       if (!entry || entry.state !== "idle") return;
@@ -270,13 +283,21 @@
     if (!settings?.enabled) return;
 
     const adapter = new CopyMangaAdapter();
-    const scheduler = new Scheduler(adapter, adapter.getWork(), adapter.getChapter());
+    scheduler = new Scheduler(adapter, adapter.getWork(), adapter.getChapter());
     scheduler.discover();
 
     const mutations = new MutationObserver(() => scheduler.discover());
     mutations.observe(document.documentElement, { childList: true, subtree: true });
     window.addEventListener("scroll", () => scheduler.discover(), { passive: true });
   }
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== "COMIC_ENHANCER_REFRESH_SETTINGS") return false;
+    settings = { ...settings, ...message.settings };
+    if (settings.enabled) scheduler?.retryFailed();
+    sendResponse({ ok: true });
+    return false;
+  });
 
   bootstrap().catch((error) => console.warn("Comic Enhancer:", error));
 })();
