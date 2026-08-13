@@ -30,7 +30,7 @@ class FakeImage {
   constructor(index = 0) {
     this.dataset = { src: `https://img.example/page-${index}.webp` };
     this.currentSrc = "https://img.example/loading.jpg";
-    this.src = this.currentSrc;
+    this._src = this.currentSrc;
     this.naturalWidth = 1124;
     this.naturalHeight = 1600;
     this.complete = true;
@@ -39,6 +39,11 @@ class FakeImage {
     this.parentElement = null;
     this.alt = "";
     this.index = index;
+  }
+  get src() { return this._src; }
+  set src(value) {
+    this._src = value;
+    this.currentSrc = value;
   }
   getAttribute() { return null; }
   removeAttribute(name) {
@@ -63,6 +68,7 @@ class FakeImage {
 test("analyzes the eight-page window containing the current manga page", async () => {
   let viewportStart = 0;
   let scrollListener = null;
+  let secondWindowAnalysisAttempts = 0;
   const images = Array.from({ length: 10 }, (_, index) => new FakeImage(index));
   for (const image of images) {
     image.getBoundingClientRect = () => ({
@@ -106,6 +112,12 @@ test("analyzes the eight-page window containing the current manga page", async (
         }
         if (message.type === "COMIC_ENHANCER_ANALYZE") {
           events.push(["analyze", message.payload.imageUrls]);
+          if (message.payload.imageUrls[0].endsWith("page-8.webp")) {
+            secondWindowAnalysisAttempts += 1;
+            if (secondWindowAnalysisAttempts === 1) {
+              return { ok: false, error: "分析服务暂时不可用" };
+            }
+          }
           return { ok: true, result: {} };
         }
         if (message.type === "COMIC_ENHANCER_PROCESS") {
@@ -140,8 +152,11 @@ test("analyzes the eight-page window containing the current manga page", async (
   assert.equal(images[0].parentElement.dataset.state, "completed");
 
   viewportStart = 8;
+  const originalWarn = console.warn;
+  console.warn = () => {};
   scrollListener();
   await new Promise((resolve) => setTimeout(resolve, 10));
+  console.warn = originalWarn;
 
   assert.deepEqual(events.slice(2), [
     [
@@ -159,4 +174,19 @@ test("analyzes the eight-page window containing the current manga page", async (
     images[0].parentElement.querySelector(":scope > .comic-enhancer-result"),
     null,
   );
+
+  viewportStart = 9;
+  scrollListener();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.deepEqual(events.slice(4), [
+    [
+      "analyze",
+      [
+        "https://img.example/page-8.webp",
+        "https://img.example/page-9.webp",
+      ],
+    ],
+    ["process", 9],
+  ]);
 });

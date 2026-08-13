@@ -76,11 +76,14 @@ const elements = {
   status: document.getElementById("status"),
   modelTier: document.getElementById("modelTier"),
   modelDetail: document.getElementById("modelDetail"),
+  extensionVersion: document.getElementById("extensionVersion"),
 };
 
 let storedSettings = { ...DEFAULTS };
 let lastModelExecution = null;
 let serviceCapabilities = null;
+
+elements.extensionVersion.textContent = `v${chrome.runtime.getManifest().version}`;
 
 elements.profile.addEventListener("change", renderSelection);
 elements.remoteApiBaseUrl.addEventListener("input", renderSelection);

@@ -169,9 +169,12 @@
           payload: { imageUrls, work: this.work },
         })
         .then((response) => {
-          if (!response?.ok) console.warn("Comic Enhancer analysis:", response?.error);
+          if (!response?.ok) throw new Error(response?.error || "人物分析失败");
         })
-        .catch((error) => console.warn("Comic Enhancer analysis:", error));
+        .catch((error) => {
+          this.analysisPromises.delete(windowStart);
+          console.warn("Comic Enhancer analysis:", error);
+        });
       this.analysisPromises.set(windowStart, promise);
       return promise;
     }
