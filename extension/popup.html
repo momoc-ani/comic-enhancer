@@ -25,7 +25,7 @@
       <label class="field">
         <span>运行方案</span>
         <select id="profile">
-          <optgroup label="远端 RTX 4090">
+          <optgroup label="远端增强服务">
             <option value="remote-fast">快速模式</option>
             <option value="remote-quality">质量模式</option>
           </optgroup>
@@ -38,6 +38,19 @@
       </label>
 
       <div id="profileSummary" class="summary" aria-live="polite"></div>
+
+      <section class="model-tier" aria-labelledby="modelTierLabel">
+        <span id="modelTierLabel">当前模型档位</span>
+        <strong id="modelTier">等待连接</strong>
+        <p id="modelDetail" aria-live="polite">等待服务状态</p>
+      </section>
+
+      <section id="remoteFields" class="custom-fields" hidden>
+        <label class="field">
+          <span>远端增强 API 地址</span>
+          <input id="remoteApiBaseUrl" type="url" spellcheck="false" placeholder="http://192.168.38.226:8765">
+        </label>
+      </section>
 
       <section id="customFields" class="custom-fields" hidden>
         <label class="field">
@@ -54,7 +67,7 @@
       </section>
 
       <label class="field">
-        <span>API Token</span>
+        <span>推理服务 Token（COMIC_ENHANCER_TOKEN）</span>
         <input id="apiToken" type="password" autocomplete="off" placeholder="输入推理服务 Token">
       </label>
     </main>
@@ -62,6 +75,6 @@
     <footer>
       <button id="save" type="button">保存并连接</button>
     </footer>
-    <script src="popup.js"></script>
+    <script type="module" src="popup.js"></script>
   </body>
 </html>

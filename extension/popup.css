@@ -124,10 +124,43 @@ input:focus, select:focus {
   letter-spacing: 0;
 }
 
+.model-tier {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  padding: 1px 0 11px;
+  border-bottom: 1px solid #dedfdb;
+  color: #5d605b;
+  font-size: 11px;
+}
+
+.model-tier > span {
+  align-self: center;
+  color: #50534e;
+  font-size: 12px;
+}
+
+.model-tier > strong {
+  max-width: 190px;
+  overflow-wrap: anywhere;
+  color: #252724;
+  font-size: 12px;
+  text-align: right;
+  letter-spacing: 0;
+}
+
+.model-tier > strong[data-state="actual"] {
+  color: #247248;
+}
+
+.model-tier > p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .custom-fields {
   display: grid;
   gap: 12px;
-  padding-top: 1px;
 }
 
 .custom-fields[hidden] { display: none; }

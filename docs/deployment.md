@@ -44,6 +44,8 @@ API Token: 与远端 .env 中 COMIC_ENHANCER_TOKEN 相同
 
 首版保持 `COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED=false`：选择“质量”时走 8190 的 `sd15-colorize-quality.json` 及作品/通用 LoRA 回退。可单独启用 `COMIC_ENHANCER_ANALYZER_ENABLED=true` 预计算人物分析缓存，而不改变页面上色路由。插件不接触管理员 Token 或 Gitee Token。
 
+插件中的远端地址是漫画增强 API 地址，不是 ComfyUI 地址。基础增强 ComfyUI 可部署在宿主机或另一台机器，通过 API 容器的 `COMIC_ENHANCER_COMFYUI_URL` 配置；参考工作流地址通过 `COMIC_ENHANCER_COMFYUI_REFERENCE_URL` 配置。插件无需感知这两个后端地址。
+
 真实基准中，MangaNinja 使用 GhostMix V2、25 步、节点线稿预处理和 PointNet 对应点，单格热推理约 8 秒、冷切换约 20 秒，因此只适合预推理质量模式，不满足快速模式秒级目标。4090 上并存其他 GPU 服务时必须预留采样峰值；OOM 会由 API 回退到 8190，不能通过降低匹配安全阈值或强制占用其他业务显存解决。
 
 替换其他 ComfyUI 工作流时，导出 API 格式 JSON，并在 `settings.json` 或环境变量中修改对应工作流路径。单输入工作流必须只有一个 `LoadImage`；多输入工作流使用 `_meta.title` 声明 `INPUT_IMAGE`、`REFERENCE_IMAGE` 等角色；所有工作流至少有一个 `SaveImage`，其余模型、LoRA 和参数必须全部预设。服务不依赖固定节点编号。

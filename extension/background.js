@@ -1,3 +1,5 @@
+import { buildModelExecution } from "./model-status.js";
+
 const DEFAULT_SETTINGS = Object.freeze({
   enabled: true,
   profile: "remote-fast",
@@ -7,13 +9,66 @@ const DEFAULT_SETTINGS = Object.freeze({
   prefetchPages: 3,
   preferWorkAdapter: true,
   allowGenericAdapter: true,
+  remoteApiBaseUrl: "http://192.168.38.226:8765",
 });
+
+const SUPPORTED_PAGE_PATTERNS = Object.freeze([
+  "*://*.copymanga.com/*",
+  "*://*.copymanga.site/*",
+  "*://*.copymanga.tv/*",
+  "*://*.mangacopy.com/*",
+]);
 
 chrome.runtime.onInstalled.addListener(async () => {
   const stored = await chrome.storage.local.get(null);
   const profile = stored.profile || inferLegacyProfile(stored);
   await chrome.storage.local.set({ ...DEFAULT_SETTINGS, ...stored, profile });
+  await injectIntoOpenMangaTabs();
 });
+
+chrome.runtime.onStartup.addListener(() => {
+  injectIntoOpenMangaTabs().catch((error) => {
+    console.warn("Comic Enhancer startup injection failed:", normalizeError(error));
+  });
+});
+
+injectIntoOpenMangaTabs().catch((error) => {
+  console.warn("Comic Enhancer initial injection failed:", normalizeError(error));
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== "complete" || !isSupportedPage(tab.url)) return;
+  injectContent(tabId).catch((error) => {
+    console.warn("Comic Enhancer injection failed:", normalizeError(error));
+  });
+});
+
+async function injectIntoOpenMangaTabs() {
+  const tabs = await chrome.tabs.query({ url: [...SUPPORTED_PAGE_PATTERNS] });
+  await Promise.allSettled(tabs.map((tab) => injectContent(tab.id)));
+}
+
+async function injectContent(tabId) {
+  if (!Number.isInteger(tabId)) return;
+  const existing = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => Boolean(globalThis.__comicEnhancerInjected),
+  });
+  if (existing.some((result) => result.result === true)) return;
+  await chrome.scripting.insertCSS({ target: { tabId }, files: ["content.css"] });
+  await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+}
+
+function isSupportedPage(url) {
+  if (!url) return false;
+  try {
+    return /(^|\.)(copymanga\.(com|site|tv)|mangacopy\.com)$/i.test(
+      new URL(url).hostname,
+    );
+  } catch {
+    return false;
+  }
+}
 
 function inferLegacyProfile(settings) {
   const url = String(settings.apiBaseUrl || "").replace(/\/$/, "");
@@ -105,6 +160,10 @@ async function processPage(payload) {
     throw new Error(`结果图片下载失败：${imageResponse.status}`);
   }
 
+  await chrome.storage.local.set({
+    lastModelExecution: buildModelExecution(result, settings),
+  });
+
   return {
     ...result,
     image_data_url: await responseToDataUrl(imageResponse),
@@ -154,4 +213,4 @@ function normalizeError(error) {
   return String(error);
 }
 
-export { DEFAULT_SETTINGS };
+export { DEFAULT_SETTINGS, isSupportedPage };

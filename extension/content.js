@@ -1,4 +1,7 @@
 (() => {
+  if (globalThis.__comicEnhancerInjected) return;
+  globalThis.__comicEnhancerInjected = true;
+
   const entriesByImage = new WeakMap();
   const pending = [];
   let active = false;
@@ -58,12 +61,18 @@
         "main img",
       ];
       const candidates = [...document.querySelectorAll(selectors.join(","))];
-      return [...new Set(candidates)].filter((image) => {
+      const bestByUrl = new Map();
+      for (const image of candidates) {
         const url = this.imageUrl(image);
         const width = image.naturalWidth || Number(image.getAttribute("width")) || 0;
         const height = image.naturalHeight || Number(image.getAttribute("height")) || 0;
-        return Boolean(url) && (height >= 500 || height > width * 1.1);
-      });
+        if (!url || !(height >= 500 || height > width * 1.1)) continue;
+        const previous = bestByUrl.get(url);
+        if (!previous || imageScore(image) > imageScore(previous)) {
+          bestByUrl.set(url, image);
+        }
+      }
+      return [...bestByUrl.values()];
     }
 
     imageUrl(image) {
@@ -101,6 +110,15 @@
         .filter(Boolean)
         .slice(0, 20);
     }
+  }
+
+  function imageScore(image) {
+    const box = image.getBoundingClientRect();
+    return (
+      (image.classList.contains("blank") ? -1000 : 0) +
+      (box.width > 0 && box.height > 0 ? 100 : 0) +
+      (image.complete && image.naturalWidth > 0 ? 10 : 0)
+    );
   }
 
   class Scheduler {
@@ -223,6 +241,8 @@
     overlay.dataset.adapterSource = result.adapter_source;
     overlay.dataset.adapterId = result.adapter_id || "none";
     overlay.dataset.adapterApplied = String(result.adapter_applied);
+    overlay.dataset.modelProfile = result.model_profile || "unknown";
+    overlay.dataset.referenceApplied = String(result.reference_applied);
     overlay.dataset.processedPanels = String(result.processed_panels || 0);
     overlay.addEventListener("load", () => markState(image, "completed"), { once: true });
   }
