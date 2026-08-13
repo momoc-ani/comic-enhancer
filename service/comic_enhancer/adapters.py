@@ -35,12 +35,14 @@ class AdapterRegistry:
         prefer_work_adapter: bool = True,
         allow_generic_adapter: bool = True,
         compatible_base_models: frozenset[str] = frozenset(),
+        required_workflow: str | None = None,
     ) -> ResolvedAdapter:
         for source, adapter in self.candidates(
             work,
             prefer_work_adapter=prefer_work_adapter,
             allow_generic_adapter=allow_generic_adapter,
             compatible_base_models=compatible_base_models,
+            required_workflow=required_workflow,
         ):
             if self.is_available(adapter):
                 return ResolvedAdapter(
@@ -66,19 +68,24 @@ class AdapterRegistry:
         prefer_work_adapter: bool = True,
         allow_generic_adapter: bool = True,
         compatible_base_models: frozenset[str] = frozenset(),
+        required_workflow: str | None = None,
     ) -> list[tuple[AdapterSource, AdapterManifest]]:
         index = self._read()
         candidates: list[tuple[AdapterSource, AdapterManifest]] = []
         if prefer_work_adapter and (work_data := index.get("works", {}).get(work.key)):
             adapter = AdapterManifest.model_validate(work_data)
-            if adapter.enabled and self._is_compatible(adapter, compatible_base_models):
+            if adapter.enabled and self._is_compatible(
+                adapter, compatible_base_models, required_workflow
+            ):
                 candidates.append((AdapterSource.WORK, adapter))
         if allow_generic_adapter and (generic_data := index.get("generic")):
             adapter = AdapterManifest.model_validate(generic_data)
             if (
                 adapter.adapter_id == self.generic_adapter_id
                 and adapter.enabled
-                and self._is_compatible(adapter, compatible_base_models)
+                and self._is_compatible(
+                    adapter, compatible_base_models, required_workflow
+                )
             ):
                 candidates.append((AdapterSource.GENERIC, adapter))
         return candidates
@@ -88,9 +95,17 @@ class AdapterRegistry:
 
     @staticmethod
     def _is_compatible(
-        adapter: AdapterManifest, compatible_base_models: frozenset[str]
+        adapter: AdapterManifest,
+        compatible_base_models: frozenset[str],
+        required_workflow: str | None,
     ) -> bool:
-        return not compatible_base_models or adapter.base_model in compatible_base_models
+        base_model_matches = (
+            not compatible_base_models or adapter.base_model in compatible_base_models
+        )
+        workflow_matches = (
+            required_workflow is None or required_workflow in adapter.workflows
+        )
+        return base_model_matches and workflow_matches
 
     def _is_available(self, adapter: AdapterManifest) -> bool:
         if adapter.file is None:

@@ -83,13 +83,46 @@ def test_capabilities_require_auth(tmp_path):
     assert client.get("/v1/capabilities").status_code == 401
 
 
+def test_cache_key_changes_with_backend_revision(tmp_path):
+    settings = Settings(
+        api_token="test-token",
+        runtime_dir=tmp_path / "runtime",
+        adapter_index=tmp_path / "missing.json",
+    )
+    app = create_app(settings)
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer test-token"}
+    data = {
+        "work_json": '{"source":"copy_manga","source_work_id":"123"}',
+        "options_json": '{"mode":"fast"}',
+    }
+
+    first = client.post(
+        "/v1/pages/process",
+        headers=headers,
+        data=data,
+        files={"image": ("page.png", png_bytes(), "image/png")},
+    )
+    app.state.processor.backend.name = "passthrough-v2"
+    second = client.post(
+        "/v1/pages/process",
+        headers=headers,
+        data=data,
+        files={"image": ("page.png", png_bytes(), "image/png")},
+    )
+
+    assert first.json()["cache_key"] != second.json()["cache_key"]
+    assert second.json()["cached"] is False
+
+
 def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     config = tmp_path / "settings.json"
     config.write_text(
         '{"runtime_dir":"runtime","adapter_index":"index.json",'
         '"adapter_weights_root":"weights",'
-        '"comfyui_workflow_with_lora":"with.json",'
-        '"comfyui_workflow_without_lora":"without.json"}',
+        '"comfyui_workflow_fast":"fast.json",'
+        '"comfyui_workflow_quality":"quality.json",'
+        '"comfyui_workflow_root":"workflows"}',
         encoding="utf-8",
     )
     monkeypatch.setenv("COMIC_ENHANCER_CONFIG", str(config))
@@ -98,3 +131,5 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
 
     assert settings.runtime_dir == Path("runtime")
     assert settings.adapter_index == Path("index.json")
+    assert settings.comfyui_workflow_fast == Path("fast.json")
+    assert settings.comfyui_workflow_root == Path("workflows")

@@ -3,9 +3,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from io import BytesIO
-import hashlib
 import json
 from pathlib import Path
+import re
 import time
 import uuid
 
@@ -13,6 +13,7 @@ import httpx
 from PIL import Image, ImageEnhance, ImageOps
 
 from .models import ProcessOptions, ResolvedAdapter
+from .workflows import WorkflowLoader
 
 
 class InferenceBackend(ABC):
@@ -22,6 +23,13 @@ class InferenceBackend(ABC):
 
     def ready(self) -> bool:
         return True
+
+    def cache_revision(
+        self,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> str:
+        return self.name
 
     @abstractmethod
     def process(
@@ -72,32 +80,12 @@ class ComfyUIBackend(InferenceBackend):
         base_url: str,
         timeout_seconds: int,
         poll_interval_seconds: float,
-        output_node: str,
-        checkpoint: str,
-        controlnet: str,
-        fast_steps: int,
-        quality_steps: int,
-        fast_megapixels: float,
-        quality_megapixels: float,
-        fast_denoise: float,
-        quality_denoise: float,
-        workflow_with_lora: Path,
-        workflow_without_lora: Path,
+        workflow_loader: WorkflowLoader,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.poll_interval_seconds = poll_interval_seconds
-        self.output_node = output_node
-        self.checkpoint = checkpoint
-        self.controlnet = controlnet
-        self.fast_steps = fast_steps
-        self.quality_steps = quality_steps
-        self.fast_megapixels = fast_megapixels
-        self.quality_megapixels = quality_megapixels
-        self.fast_denoise = fast_denoise
-        self.quality_denoise = quality_denoise
-        self.workflow_with_lora = workflow_with_lora
-        self.workflow_without_lora = workflow_without_lora
+        self.workflow_loader = workflow_loader
 
     def ready(self) -> bool:
         try:
@@ -106,6 +94,13 @@ class ComfyUIBackend(InferenceBackend):
         except httpx.HTTPError:
             return False
 
+    def cache_revision(
+        self,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> str:
+        return self.workflow_loader.revision(options, resolved)
+
     def process(
         self,
         image_bytes: bytes,
@@ -113,12 +108,7 @@ class ComfyUIBackend(InferenceBackend):
         options: ProcessOptions,
         resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
-        use_adapter = resolved.adapter is not None and resolved.adapter.file is not None
-        workflow_path = (
-            self.workflow_with_lora if use_adapter else self.workflow_without_lora
-        )
-        if not workflow_path.is_file():
-            raise RuntimeError(f"ComfyUI workflow not found: {workflow_path}")
+        loaded_workflow = self.workflow_loader.load(options, resolved)
 
         upload_name = f"comic-enhancer-{uuid.uuid4().hex}.png"
         normalized = BytesIO()
@@ -134,40 +124,17 @@ class ComfyUIBackend(InferenceBackend):
             uploaded = upload.json()
             comfy_input = self._comfy_path(uploaded)
 
-            replacements: dict[str, object] = {
-                "${INPUT_IMAGE}": comfy_input,
-                "${OUTPUT_PREFIX}": f"comic-enhancer/{uuid.uuid4().hex}",
-                "${CHECKPOINT_NAME}": self.checkpoint,
-                "${CONTROLNET_NAME}": self.controlnet,
-                "${LORA_NAME}": resolved.adapter.file if use_adapter else "",
-                "${LORA_STRENGTH}": (
-                    resolved.adapter.recommended_weight if use_adapter else 0.0
-                ),
-                "${SEED}": int.from_bytes(
-                    hashlib.sha256(image_bytes).digest()[:8], "big"
-                ),
-                "${STEPS}": (
-                    self.quality_steps
-                    if options.mode == "quality"
-                    else self.fast_steps
-                ),
-                "${TARGET_MEGAPIXELS}": (
-                    self.quality_megapixels
-                    if options.mode == "quality"
-                    else self.fast_megapixels
-                ),
-                "${DENOISE}": (
-                    self.quality_denoise
-                    if options.mode == "quality"
-                    else self.fast_denoise
-                ),
-            }
-            workflow = self._load_workflow(workflow_path, replacements)
+            workflow = loaded_workflow.prompt
+            output_nodes = self._bind_io(
+                workflow,
+                input_image=comfy_input,
+                output_prefix=f"comic-enhancer/{uuid.uuid4().hex}",
+            )
             client_id = uuid.uuid4().hex
             queued = client.post("/prompt", json={"prompt": workflow, "client_id": client_id})
             queued.raise_for_status()
             prompt_id = queued.json()["prompt_id"]
-            image_info = self._wait_for_output(client, prompt_id)
+            image_info = self._wait_for_output(client, prompt_id, output_nodes)
             result = client.get("/view", params=image_info)
             result.raise_for_status()
 
@@ -177,9 +144,14 @@ class ComfyUIBackend(InferenceBackend):
             image = ImageOps.exif_transpose(source).convert("RGB")
             image.save(temporary, format="WEBP", quality=93, method=4)
         temporary.replace(output_path)
-        return InferenceOutcome(adapter_applied=use_adapter)
+        return InferenceOutcome(adapter_applied=loaded_workflow.adapter_applied)
 
-    def _wait_for_output(self, client: httpx.Client, prompt_id: str) -> dict[str, str]:
+    def _wait_for_output(
+        self,
+        client: httpx.Client,
+        prompt_id: str,
+        output_nodes: tuple[str, ...],
+    ) -> dict[str, str]:
         deadline = time.monotonic() + self.timeout_seconds
         while time.monotonic() < deadline:
             response = client.get(f"/history/{prompt_id}")
@@ -189,30 +161,57 @@ class ComfyUIBackend(InferenceBackend):
                 status = history.get("status", {})
                 if status.get("status_str") == "error":
                     raise RuntimeError(f"ComfyUI prompt failed: {status}")
-                output = history.get("outputs", {}).get(self.output_node, {})
-                images = output.get("images", [])
-                if images:
-                    image = images[-1]
-                    return {
-                        "filename": image["filename"],
-                        "subfolder": image.get("subfolder", ""),
-                        "type": image.get("type", "output"),
-                    }
+                outputs = history.get("outputs", {})
+                for node_id in reversed(output_nodes):
+                    images = outputs.get(node_id, {}).get("images", [])
+                    if images:
+                        image = images[-1]
+                        return {
+                            "filename": image["filename"],
+                            "subfolder": image.get("subfolder", ""),
+                            "type": image.get("type", "output"),
+                        }
             time.sleep(self.poll_interval_seconds)
         raise TimeoutError(f"ComfyUI prompt timed out: {prompt_id}")
 
     @staticmethod
-    def _load_workflow(path: Path, replacements: dict[str, object]) -> dict:
-        workflow = json.loads(path.read_text(encoding="utf-8"))
+    def _bind_io(
+        workflow: dict,
+        *,
+        input_image: str,
+        output_prefix: str,
+    ) -> tuple[str, ...]:
+        load_nodes = [
+            (str(node_id), node)
+            for node_id, node in workflow.items()
+            if isinstance(node, dict) and node.get("class_type") == "LoadImage"
+        ]
+        if len(load_nodes) != 1:
+            raise RuntimeError(
+                "ComfyUI workflow must contain exactly one LoadImage node; "
+                f"found {len(load_nodes)}"
+            )
+        load_nodes[0][1].setdefault("inputs", {})["image"] = input_image
 
-        def replace(value):
-            if isinstance(value, dict):
-                return {key: replace(item) for key, item in value.items()}
-            if isinstance(value, list):
-                return [replace(item) for item in value]
-            return replacements.get(value, value) if isinstance(value, str) else value
+        output_nodes = tuple(
+            str(node_id)
+            for node_id, node in workflow.items()
+            if isinstance(node, dict) and node.get("class_type") == "SaveImage"
+        )
+        if not output_nodes:
+            raise RuntimeError("ComfyUI workflow must contain at least one SaveImage node")
+        for node_id in output_nodes:
+            workflow[node_id].setdefault("inputs", {})["filename_prefix"] = output_prefix
 
-        return replace(workflow)
+        serialized = json.dumps(workflow, ensure_ascii=False)
+        placeholders = sorted(set(re.findall(r"\$\{[^}]+\}", serialized)))
+        if placeholders:
+            raise RuntimeError(
+                "ComfyUI workflow contains runtime placeholders: "
+                + ", ".join(placeholders)
+            )
+
+        return output_nodes
 
     @staticmethod
     def _comfy_path(uploaded: dict) -> str:

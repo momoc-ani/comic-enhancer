@@ -19,6 +19,7 @@ from .config import Settings, load_settings
 from .jobs import ProcessingService
 from .gitee import GiteeAdapterStore, GiteeError
 from .models import AdapterManifest, Capabilities, ProcessOptions, ProcessResult, WorkIdentity
+from .workflows import PresetWorkflowLoader
 
 logger = logging.getLogger(__name__)
 
@@ -27,21 +28,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     backend_options = {}
     if settings.backend == "comfyui":
+        workflow_loader = PresetWorkflowLoader(
+            fast_workflow=settings.comfyui_workflow_fast,
+            quality_workflow=settings.comfyui_workflow_quality,
+            workflow_root=settings.comfyui_workflow_root,
+        )
         backend_options = {
             "base_url": settings.comfyui_url,
             "timeout_seconds": settings.comfyui_timeout_seconds,
             "poll_interval_seconds": settings.comfyui_poll_interval_seconds,
-            "output_node": settings.comfyui_output_node,
-            "checkpoint": settings.comfyui_checkpoint,
-            "controlnet": settings.comfyui_controlnet,
-            "fast_steps": settings.comfyui_fast_steps,
-            "quality_steps": settings.comfyui_quality_steps,
-            "fast_megapixels": settings.comfyui_fast_megapixels,
-            "quality_megapixels": settings.comfyui_quality_megapixels,
-            "fast_denoise": settings.comfyui_fast_denoise,
-            "quality_denoise": settings.comfyui_quality_denoise,
-            "workflow_with_lora": settings.comfyui_workflow_with_lora,
-            "workflow_without_lora": settings.comfyui_workflow_without_lora,
+            "workflow_loader": workflow_loader,
         }
     backend = create_backend(settings.backend, **backend_options)
     registry = AdapterRegistry(
@@ -146,6 +142,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             prefer_work_adapter=options.prefer_work_adapter,
             allow_generic_adapter=options.allow_generic_adapter,
             compatible_base_models=backend.supported_base_models,
+            required_workflow=str(options.mode),
         ):
             if registry.is_available(manifest):
                 return

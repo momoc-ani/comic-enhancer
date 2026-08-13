@@ -27,17 +27,9 @@ class Settings:
     comfyui_url: str = "http://comfyui:8188"
     comfyui_timeout_seconds: int = 180
     comfyui_poll_interval_seconds: float = 0.25
-    comfyui_output_node: str = "15"
-    comfyui_checkpoint: str = "SD1.5/SD1.5_GhostMix_V2.0.safetensors"
-    comfyui_controlnet: str = "SD1.5/control_v11p_sd15_lineart_fp16.safetensors"
-    comfyui_fast_steps: int = 8
-    comfyui_quality_steps: int = 12
-    comfyui_fast_megapixels: float = 0.55
-    comfyui_quality_megapixels: float = 0.85
-    comfyui_fast_denoise: float = 0.52
-    comfyui_quality_denoise: float = 0.58
-    comfyui_workflow_with_lora: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-lora.json"
-    comfyui_workflow_without_lora: Path = PROJECT_ROOT / "workflows" / "sd15-colorize.json"
+    comfyui_workflow_fast: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json"
+    comfyui_workflow_quality: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json"
+    comfyui_workflow_root: Path = PROJECT_ROOT / "workflows"
     runtime_dir: Path = PROJECT_ROOT / "runtime"
     adapter_index: Path = PROJECT_ROOT / "adapters" / "index.json"
     adapter_weights_root: Path = PROJECT_ROOT / "adapters"
@@ -67,8 +59,9 @@ def load_settings() -> Settings:
         "adapter_index",
         "adapter_weights_root",
         "runtime_dir",
-        "comfyui_workflow_with_lora",
-        "comfyui_workflow_without_lora",
+        "comfyui_workflow_fast",
+        "comfyui_workflow_quality",
+        "comfyui_workflow_root",
     ):
         if field_name in values:
             values[field_name] = Path(values[field_name])
@@ -93,29 +86,9 @@ def load_settings() -> Settings:
         "COMIC_ENHANCER_RUNTIME_DIR": ("runtime_dir", Path),
         "COMIC_ENHANCER_COMFYUI_URL": ("comfyui_url", str),
         "COMIC_ENHANCER_COMFYUI_TIMEOUT": ("comfyui_timeout_seconds", int),
-        "COMIC_ENHANCER_COMFYUI_OUTPUT_NODE": ("comfyui_output_node", str),
-        "COMIC_ENHANCER_COMFYUI_CHECKPOINT": ("comfyui_checkpoint", str),
-        "COMIC_ENHANCER_COMFYUI_CONTROLNET": ("comfyui_controlnet", str),
-        "COMIC_ENHANCER_COMFYUI_FAST_STEPS": ("comfyui_fast_steps", int),
-        "COMIC_ENHANCER_COMFYUI_QUALITY_STEPS": ("comfyui_quality_steps", int),
-        "COMIC_ENHANCER_COMFYUI_FAST_MEGAPIXELS": (
-            "comfyui_fast_megapixels",
-            float,
-        ),
-        "COMIC_ENHANCER_COMFYUI_QUALITY_MEGAPIXELS": (
-            "comfyui_quality_megapixels",
-            float,
-        ),
-        "COMIC_ENHANCER_COMFYUI_FAST_DENOISE": ("comfyui_fast_denoise", float),
-        "COMIC_ENHANCER_COMFYUI_QUALITY_DENOISE": (
-            "comfyui_quality_denoise",
-            float,
-        ),
-        "COMIC_ENHANCER_WORKFLOW_WITH_LORA": ("comfyui_workflow_with_lora", Path),
-        "COMIC_ENHANCER_WORKFLOW_WITHOUT_LORA": (
-            "comfyui_workflow_without_lora",
-            Path,
-        ),
+        "COMIC_ENHANCER_WORKFLOW_FAST": ("comfyui_workflow_fast", Path),
+        "COMIC_ENHANCER_WORKFLOW_QUALITY": ("comfyui_workflow_quality", Path),
+        "COMIC_ENHANCER_WORKFLOW_ROOT": ("comfyui_workflow_root", Path),
     }
     for env_name, (field_name, converter) in env_map.items():
         if env_name in os.environ:

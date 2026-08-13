@@ -56,6 +56,7 @@ class AdapterManifest(BaseModel):
     download_url: str | None = None
     release_id: int | None = None
     asset_id: int | None = None
+    workflows: dict[str, str] = Field(default_factory=dict)
 
 
 class ResolvedAdapter(BaseModel):

@@ -156,3 +156,42 @@ def test_incompatible_work_adapter_falls_back_to_generic(tmp_path):
 
     assert resolved.source == AdapterSource.GENERIC
     assert resolved.adapter.adapter_id == "generic"
+
+
+def test_adapter_requires_workflow_for_requested_mode(tmp_path):
+    work_file = tmp_path / "work.safetensors"
+    work_file.write_bytes(b"work")
+    generic_file = tmp_path / "generic.safetensors"
+    generic_file.write_bytes(b"generic")
+    index = write_index(
+        tmp_path,
+        {
+            "generic": {
+                "adapter_id": "generic",
+                "name": "Generic",
+                "base_model": "sd15-anime",
+                "revision": "v1",
+                "file": "generic.safetensors",
+                "workflows": {"fast": "generic-fast.json"},
+            },
+            "works": {
+                "copy_manga:42": {
+                    "adapter_id": "work-42",
+                    "name": "Work 42",
+                    "base_model": "sd15-anime",
+                    "revision": "v1",
+                    "file": "work.safetensors",
+                    "workflows": {"quality": "work-42-quality.json"},
+                }
+            },
+        },
+    )
+    registry = AdapterRegistry(index, "generic")
+
+    resolved = registry.resolve(
+        WorkIdentity(source="copy_manga", source_work_id="42"),
+        compatible_base_models=frozenset({"sd15-anime"}),
+        required_workflow="fast",
+    )
+
+    assert resolved.source == AdapterSource.GENERIC

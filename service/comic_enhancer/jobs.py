@@ -29,8 +29,17 @@ class ProcessingService:
             prefer_work_adapter=options.prefer_work_adapter,
             allow_generic_adapter=options.allow_generic_adapter,
             compatible_base_models=self.backend.supported_base_models,
+            required_workflow=(
+                str(options.mode) if self.backend.applies_adapters else None
+            ),
         )
-        cache_key = self.cache.key(image_bytes, work, options, resolved)
+        cache_key = self.cache.key(
+            image_bytes,
+            work,
+            options,
+            resolved,
+            self.backend.cache_revision(options, resolved),
+        )
         output_path = self.cache.result_path(cache_key)
         started = time.perf_counter()
 

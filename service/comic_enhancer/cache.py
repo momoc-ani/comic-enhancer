@@ -19,6 +19,7 @@ class ResultCache:
         work: WorkIdentity,
         options: ProcessOptions,
         resolved: ResolvedAdapter,
+        backend_revision: str = "",
     ) -> str:
         image_hash = hashlib.sha256(image_bytes).hexdigest()
         adapter_revision = (
@@ -33,6 +34,7 @@ class ResultCache:
                 options.mode,
                 options.palette_version,
                 adapter_revision,
+                backend_revision,
             ]
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
