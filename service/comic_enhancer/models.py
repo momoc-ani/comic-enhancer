@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ProcessingMode(StrEnum):
@@ -149,12 +149,28 @@ class CharacterMatch(BaseModel):
     reason: str = ""
 
 
+class CharacterMask(BaseModel):
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    counts: list[int] = Field(min_length=1)
+    score: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_counts(self):
+        if any(count < 0 for count in self.counts):
+            raise ValueError("character mask counts must be non-negative")
+        if sum(self.counts) != self.width * self.height:
+            raise ValueError("character mask counts do not match dimensions")
+        return self
+
+
 class CharacterInstance(BaseModel):
     instance_id: str
     cluster_id: str
     box: BoundingBox
     panel_index: int | None = Field(default=None, ge=0)
     match: CharacterMatch = Field(default_factory=CharacterMatch)
+    mask: CharacterMask | None = None
 
 
 class PanelRegion(BaseModel):

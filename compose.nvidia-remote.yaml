@@ -12,6 +12,9 @@ services:
       MAGIV2_REVISION: fbc890fec52977142e8ee00bfe26e9458b65517c
       MAGIV2_CLUSTER_MAX_DISTANCE: "0.50"
       MAGIV2_PROPAGATION_MAX_DISTANCE: "0.72"
+      MAGIV2_SAM_CHECKPOINT: /models/sams/sam_vit_b_01ec64.pth
+      MAGIV2_SAM_MODEL_TYPE: vit_b
+      MAGIV2_SAM_MIN_SCORE: "0.85"
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     ports:
       - "127.0.0.1:8770:8770"

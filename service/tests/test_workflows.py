@@ -10,6 +10,7 @@ from comic_enhancer.models import (
     AdapterSource,
     BoundingBox,
     CharacterInstance,
+    CharacterMask,
     CharacterMatch,
     PageAnalysis,
     PanelRegion,
@@ -75,6 +76,12 @@ def reference_assets():
                         reference_url="https://example.com/1.png",
                         status="accepted",
                         confidence=0.9,
+                    ),
+                    mask=CharacterMask(
+                        width=40,
+                        height=80,
+                        counts=[0, 3200],
+                        score=0.95,
                     ),
                 )
             ],
@@ -540,6 +547,13 @@ def test_reference_board_and_target_points_keep_multiple_characters_aligned():
     assert len(reference_points) == len(target_points) == 2
     assert reference_points[0][1] < reference_points[1][1]
     assert target_points[0][1] < target_points[1][1]
+
+
+def test_reference_assets_require_character_segmentation_mask():
+    assets = reference_assets()
+    assets.analysis.characters[0].mask = None
+
+    assert assets.has_panel_references is False
 
 
 def test_bind_runtime_values_requires_titled_nodes():

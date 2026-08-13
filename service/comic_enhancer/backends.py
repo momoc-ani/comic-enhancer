@@ -12,9 +12,9 @@ import time
 import uuid
 
 import httpx
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image, ImageChops, ImageEnhance, ImageFilter, ImageOps
 
-from .models import PageAnalysis, PanelRegion, ProcessOptions, ResolvedAdapter
+from .models import CharacterMask, PageAnalysis, PanelRegion, ProcessOptions, ResolvedAdapter
 from .workflows import WorkflowLoader
 
 
@@ -89,6 +89,7 @@ class InferenceAssets:
             for item in self.analysis.characters
             if item.match.status == "accepted"
             and item.match.character_id in self.character_references
+            and item.mask is not None
         }
         return any(
             accepted.intersection(panel.character_instance_ids)
@@ -317,6 +318,7 @@ class ComfyUIBackend(InferenceBackend):
                     and characters[instance_id].match.status == "accepted"
                     and characters[instance_id].match.character_id
                     in assets.character_references
+                    and characters[instance_id].mask is not None
                 ]
                 selected.sort(
                     key=lambda item: (
@@ -343,10 +345,12 @@ class ComfyUIBackend(InferenceBackend):
                     workflow_template,
                 )
                 restored = self._restore_geometry(panel_bytes, generated)
-                protected = self._protect_source_structure(panel_bytes, restored)
+                protected = self._protect_masked_structure(panel_bytes, restored)
+                panel_mask = self._panel_character_mask(selected, panel)
                 composite.paste(
                     protected,
                     (panel.box.x1, panel.box.y1, panel.box.x2, panel.box.y2),
+                    panel_mask,
                 )
                 processed_panels += 1
 
@@ -669,6 +673,80 @@ class ComfyUIBackend(InferenceBackend):
             )
         )
         return Image.composite(source, colorized, dark_mask)
+
+    @staticmethod
+    def _protect_masked_structure(source_bytes: bytes, generated: Image.Image) -> Image.Image:
+        with Image.open(BytesIO(source_bytes)) as source_file:
+            source = ImageOps.exif_transpose(source_file).convert("RGB")
+        generated = generated.resize(source.size, Image.Resampling.LANCZOS)
+
+        source_y, _, _ = source.convert("YCbCr").split()
+        _, generated_cb, generated_cr = generated.convert("YCbCr").split()
+        neutral = Image.new("L", source.size, 128)
+        chroma = ImageChops.lighter(
+            ImageChops.difference(generated_cb, neutral),
+            ImageChops.difference(generated_cr, neutral),
+        )
+        luminance_drop = chroma.point(lambda value: min(24, round(value * 0.3)))
+        bright_mask = source_y.point(
+            lambda value: max(0, min(255, round((value - 160) * 255 / 80)))
+        )
+        colored_y = ImageChops.subtract(
+            source_y,
+            ImageChops.multiply(luminance_drop, bright_mask),
+        )
+        colorized = Image.merge(
+            "YCbCr",
+            (colored_y, generated_cb, generated_cr),
+        ).convert("RGB")
+        ink_mask = source_y.point(
+            lambda value: (
+                255
+                if value <= 80
+                else max(0, min(255, round((128 - value) * 255 / 48)))
+            )
+        )
+        return Image.composite(source, colorized, ink_mask)
+
+    @staticmethod
+    def _decode_character_mask(mask: CharacterMask) -> Image.Image:
+        pixels = bytearray(mask.width * mask.height)
+        offset = 0
+        value = 0
+        for count in mask.counts:
+            if value:
+                pixels[offset : offset + count] = b"\xff" * count
+            offset += count
+            value = 1 - value
+        return Image.frombytes("L", (mask.width, mask.height), bytes(pixels))
+
+    @staticmethod
+    def _panel_character_mask(selected, panel: PanelRegion) -> Image.Image:
+        width = panel.box.x2 - panel.box.x1
+        height = panel.box.y2 - panel.box.y1
+        panel_mask = Image.new("L", (width, height), 0)
+        for character in selected:
+            if character.mask is None:
+                continue
+            mask = ComfyUIBackend._decode_character_mask(character.mask)
+            box_width = character.box.x2 - character.box.x1
+            box_height = character.box.y2 - character.box.y1
+            if mask.size != (box_width, box_height):
+                continue
+            positioned = Image.new("L", panel_mask.size, 0)
+            positioned.paste(
+                mask,
+                (
+                    character.box.x1 - panel.box.x1,
+                    character.box.y1 - panel.box.y1,
+                ),
+            )
+            panel_mask = ImageChops.lighter(
+                panel_mask,
+                positioned,
+            )
+        feather = min(1.5, min(panel_mask.size) * 0.005)
+        return panel_mask.filter(ImageFilter.GaussianBlur(feather))
 
     @staticmethod
     def _comfy_path(uploaded: dict) -> str:

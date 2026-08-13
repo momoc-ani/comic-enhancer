@@ -28,6 +28,22 @@ def test_structure_protection_restores_black_text_and_source_luminance():
     assert min(white_pixel) >= 245
 
 
+def test_masked_structure_colors_light_regions_and_preserves_black_ink():
+    source = Image.new("RGB", (8, 8), "white")
+    source.putpixel((3, 3), (0, 0, 0))
+    generated = Image.new("RGB", (16, 16), (40, 120, 240))
+
+    result = ComfyUIBackend._protect_masked_structure(
+        image_bytes(source),
+        generated,
+    )
+
+    assert max(result.getpixel((3, 3))) <= 16
+    colored = result.getpixel((0, 0))
+    assert colored[2] > colored[0] + 40
+    assert min(colored) < 220
+
+
 def test_manganinja_geometry_round_trip_preserves_portrait_ratio():
     source = Image.new("RGB", (100, 200), "red")
 

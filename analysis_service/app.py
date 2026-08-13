@@ -13,10 +13,12 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 from scipy.spatial.distance import cdist
+from segment_anything import SamPredictor, sam_model_registry
 from transformers import AutoModel
 
 from .clustering import propagate_cluster_matches, stable_cross_page_clusters
 from .matching import ranked_identity_candidates
+from .masks import encode_binary_mask
 
 
 MODEL_PATH = Path(os.environ.get("MAGIV2_MODEL_PATH", "/models/magiv2"))
@@ -34,7 +36,14 @@ CROSS_PAGE_CLUSTER_MAX_DISTANCE = float(
 PROPAGATION_MAX_DISTANCE = float(
     os.environ.get("MAGIV2_PROPAGATION_MAX_DISTANCE", "0.72")
 )
-ANALYZER_PROFILE = f"magiv2@{MODEL_REVISION[:12]}+cluster-v1+multi-view-v1+anchor-v2"
+SAM_CHECKPOINT = Path(
+    os.environ.get("MAGIV2_SAM_CHECKPOINT", "/models/sams/sam_vit_b_01ec64.pth")
+)
+SAM_MODEL_TYPE = os.environ.get("MAGIV2_SAM_MODEL_TYPE", "vit_b")
+SAM_MIN_SCORE = float(os.environ.get("MAGIV2_SAM_MIN_SCORE", "0.85"))
+ANALYZER_PROFILE = (
+    f"magiv2@{MODEL_REVISION[:12]}+cluster-v1+multi-view-v1+anchor-v2+sam-v1"
+)
 
 
 class CharacterBankEntry(BaseModel):
@@ -46,6 +55,7 @@ class CharacterBankEntry(BaseModel):
 
 class State:
     model = None
+    sam_predictor = None
 
 
 def read_image(image_bytes: bytes) -> np.ndarray:
@@ -63,8 +73,13 @@ async def lifespan(_: FastAPI):
         trust_remote_code=True,
         local_files_only=True,
     ).cuda().eval()
+    if not SAM_CHECKPOINT.is_file():
+        raise RuntimeError(f"SAM checkpoint is missing: {SAM_CHECKPOINT}")
+    sam = sam_model_registry[SAM_MODEL_TYPE](checkpoint=str(SAM_CHECKPOINT))
+    State.sam_predictor = SamPredictor(sam.cuda().eval())
     yield
     State.model = None
+    State.sam_predictor = None
     torch.cuda.empty_cache()
 
 
@@ -74,7 +89,11 @@ app = FastAPI(title="Comic Enhancer MAGIv2 Analyzer", lifespan=lifespan)
 @app.get("/v1/health")
 def health() -> dict[str, object]:
     return {
-        "ready": State.model is not None and torch.cuda.is_available(),
+        "ready": (
+            State.model is not None
+            and State.sam_predictor is not None
+            and torch.cuda.is_available()
+        ),
         "profile": ANALYZER_PROFILE,
     }
 
@@ -124,18 +143,27 @@ async def analyze_chapter(
             max_distance=PROPAGATION_MAX_DISTANCE,
             min_margin=MIN_MARGIN,
         )
+        character_masks = predict_character_masks(page_arrays, raw_results, matches)
 
     pages_result = []
-    for page_index, (image_bytes, image, raw, page_matches, page_cluster_ids) in enumerate(
-        zip(page_bytes, page_arrays, raw_results, matches, cluster_ids)
+    for page_index, (
+        image_bytes,
+        image,
+        raw,
+        page_matches,
+        page_cluster_ids,
+        page_masks,
+    ) in enumerate(
+        zip(page_bytes, page_arrays, raw_results, matches, cluster_ids, character_masks)
     ):
         panels = normalized_panels(raw.get("panels", []), image.shape[1], image.shape[0])
         characters = []
-        for character_index, (box, cluster_id, match) in enumerate(
+        for character_index, (box, cluster_id, match, mask) in enumerate(
             zip(
                 raw.get("characters", []),
                 page_cluster_ids,
                 page_matches,
+                page_masks,
             )
         ):
             instance_id = f"p{page_index}-c{character_index}"
@@ -150,6 +178,7 @@ async def analyze_chapter(
                     "box": character_box,
                     "panel_index": panel_index,
                     "match": match,
+                    "mask": mask,
                 }
             )
         pages_result.append(
@@ -174,6 +203,49 @@ async def analyze_chapter(
             }
         )
     return {"analyzer_profile": ANALYZER_PROFILE, "pages": pages_result}
+
+
+def predict_character_masks(page_arrays, raw_results, matches):
+    results = []
+    for image, raw, page_matches in zip(page_arrays, raw_results, matches):
+        State.sam_predictor.set_image(image)
+        page_masks = []
+        panels = normalized_panels(
+            raw.get("panels", []),
+            image.shape[1],
+            image.shape[0],
+        )
+        for raw_box, match in zip(raw.get("characters", []), page_matches):
+            if match.get("status") != "accepted":
+                page_masks.append(None)
+                continue
+            box = box_payload(raw_box, image.shape[1], image.shape[0])
+            panel_index = containing_panel(box, panels)
+            if panel_index is not None:
+                box = intersect_box(box, panels[panel_index])
+            masks, scores, _ = State.sam_predictor.predict(
+                box=np.asarray(
+                    [box["x1"], box["y1"], box["x2"], box["y2"]],
+                    dtype=np.float32,
+                ),
+                multimask_output=True,
+            )
+            index = int(np.argmax(scores))
+            score = float(scores[index])
+            if score < SAM_MIN_SCORE:
+                page_masks.append(None)
+                continue
+            cropped = masks[index][box["y1"] : box["y2"], box["x1"] : box["x2"]]
+            page_masks.append(
+                {
+                    "width": box["x2"] - box["x1"],
+                    "height": box["y2"] - box["y1"],
+                    "counts": encode_binary_mask(cropped),
+                    "score": score,
+                }
+            )
+        results.append(page_masks)
+    return results
 
 
 def character_crop_embeddings(page_arrays, raw_results):
