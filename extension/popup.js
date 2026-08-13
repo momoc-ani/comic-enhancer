@@ -147,7 +147,7 @@ async function save() {
   try {
     const current = await chrome.storage.local.get(DEFAULTS);
     const settings = resolveSettings(current);
-    if (!settings.apiBaseUrl) throw new Error("请输入漫画增强 API 地址");
+    if (!settings.apiBaseUrl) throw new Error("请输入漫画增强服务地址");
     if (!settings.apiToken) throw new Error("请输入 API Token");
 
     const granted = await chrome.permissions.request({
