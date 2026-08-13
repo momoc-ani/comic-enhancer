@@ -7,8 +7,6 @@
   let active = false;
   let settings = null;
   let sequence = 0;
-  let analysisStarted = false;
-  let analysisPromise = null;
   let scheduler = null;
   let settingsVersion = 0;
 
@@ -128,6 +126,7 @@
       this.adapter = adapter;
       this.work = work;
       this.chapter = chapter;
+      this.analysisPromises = new Map();
       this.observer = new IntersectionObserver(
         (observations) => {
           for (const observation of observations) {
@@ -144,21 +143,25 @@
         if (!entriesByImage.has(image)) {
           entriesByImage.set(image, { image, index, state: "idle" });
           this.observer.observe(image);
+        } else {
+          entriesByImage.get(image).index = index;
         }
       });
-      this.analyzeWindow(images);
       this.prefetchAroundViewport(images);
     }
 
-    analyzeWindow(images) {
-      if (analysisStarted || settings.mode !== "manganinja") return;
+    analyzeWindow(images, pageIndex) {
+      if (settings.mode !== "manganinja") return null;
+      const windowStart = Math.floor(pageIndex / 8) * 8;
+      if (this.analysisPromises.has(windowStart)) {
+        return this.analysisPromises.get(windowStart);
+      }
       const imageUrls = images
-        .slice(0, 8)
+        .slice(windowStart, windowStart + 8)
         .map((image) => this.adapter.imageUrl(image))
         .filter(Boolean);
-      if (imageUrls.length === 0) return;
-      analysisStarted = true;
-      analysisPromise = chrome.runtime
+      if (imageUrls.length === 0) return null;
+      const promise = chrome.runtime
         .sendMessage({
           type: "COMIC_ENHANCER_ANALYZE",
           payload: { imageUrls, work: this.work },
@@ -167,6 +170,8 @@
           if (!response?.ok) console.warn("Comic Enhancer analysis:", response?.error);
         })
         .catch((error) => console.warn("Comic Enhancer analysis:", error));
+      this.analysisPromises.set(windowStart, promise);
+      return promise;
     }
 
     prefetchAroundViewport(images) {
@@ -175,6 +180,7 @@
       );
       const start = firstBelowViewport < 0 ? 0 : firstBelowViewport;
       const count = Math.max(0, Number(settings.prefetchPages) || 0);
+      this.analyzeWindow(images, start);
       images.slice(start, start + count + 1).forEach((image, offset) => {
         this.enqueue(image, offset);
       });
@@ -195,8 +201,7 @@
     resetForSettingsChange() {
       settingsVersion += 1;
       pending.length = 0;
-      analysisStarted = false;
-      analysisPromise = null;
+      this.analysisPromises.clear();
       for (const image of this.adapter.findImages()) {
         const entry = entriesByImage.get(image);
         if (!entry) continue;
@@ -239,8 +244,12 @@
       entry.state = "processing";
       markState(task.image, "processing");
       try {
-        if (settings.mode === "manganinja" && analysisPromise) {
-          await analysisPromise;
+        if (settings.mode === "manganinja") {
+          const analysis = this.analyzeWindow(
+            this.adapter.findImages(),
+            task.index,
+          );
+          if (analysis) await analysis;
         }
         if (task.settingsVersion !== settingsVersion) return;
         const response = await chrome.runtime.sendMessage({
