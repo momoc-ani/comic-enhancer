@@ -126,7 +126,7 @@ class PresetWorkflowLoader(WorkflowLoader):
     ) -> tuple[Path, bool, bool, str]:
         mode = str(options.mode)
         if (
-            mode == "quality"
+            mode == "manganinja"
             and reference_available
             and self.reference_quality_workflow is not None
             and self.reference_quality_workflow.is_file()
@@ -137,9 +137,10 @@ class PresetWorkflowLoader(WorkflowLoader):
                 True,
                 "manganinja-reference",
             )
-        path = self.quality_workflow if mode == "quality" else self.fast_workflow
+        fallback_mode = "quality" if mode == "manganinja" else mode
+        path = self.quality_workflow if fallback_mode == "quality" else self.fast_workflow
         if resolved.adapter is not None:
-            adapter_workflow = resolved.adapter.workflows.get(mode)
+            adapter_workflow = resolved.adapter.workflows.get(fallback_mode)
             if adapter_workflow:
                 return (
                     self._adapter_workflow_path(adapter_workflow),

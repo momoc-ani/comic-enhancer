@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class ProcessingMode(StrEnum):
     FAST = "fast"
     QUALITY = "quality"
+    MANGANINJA = "manganinja"
 
 
 class AdapterSource(StrEnum):
@@ -119,6 +120,8 @@ class Capabilities(BaseModel):
     ready: bool
     adapter_policy: list[str]
     model_profiles: list[str] = Field(default_factory=list)
+    processing_modes: list[ProcessingMode] = Field(default_factory=list)
+    manganinja_available: bool = False
     prefetch_pages: int
     max_parallel_inference: int
 

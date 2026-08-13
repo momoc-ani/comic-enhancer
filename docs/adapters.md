@@ -29,7 +29,7 @@
 }
 ```
 
-LoRA 强度和加载器节点不再由 Python 注入。每个 LoRA 的 `workflows` 指向完整 API 工作流，因此不同 LoRA 可以使用不同加载器、节点编号和强度；工作流内的 `lora_name` 必须与下载到 ComfyUI `models/loras` 的相对路径一致。若只提供 `fast`，质量模式会继续尝试通用 LoRA，最后回退到质量基础工作流。
+LoRA 强度和加载器节点不再由 Python 注入。每个 LoRA 的 `workflows` 指向完整 API 工作流，因此不同 LoRA 可以使用不同加载器、节点编号和强度；工作流内的 `lora_name` 必须与下载到 ComfyUI `models/loras` 的相对路径一致。若只提供 `fast`，质量模式会继续尝试通用 LoRA，最后回退到质量基础工作流。MangaNinja 档没有可靠参考或参考推理失败时，也复用 `quality` 工作流的作品/通用 LoRA 回退。
 
 ## Gitee 分发设计
 

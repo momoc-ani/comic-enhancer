@@ -10,6 +10,7 @@
   let analysisStarted = false;
   let analysisPromise = null;
   let scheduler = null;
+  let settingsVersion = 0;
 
   class CopyMangaAdapter {
     static matches() {
@@ -150,7 +151,7 @@
     }
 
     analyzeWindow(images) {
-      if (analysisStarted || settings.mode !== "quality") return;
+      if (analysisStarted || settings.mode !== "manganinja") return;
       const imageUrls = images
         .slice(0, 8)
         .map((image) => this.adapter.imageUrl(image))
@@ -191,13 +192,35 @@
       this.discover();
     }
 
+    resetForSettingsChange() {
+      settingsVersion += 1;
+      pending.length = 0;
+      analysisStarted = false;
+      analysisPromise = null;
+      for (const image of this.adapter.findImages()) {
+        const entry = entriesByImage.get(image);
+        if (!entry) continue;
+        entry.state = "idle";
+        const wrapper = ensureWrapper(image);
+        delete wrapper.dataset.state;
+        wrapper.title = "";
+      }
+      this.discover();
+    }
+
     enqueue(image, priority) {
       const entry = entriesByImage.get(image);
       if (!entry || entry.state !== "idle") return;
       const imageUrl = this.adapter.imageUrl(image);
       if (!imageUrl) return;
       entry.state = "queued";
-      pending.push({ ...entry, imageUrl, priority, sequence: sequence++ });
+      pending.push({
+        ...entry,
+        imageUrl,
+        priority,
+        sequence: sequence++,
+        settingsVersion,
+      });
       pending.sort((a, b) => a.priority - b.priority || a.sequence - b.sequence);
       this.drain();
     }
@@ -216,9 +239,10 @@
       entry.state = "processing";
       markState(task.image, "processing");
       try {
-        if (settings.mode === "quality" && analysisPromise) {
+        if (settings.mode === "manganinja" && analysisPromise) {
           await analysisPromise;
         }
+        if (task.settingsVersion !== settingsVersion) return;
         const response = await chrome.runtime.sendMessage({
           type: "COMIC_ENHANCER_PROCESS",
           payload: {
@@ -228,10 +252,12 @@
             options: { page_index: task.index, palette_version: "default" },
           },
         });
+        if (task.settingsVersion !== settingsVersion) return;
         if (!response?.ok) throw new Error(response?.error || "Unknown error");
         await showResult(task.image, response.result);
         entry.state = "completed";
       } catch (error) {
+        if (task.settingsVersion !== settingsVersion) return;
         entry.state = "failed";
         markState(task.image, "failed", error instanceof Error ? error.message : String(error));
       } finally {
@@ -293,8 +319,14 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type !== "COMIC_ENHANCER_REFRESH_SETTINGS") return false;
+    const runChanged =
+      settings?.mode !== message.settings.mode ||
+      settings?.apiBaseUrl !== message.settings.apiBaseUrl;
     settings = { ...settings, ...message.settings };
-    if (settings.enabled) scheduler?.retryFailed();
+    if (settings.enabled) {
+      if (runChanged) scheduler?.resetForSettingsChange();
+      else scheduler?.retryFailed();
+    }
     sendResponse({ ok: true });
     return false;
   });

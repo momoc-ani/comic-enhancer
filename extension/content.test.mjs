@@ -68,7 +68,13 @@ test("retries failed pages with the real lazy-load URL after settings change", a
   const image = new FakeImage();
   const runtimeListeners = [];
   const processUrls = [];
+  let analysisCalls = 0;
   let processAttempt = 0;
+  let releaseSlowRequest;
+  let markSlowRequestStarted;
+  const slowRequestStarted = new Promise((resolve) => {
+    markSlowRequestStarted = resolve;
+  });
   globalThis.location = {
     hostname: "www.mangacopy.com",
     pathname: "/comic/work/chapter/one",
@@ -106,19 +112,31 @@ test("retries failed pages with the real lazy-load URL after settings change", a
         if (message.type === "COMIC_ENHANCER_PROCESS") {
           processUrls.push(message.payload.imageUrl);
           processAttempt += 1;
-          return processAttempt === 1
-            ? { ok: false, error: "推理服务失败：401" }
-            : {
-                ok: true,
-                result: {
-                  image_data_url: "data:image/webp;base64,AA==",
-                  adapter_source: "none",
-                  adapter_applied: false,
-                  reference_applied: false,
-                  processed_panels: 0,
-                  model_profile: "sd15-colorize",
-                },
-              };
+          if (processAttempt === 1) {
+            return { ok: false, error: "推理服务失败：401" };
+          }
+          const success = {
+            ok: true,
+            result: {
+              image_data_url: "data:image/webp;base64,AA==",
+              adapter_source: "none",
+              adapter_applied: false,
+              reference_applied: false,
+              processed_panels: 0,
+              model_profile: "sd15-colorize",
+            },
+          };
+          if (processAttempt === 3) {
+            markSlowRequestStarted();
+            return new Promise((resolve) => {
+              releaseSlowRequest = () => resolve(success);
+            });
+          }
+          return success;
+        }
+        if (message.type === "COMIC_ENHANCER_ANALYZE") {
+          analysisCalls += 1;
+          return { ok: true, result: null };
         }
         return { ok: true };
       },
@@ -151,5 +169,40 @@ test("retries failed pages with the real lazy-load URL after settings change", a
     "https://img.example/page-1.webp",
     "https://img.example/page-1.webp",
   ]);
+  assert.equal(image.parentElement.dataset.state, "completed");
+
+  refresh(
+    {
+      type: "COMIC_ENHANCER_REFRESH_SETTINGS",
+      settings: {
+        enabled: true,
+        apiBaseUrl: "http://enhancer.example",
+        mode: "quality",
+        prefetchPages: 0,
+      },
+    },
+    {},
+    () => {},
+  );
+  await slowRequestStarted;
+
+  refresh(
+    {
+      type: "COMIC_ENHANCER_REFRESH_SETTINGS",
+      settings: {
+        enabled: true,
+        apiBaseUrl: "http://enhancer.example",
+        mode: "manganinja",
+        prefetchPages: 0,
+      },
+    },
+    {},
+    () => {},
+  );
+  releaseSlowRequest();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.equal(analysisCalls, 1);
+  assert.equal(processUrls.length, 4);
   assert.equal(image.parentElement.dataset.state, "completed");
 });

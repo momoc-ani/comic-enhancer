@@ -153,6 +153,10 @@ input:focus, select:focus {
   color: #247248;
 }
 
+.model-tier > strong[data-state="unavailable"] {
+  color: #a33a2d;
+}
+
 .model-tier > p {
   grid-column: 1 / -1;
   margin: 0;

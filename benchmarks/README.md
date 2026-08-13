@@ -15,7 +15,12 @@ COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
 COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
   --base-url http://192.168.38.226:8765 \
   --manifest benchmarks/works/exiled-reincarnated-heavy-knight.json \
-  --mode quality \
+  --mode quality
+
+COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
+  --base-url http://192.168.38.226:8765 \
+  --manifest benchmarks/works/exiled-reincarnated-heavy-knight.json \
+  --mode manganinja \
   --analyze
 ```
 
@@ -36,4 +41,4 @@ MangaNinja 角色参考进入默认质量路由前，还必须满足：
 - 与基础质量工作流成对比较，不因参考上色降低文字与墨线清晰度。
 - 分别报告参考实际生效页、处理分格数、回退页及失败原因。
 
-三页冒烟集只证明链路可运行。未达到 100 页授权集和上述质量门禁前，`COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED` 保持 `false`。
+三页冒烟集只证明链路可运行。`COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED=true` 只允许显式 MangaNinja 实验档使用参考链路；未达到 100 页授权集和上述质量门禁前，不得让普通质量档自动进入该链路。

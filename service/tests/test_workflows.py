@@ -214,7 +214,7 @@ def test_adapter_workflow_cannot_escape_root(tmp_path):
         loader.load(ProcessOptions(mode="fast"), resolved(adapter))
 
 
-def test_quality_reference_workflow_has_priority(tmp_path):
+def test_quality_mode_does_not_select_reference_workflow(tmp_path):
     fast = tmp_path / "fast.json"
     quality = tmp_path / "quality.json"
     reference = tmp_path / "reference.json"
@@ -234,9 +234,67 @@ def test_quality_reference_workflow_has_priority(tmp_path):
         reference_available=True,
     )
 
+    assert loaded.prompt["marker"]["inputs"]["value"] == "quality"
+    assert loaded.reference_required is False
+    assert loaded.model_profile == "sd15-colorize"
+
+
+def test_manganinja_mode_selects_reference_workflow_when_available(tmp_path):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    reference = tmp_path / "reference.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    write_workflow(reference, marker="reference")
+    loader = PresetWorkflowLoader(
+        fast_workflow=fast,
+        quality_workflow=quality,
+        reference_quality_workflow=reference,
+        workflow_root=tmp_path,
+    )
+
+    loaded = loader.load(
+        ProcessOptions(mode="manganinja"),
+        resolved(),
+        reference_available=True,
+    )
+
     assert loaded.prompt["marker"]["inputs"]["value"] == "reference"
     assert loaded.reference_required is True
     assert loaded.model_profile == "manganinja-reference"
+
+
+def test_manganinja_without_reference_uses_quality_adapter_workflow(tmp_path):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    adapter_workflow = tmp_path / "works" / "42-quality.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    write_workflow(adapter_workflow, marker="adapter-quality")
+    loader = PresetWorkflowLoader(
+        fast_workflow=fast,
+        quality_workflow=quality,
+        workflow_root=tmp_path,
+    )
+    adapter = AdapterManifest(
+        adapter_id="work-42",
+        name="Work 42",
+        base_model="sd15-anime",
+        revision="v1",
+        file="work.safetensors",
+        workflows={"quality": "works/42-quality.json"},
+    )
+
+    loaded = loader.load(
+        ProcessOptions(mode="manganinja"),
+        resolved(adapter),
+        reference_available=False,
+    )
+
+    assert loaded.prompt["marker"]["inputs"]["value"] == "adapter-quality"
+    assert loaded.adapter_applied is True
+    assert loaded.reference_required is False
+    assert loaded.model_profile == "sd15-colorize-lora"
 
 
 def test_reference_profile_requires_ready_marker(tmp_path, monkeypatch):
@@ -269,20 +327,52 @@ def test_reference_profile_requires_ready_marker(tmp_path, monkeypatch):
     )
     assets = reference_assets()
 
-    unavailable = backend.adapter_policy(assets, ProcessOptions(mode="quality"))
-    assert unavailable.enabled is True
-    assert unavailable.required_workflow == "quality"
+    assert backend.reference_profile_ready() is False
     assert calls == []
 
     ready.touch()
-    available = backend.adapter_policy(assets, ProcessOptions(mode="quality"))
-    assert available.enabled is True
-    cached = backend.adapter_policy(assets, ProcessOptions(mode="quality"))
-    assert cached.enabled is True
-    assert calls == []
+    assert backend.reference_profile_ready() is True
+    assert backend.reference_profile_ready() is True
+    assert len(calls) == 1
 
 
-def test_rejected_character_never_enables_reference_profile(tmp_path, monkeypatch):
+def test_quality_backend_does_not_probe_reference_profile(tmp_path, monkeypatch):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    reference = tmp_path / "reference.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    write_workflow(reference, marker="reference")
+    loader = PresetWorkflowLoader(
+        fast_workflow=fast,
+        quality_workflow=quality,
+        reference_quality_workflow=reference,
+        workflow_root=tmp_path,
+    )
+    backend = ComfyUIBackend(
+        base_url="http://main",
+        reference_base_url="http://reference",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=loader,
+        reference_enabled=True,
+    )
+    monkeypatch.setattr(
+        backend,
+        "_reference_ready",
+        lambda: (_ for _ in ()).throw(AssertionError("reference probe")),
+    )
+
+    revision = backend.cache_revision(
+        ProcessOptions(mode="quality"),
+        resolved(),
+        reference_assets(),
+    )
+
+    assert revision == loader.revision(ProcessOptions(mode="quality"), resolved())
+
+
+def test_rejected_character_never_selects_reference_workflow(tmp_path, monkeypatch):
     fast = tmp_path / "fast.json"
     quality = tmp_path / "quality.json"
     reference = tmp_path / "reference.json"
@@ -313,9 +403,15 @@ def test_rejected_character_never_enables_reference_profile(tmp_path, monkeypatc
     assets = reference_assets()
     assets.analysis.characters[0].match.status = "rejected"
 
-    policy = backend.adapter_policy(assets, ProcessOptions(mode="quality"))
+    monkeypatch.setattr(backend, "_reference_ready", lambda: True)
+    options = ProcessOptions(mode="manganinja")
+    revision = backend.cache_revision(options, resolved(), assets)
 
-    assert policy.enabled is True
+    assert revision == loader.revision(
+        options,
+        resolved(),
+        reference_available=False,
+    )
 
 
 def test_reference_failure_falls_back_to_selected_quality_workflow(tmp_path, monkeypatch):
@@ -399,7 +495,7 @@ def test_reference_failure_falls_back_to_selected_quality_workflow(tmp_path, mon
         backend.process(
             assets,
             tmp_path / "output.webp",
-            ProcessOptions(mode="quality"),
+            ProcessOptions(mode="manganinja"),
             resolved(),
         )
 

@@ -35,6 +35,7 @@ from .models import (
     ChapterAnalysisResult,
     CharacterBankEntry,
     MetadataResolution,
+    ProcessingMode,
     ProcessOptions,
     ProcessResult,
     WorkIdentity,
@@ -186,6 +187,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ready=backend.ready(),
             adapter_policy=["work", "generic", "none"],
             model_profiles=list(backend.model_profiles),
+            processing_modes=list(ProcessingMode),
+            manganinja_available=bool(
+                settings.comfyui_reference_enabled
+                and analyzer is not None
+                and analyzer.ready()
+                and backend.reference_profile_ready()
+            ),
             prefetch_pages=settings.prefetch_pages,
             max_parallel_inference=settings.max_parallel_inference,
         )
@@ -215,7 +223,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         analysis = None
         character_references: dict[str, bytes] = {}
         if (
-            str(options.mode) == "quality"
+            str(options.mode) == "manganinja"
             and settings.comfyui_reference_enabled
             and analyzer is not None
         ):
@@ -332,12 +340,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await asyncio.to_thread(metadata.resolve, work)
 
     async def _ensure_remote_adapter(work: WorkIdentity, options: ProcessOptions) -> None:
+        required_workflow = (
+            "quality" if str(options.mode) == "manganinja" else str(options.mode)
+        )
         for _, manifest in registry.candidates(
             work,
             prefer_work_adapter=options.prefer_work_adapter,
             allow_generic_adapter=options.allow_generic_adapter,
             compatible_base_models=backend.supported_base_models,
-            required_workflow=str(options.mode),
+            required_workflow=required_workflow,
         ):
             if registry.is_available(manifest):
                 return

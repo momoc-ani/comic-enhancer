@@ -18,6 +18,13 @@ const PROFILES = Object.freeze({
     mode: "quality",
     prefetchPages: 2,
   },
+  "remote-manganinja": {
+    title: "远端增强服务 · MangaNinja",
+    detail: "角色参考实验档，人物可靠时分格上色，否则回退质量档",
+    endpoint: "remote",
+    mode: "manganinja",
+    prefetchPages: 1,
+  },
   "local-fast": {
     title: "本机服务 · 快速",
     detail: "连接本机 8765 端口，预处理后续 3 页",
@@ -31,6 +38,13 @@ const PROFILES = Object.freeze({
     apiBaseUrl: LOCAL_API_URL,
     mode: "quality",
     prefetchPages: 2,
+  },
+  "local-manganinja": {
+    title: "本机服务 · MangaNinja",
+    detail: "需要服务端部署 MAGIv2 与 MangaNinja，失败时回退质量档",
+    apiBaseUrl: LOCAL_API_URL,
+    mode: "manganinja",
+    prefetchPages: 1,
   },
 });
 
@@ -104,7 +118,7 @@ function inferProfile(settings) {
     return settings.profile;
   }
   const url = normalizeUrl(settings.apiBaseUrl || "");
-  const mode = settings.mode === "quality" ? "quality" : "fast";
+  const mode = normalizeMode(settings.mode);
   if (url === REMOTE_API_URL) return `remote-${mode}`;
   if (url === LOCAL_API_URL || url === "http://localhost:8765") return `local-${mode}`;
   return "custom";
@@ -118,7 +132,7 @@ function renderProfile() {
   elements.customFields.hidden = !custom;
   const profile = custom
     ? {
-        title: `自定义服务 · ${elements.customMode.value === "quality" ? "质量" : "快速"}`,
+        title: `自定义服务 · ${modeLabel(elements.customMode.value)}`,
         detail: "使用指定服务地址，自动启用作品 LoRA 回退和页面预处理",
       }
     : PROFILES[profileId];
@@ -180,7 +194,7 @@ async function save() {
 function resolveSettings(current = DEFAULTS) {
   const profileId = elements.profile.value;
   const preset = PROFILES[profileId];
-  const customMode = elements.customMode.value === "quality" ? "quality" : "fast";
+  const customMode = normalizeMode(elements.customMode.value);
   const mode = preset?.mode || customMode;
   const apiBaseUrl = normalizeUrl(
     preset?.endpoint === "remote"
@@ -194,7 +208,8 @@ function resolveSettings(current = DEFAULTS) {
     apiBaseUrl,
     apiToken: elements.apiToken.value.trim(),
     mode,
-    prefetchPages: preset?.prefetchPages || (mode === "quality" ? 2 : 3),
+    prefetchPages:
+      preset?.prefetchPages || (mode === "manganinja" ? 1 : mode === "quality" ? 2 : 3),
     preferWorkAdapter: true,
     allowGenericAdapter: true,
     remoteApiBaseUrl: normalizeUrl(elements.remoteApiBaseUrl.value),
@@ -236,4 +251,13 @@ function setStatus(message, state) {
 
 function normalizeUrl(value) {
   return String(value || "").trim().replace(/\/$/, "");
+}
+
+function normalizeMode(value) {
+  return ["fast", "quality", "manganinja"].includes(value) ? value : "fast";
+}
+
+function modeLabel(value) {
+  if (value === "manganinja") return "MangaNinja";
+  return value === "quality" ? "质量" : "快速";
 }

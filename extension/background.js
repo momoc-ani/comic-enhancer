@@ -81,7 +81,9 @@ function isSupportedPage(url) {
 
 function inferLegacyProfile(settings) {
   const url = String(settings.apiBaseUrl || "").replace(/\/$/, "");
-  const mode = settings.mode === "quality" ? "quality" : "fast";
+  const mode = ["fast", "quality", "manganinja"].includes(settings.mode)
+    ? settings.mode
+    : "fast";
   if (url === "http://192.168.38.226:8765") return `remote-${mode}`;
   if (url === "http://127.0.0.1:8765" || url === "http://localhost:8765") {
     return `local-${mode}`;
@@ -203,7 +205,7 @@ async function processPage(payload) {
 
 async function analyzePages(payload) {
   const settings = await chrome.storage.local.get(DEFAULT_SETTINGS);
-  if (!settings.enabled || settings.mode !== "quality") return null;
+  if (!settings.enabled || settings.mode !== "manganinja") return null;
   const form = new FormData();
   for (const [index, imageUrl] of payload.imageUrls.entries()) {
     const sourceResponse = await fetch(imageUrl, {

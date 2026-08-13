@@ -30,6 +30,9 @@ class InferenceBackend(ABC):
     def ready(self) -> bool:
         return True
 
+    def reference_profile_ready(self) -> bool:
+        return False
+
     def cache_revision(
         self,
         options: ProcessOptions,
@@ -115,7 +118,7 @@ class PassthroughBackend(InferenceBackend):
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with Image.open(BytesIO(assets.image_bytes)) as source:
             image = ImageOps.exif_transpose(source).convert("RGB")
-            if options.mode == "quality":
+            if options.mode in {"quality", "manganinja"}:
                 image = ImageEnhance.Contrast(image).enhance(1.04)
                 image = ImageEnhance.Sharpness(image).enhance(1.08)
             image.save(output_path, format="WEBP", quality=92, method=4)
@@ -159,15 +162,18 @@ class ComfyUIBackend(InferenceBackend):
         except httpx.HTTPError:
             return False
 
+    def reference_profile_ready(self) -> bool:
+        return bool(
+            self.workflow_loader.supports_reference() and self._reference_ready()
+        )
+
     def cache_revision(
         self,
         options: ProcessOptions,
         resolved: ResolvedAdapter,
         assets: InferenceAssets | None = None,
     ) -> str:
-        reference_available = bool(
-            assets and assets.has_panel_references and self._reference_ready()
-        )
+        reference_available = self._reference_available(options, assets)
         workflow_revision = self.workflow_loader.revision(
             options,
             resolved,
@@ -192,7 +198,9 @@ class ComfyUIBackend(InferenceBackend):
         return AdapterPolicy(
             enabled=True,
             compatible_base_models=self.supported_base_models,
-            required_workflow=str(options.mode),
+            required_workflow=(
+                "quality" if str(options.mode) == "manganinja" else str(options.mode)
+            ),
         )
 
     def process(
@@ -202,9 +210,7 @@ class ComfyUIBackend(InferenceBackend):
         options: ProcessOptions,
         resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
-        reference_available = bool(
-            assets.has_panel_references and self._reference_ready()
-        )
+        reference_available = self._reference_available(options, assets)
         loaded_workflow = self.workflow_loader.load(
             options,
             resolved,
@@ -487,6 +493,18 @@ class ComfyUIBackend(InferenceBackend):
         self._reference_ready_cached_value = ready
         self._reference_ready_cached_until = now + (5 if ready else 1)
         return ready
+
+    def _reference_available(
+        self,
+        options: ProcessOptions,
+        assets: InferenceAssets | None,
+    ) -> bool:
+        return bool(
+            str(options.mode) == "manganinja"
+            and assets is not None
+            and assets.has_panel_references
+            and self._reference_ready()
+        )
 
     def _upload(self, client: httpx.Client, image_bytes: bytes, role: str) -> str:
         upload_name = f"comic-enhancer-{role}-{uuid.uuid4().hex}.png"

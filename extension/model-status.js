@@ -6,7 +6,7 @@ const PROFILE_LABELS = Object.freeze({
 
 export function buildModelExecution(result, settings, completedAt = Date.now()) {
   return {
-    requestedMode: settings.mode === "quality" ? "quality" : "fast",
+    requestedMode: normalizeMode(settings.mode),
     configuredProfile: settings.profile || "custom",
     apiBaseUrl: normalizeUrl(settings.apiBaseUrl),
     modelProfile: String(result.model_profile || "unknown"),
@@ -22,15 +22,20 @@ export function buildModelExecution(result, settings, completedAt = Date.now()) 
 }
 
 export function describeModelTier(settings, execution, capabilities = null) {
-  const mode = settings.mode === "quality" ? "quality" : "fast";
-  const configuredTitle = mode === "quality" ? "质量档" : "快速档";
+  const mode = normalizeMode(settings.mode);
+  const configuredTitle =
+    mode === "manganinja" ? "MangaNinja 档" : mode === "quality" ? "质量档" : "快速档";
   if (!matchesCurrentSettings(settings, execution)) {
+    const unavailable =
+      mode === "manganinja" && capabilities && !capabilities.manganinja_available;
     return {
       title: configuredTitle,
-      detail: capabilities?.ready
-        ? "服务已连接，等待当前档位首次推理"
-        : "等待连接服务并完成首次推理",
-      state: capabilities?.ready ? "ready" : "pending",
+      detail: unavailable
+        ? "服务未启用 MangaNinja，当前请求会回退质量档"
+        : capabilities?.ready
+          ? "服务已连接，等待当前档位首次推理"
+          : "等待连接服务并完成首次推理",
+      state: unavailable ? "unavailable" : capabilities?.ready ? "ready" : "pending",
     };
   }
 
@@ -63,7 +68,7 @@ export function describeModelTier(settings, execution, capabilities = null) {
 
 export function matchesCurrentSettings(settings, execution) {
   if (!execution) return false;
-  const mode = settings.mode === "quality" ? "quality" : "fast";
+  const mode = normalizeMode(settings.mode);
   return (
     execution.requestedMode === mode &&
     normalizeUrl(execution.apiBaseUrl) === normalizeUrl(settings.apiBaseUrl)
@@ -76,4 +81,8 @@ function formatElapsed(elapsedMs) {
 
 function normalizeUrl(value) {
   return String(value || "").trim().replace(/\/$/, "");
+}
+
+function normalizeMode(value) {
+  return ["fast", "quality", "manganinja"].includes(value) ? value : "fast";
 }

@@ -174,7 +174,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--manifest", type=Path, required=True)
-    parser.add_argument("--mode", choices=("fast", "quality"), required=True)
+    parser.add_argument(
+        "--mode",
+        choices=("fast", "quality", "manganinja"),
+        required=True,
+    )
     parser.add_argument("--analyze", action="store_true")
     parser.add_argument("--token-env", default="COMIC_ENHANCER_TOKEN")
     parser.add_argument("--timeout", type=int, default=600)

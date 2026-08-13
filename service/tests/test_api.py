@@ -7,7 +7,13 @@ from PIL import Image
 from comic_enhancer.config import Settings
 from comic_enhancer.config import load_settings
 from comic_enhancer.main import create_app, prioritized_metadata_candidates
-from comic_enhancer.models import MetadataResolution, WorkIdentity, WorkMetadata
+from comic_enhancer.models import (
+    MetadataResolution,
+    ProcessOptions,
+    ProcessingMode,
+    WorkIdentity,
+    WorkMetadata,
+)
 
 
 def png_bytes():
@@ -84,6 +90,38 @@ def test_capabilities_require_auth(tmp_path):
     client = TestClient(create_app(settings))
 
     assert client.get("/v1/capabilities").status_code == 401
+
+
+def test_manganinja_mode_is_valid():
+    options = ProcessOptions(mode="manganinja")
+
+    assert options.mode == ProcessingMode.MANGANINJA
+
+
+def test_capabilities_declare_processing_modes_and_manganinja_state(
+    tmp_path, monkeypatch
+):
+    settings = Settings(
+        api_token="test-token",
+        runtime_dir=tmp_path / "runtime",
+        adapter_index=tmp_path / "missing.json",
+        comfyui_reference_enabled=True,
+        analyzer_enabled=True,
+    )
+    app = create_app(settings)
+    monkeypatch.setattr(app.state.processor.backend, "reference_profile_ready", lambda: True)
+    monkeypatch.setattr(app.state.analyzer, "ready", lambda: True)
+    client = TestClient(app)
+
+    response = client.get(
+        "/v1/capabilities",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["processing_modes"] == ["fast", "quality", "manganinja"]
+    assert payload["manganinja_available"] is True
 
 
 def test_metadata_resolve_requires_auth_and_returns_cached_shape(tmp_path):

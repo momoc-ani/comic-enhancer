@@ -31,22 +31,22 @@ MangaNinja 上游使用 `CC BY-NC 4.0`，当前部署只适用于已确认的非
 
 MAGIv2 固定版本为 `ragavsachdeva/magiv2@fbc890fec52977142e8ee00bfe26e9458b65517c`，模型放在 `/data1/models/ComfyUI/models/magiv2`。其模型卡限定个人、研究、非商用、非营利用途，不能据此推导出商用或任意再分发权利。权重同样不进入 Git、Gitee 或镜像。热分析三张测试页约 `0.64` 秒，模型常驻约 `2.2-3.3 GiB` 显存，冷启动约 90 秒。
 
-五个权重全部校验通过后，下载脚本才会生成 `MangaNinjia.ready`。专用容器的健康检查和增强 API 都检查该标记；下载未完成、哈希不一致或 8191 不可达时，质量请求回退至 8190 的基础质量工作流，不会进入一个必然失败的 MangaNinja 队列。本机下载可运行 `scripts/download_manganinja_local.sh`，默认从 `hf-mirror.com` 并行断点续传全部五项权重至 `runtime/model-downloads/MangaNinjia`；也可用 `MANGANINJA_HF_BASE_URL` 切换其他兼容国内镜像。完成后运行 `scripts/upload_manganinja_weights.sh`，五个文件均以 `.uploading` 名称续传并逐个原子改名，远端五项哈希全部通过后才生成正式就绪标记。
+五个权重全部校验通过后，下载脚本才会生成 `MangaNinjia.ready`。专用容器的健康检查和增强 API 都检查该标记；下载未完成、哈希不一致或 8191 不可达时，MangaNinja 档请求回退至 8190 的质量工作流，不会进入一个必然失败的 MangaNinja 队列。本机下载可运行 `scripts/download_manganinja_local.sh`，默认从 `hf-mirror.com` 并行断点续传全部五项权重至 `runtime/model-downloads/MangaNinjia`；也可用 `MANGANINJA_HF_BASE_URL` 切换其他兼容国内镜像。完成后运行 `scripts/upload_manganinja_weights.sh`，五个文件均以 `.uploading` 名称续传并逐个原子改名，远端五项哈希全部通过后才生成正式就绪标记。
 
 未配置 Gitee 仓库和 Token 时保持 `COMIC_ENHANCER_GITEE_ENABLED=false`，基础上色和本地 LoRA 仍可使用。填写完整 Gitee 配置后再改为 `true` 并重建 API 容器。
 
 插件配置：
 
 ```text
-运行方案: 远端 RTX 4090 · 快速
+运行方案: 远端增强服务 · 快速/质量/MangaNinja
 API Token: 与远端 .env 中 COMIC_ENHANCER_TOKEN 相同
 ```
 
-首版保持 `COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED=false`：选择“质量”时走 8190 的 `sd15-colorize-quality.json` 及作品/通用 LoRA 回退。可单独启用 `COMIC_ENHANCER_ANALYZER_ENABLED=true` 预计算人物分析缓存，而不改变页面上色路由。插件不接触管理员 Token 或 Gitee Token。
+部署 MangaNinja 档时设置 `COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED=true` 和 `COMIC_ENHANCER_ANALYZER_ENABLED=true`。这两个服务端总开关只控制第三档是否可用；选择“质量”始终走 8190 的 `sd15-colorize-quality.json` 及作品/通用 LoRA 回退，不会调用 MAGIv2 或 MangaNinja。插件不接触管理员 Token 或 Gitee Token。
 
 插件只配置漫画增强服务地址，不提供 ComfyUI、MAGIv2 或 MangaNinja 地址入口。基础增强 ComfyUI 可部署在宿主机或另一台机器，通过 API 容器的 `COMIC_ENHANCER_COMFYUI_URL` 配置；参考工作流地址通过 `COMIC_ENHANCER_COMFYUI_REFERENCE_URL` 配置。插件无需感知任何内部推理后端地址。
 
-真实基准中，MangaNinja 使用 GhostMix V2、25 步、节点线稿预处理和 PointNet 对应点，单格热推理约 8 秒、冷切换约 20 秒，因此只适合预推理质量模式，不满足快速模式秒级目标。4090 上并存其他 GPU 服务时必须预留采样峰值；OOM 会由 API 回退到 8190，不能通过降低匹配安全阈值或强制占用其他业务显存解决。
+真实基准中，MangaNinja 使用 GhostMix V2、25 步、节点线稿预处理和 PointNet 对应点，单格热推理约 8 秒、冷切换约 20 秒，因此作为可预推理的独立实验档，不满足快速模式秒级目标。4090 上并存其他 GPU 服务时必须预留采样峰值；OOM 会由 API 回退到 8190，不能通过降低匹配安全阈值或强制占用其他业务显存解决。
 
 替换其他 ComfyUI 工作流时，导出 API 格式 JSON，并在 `settings.json` 或环境变量中修改对应工作流路径。单输入工作流必须只有一个 `LoadImage`；多输入工作流使用 `_meta.title` 声明 `INPUT_IMAGE`、`REFERENCE_IMAGE` 等角色；所有工作流至少有一个 `SaveImage`，其余模型、LoRA 和参数必须全部预设。服务不依赖固定节点编号。
 
