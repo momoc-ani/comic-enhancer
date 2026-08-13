@@ -254,6 +254,8 @@
         });
         if (task.settingsVersion !== settingsVersion) return;
         if (!response?.ok) throw new Error(response?.error || "Unknown error");
+        await ensureSourceImageLoaded(task.image, task.imageUrl);
+        if (task.settingsVersion !== settingsVersion) return;
         await showResult(task.image, response.result);
         entry.state = "completed";
       } catch (error) {
@@ -265,6 +267,50 @@
         this.drain();
       }
     }
+  }
+
+  async function ensureSourceImageLoaded(image, imageUrl) {
+    const currentUrl = image.currentSrc || image.src;
+    if (
+      currentUrl === imageUrl &&
+      image.complete &&
+      image.naturalWidth > 0 &&
+      image.naturalHeight > 0
+    ) {
+      pinSourceImage(image, imageUrl);
+      return;
+    }
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error("漫画原图加载超时")),
+        15000,
+      );
+      const complete = (callback) => () => {
+        clearTimeout(timeout);
+        callback();
+      };
+      image.addEventListener("load", complete(resolve), { once: true });
+      image.addEventListener(
+        "error",
+        complete(() => reject(new Error("漫画原图加载失败"))),
+        { once: true },
+      );
+      pinSourceImage(image, imageUrl);
+    });
+  }
+
+  function pinSourceImage(image, imageUrl) {
+    for (const attribute of [
+      "data-src",
+      "data-original",
+      "data-lazy-src",
+      "data-srcset",
+      "srcset",
+    ]) {
+      image.removeAttribute(attribute);
+    }
+    image.classList.remove("lazyload", "lazyloading");
+    image.src = imageUrl;
   }
 
   async function showResult(image, result) {

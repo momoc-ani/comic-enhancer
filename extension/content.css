@@ -13,7 +13,7 @@
   height: auto;
 }
 
-.comic-enhancer-result {
+.comic-enhancer-page > .comic-enhancer-result {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -46,4 +46,3 @@
 @keyframes comic-enhancer-spin {
   to { transform: rotate(360deg); }
 }
-

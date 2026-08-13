@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 class ClassList {
   constructor(values = []) {
@@ -8,6 +9,10 @@ class ClassList {
 
   contains(value) {
     return this.values.has(value);
+  }
+
+  remove(...values) {
+    values.forEach((value) => this.values.delete(value));
   }
 }
 
@@ -51,6 +56,10 @@ class FakeImage {
     return null;
   }
 
+  removeAttribute(name) {
+    if (name === "data-src") delete this.dataset.src;
+  }
+
   getBoundingClientRect() {
     return { width: 1124, height: 1600, bottom: 100 };
   }
@@ -63,6 +72,13 @@ class FakeImage {
     if (type === "load") queueMicrotask(listener);
   }
 }
+
+test("result overlay sizing overrides generic page image sizing", () => {
+  const css = readFileSync(new URL("./content.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.comic-enhancer-page\s*>\s*\.comic-enhancer-result\s*\{/);
+  assert.match(css, /height:\s*100%/);
+});
 
 test("retries failed pages with the real lazy-load URL after settings change", async () => {
   const image = new FakeImage();
@@ -169,6 +185,9 @@ test("retries failed pages with the real lazy-load URL after settings change", a
     "https://img.example/page-1.webp",
     "https://img.example/page-1.webp",
   ]);
+  assert.equal(image.src, "https://img.example/page-1.webp");
+  assert.equal(image.dataset.src, undefined);
+  assert.equal(image.classList.contains("lazyload"), false);
   assert.equal(image.parentElement.dataset.state, "completed");
 
   refresh(
