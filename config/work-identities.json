@@ -9,8 +9,38 @@
         "追放された転生重騎士はゲーム知識で無双する"
       ],
       "external_ids": {
+        "bangumi": "418302",
         "anilist": "150193"
-      }
+      },
+      "characters": [
+        {
+          "identity_id": "elymas-edvan",
+          "name": "Elymas Edvan",
+          "aliases": ["エルマ・エドヴァン"],
+          "external_ids": {
+            "bangumi": "173007",
+            "anilist": "277688"
+          }
+        },
+        {
+          "identity_id": "luce-rubis",
+          "name": "Luce Rubis",
+          "aliases": ["ルーチェ・ルービス"],
+          "external_ids": {
+            "bangumi": "173008",
+            "anilist": "344248"
+          }
+        },
+        {
+          "identity_id": "maris-edvan",
+          "name": "Maris Edvan",
+          "aliases": ["マリス・エドヴァン"],
+          "external_ids": {
+            "bangumi": "173009",
+            "anilist": "342589"
+          }
+        }
+      ]
     }
   ]
 }

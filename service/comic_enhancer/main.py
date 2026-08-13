@@ -40,7 +40,11 @@ from .models import (
     ProcessResult,
     WorkIdentity,
 )
-from .references import ReferenceImageStore
+from .references import (
+    ReferenceImageStore,
+    assess_reference_image,
+    reference_quality_rank,
+)
 from .workflows import PresetWorkflowLoader
 
 logger = logging.getLogger(__name__)
@@ -155,6 +159,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.metadata = metadata
     app.state.analyzer = analyzer
     app.state.identities = identities
+    app.state.references = references
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^(chrome-extension|moz-extension)://.*$",
@@ -295,7 +300,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         resolution: MetadataResolution,
         work: WorkIdentity,
     ):
-        entries: list[tuple[CharacterBankEntry, bytes]] = []
+        grouped: dict[str, list[dict[str, object]]] = {}
         seen: set[str] = set()
         for candidate in prioritized_metadata_candidates(resolution, work):
             if candidate.confidence < 0.6:
@@ -310,20 +315,79 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 if image_bytes is None:
                     continue
-                entries.append(
-                    (
-                        CharacterBankEntry(
-                            character_id=key,
-                            name=character.name,
-                            image_url=character.image_url,
-                            provider=character.provider,
+                character_id, character_name = identities.canonical_character(
+                    work,
+                    character,
+                )
+                quality = assess_reference_image(image_bytes)
+                grouped.setdefault(character_id, []).append(
+                    {
+                        "name": character_name,
+                        "image_url": character.image_url,
+                        "provider": character.provider,
+                        "image_bytes": image_bytes,
+                        "quality": quality,
+                        "confirmed_source": (
+                            work.external_ids.get(candidate.provider)
+                            == candidate.provider_id
                         ),
-                        image_bytes,
-                    )
+                    }
                 )
                 seen.add(key)
-                if len(entries) >= 16:
-                    return entries
+        entries: list[tuple[CharacterBankEntry, bytes]] = []
+        decisions: list[dict[str, object]] = []
+        for character_id, candidates in grouped.items():
+            eligible = [
+                item
+                for item in candidates
+                if item["quality"].usable and item["quality"].colorful
+            ]
+            if not eligible:
+                logger.info(
+                    "角色参考图均不满足彩色质量门槛，跳过: work=%s character=%s",
+                    work.key,
+                    character_id,
+                )
+                continue
+            best = max(
+                eligible,
+                key=lambda item: reference_quality_rank(
+                    item["quality"],
+                    confirmed_source=bool(item["confirmed_source"]),
+                    provider=str(item["provider"]),
+                ),
+            )
+            quality = best["quality"]
+            entries.append(
+                (
+                    CharacterBankEntry(
+                        character_id=character_id,
+                        name=str(best["name"]),
+                        image_url=str(best["image_url"]),
+                        provider=str(best["provider"]),
+                    ),
+                    best["image_bytes"],
+                )
+            )
+            decisions.append(
+                {
+                    "character_id": character_id,
+                    "name": best["name"],
+                    "provider": best["provider"],
+                    "size": f"{quality.width}x{quality.height}",
+                    "saturation": round(quality.saturation, 1),
+                    "alternatives": len(candidates),
+                }
+            )
+        logger.info(
+            "角色参考图择优完成 work=%s selections=%s",
+            work.key,
+            json.dumps(decisions[:16], ensure_ascii=False),
+        )
+        entries.sort(key=lambda item: item[0].character_id)
+        if len(entries) > 16:
+            logger.warning("角色参考图超过 16 个，仅保留前 16 个: work=%s", work.key)
+            return entries[:16]
         return entries
 
     @app.post("/v1/metadata/resolve", response_model=MetadataResolution)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from io import BytesIO
 import hashlib
 import ipaddress
@@ -9,10 +10,68 @@ import socket
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps, ImageStat
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ReferenceImageQuality:
+    width: int
+    height: int
+    saturation: float
+    detail: float
+    colorful: bool
+    usable: bool
+
+
+REFERENCE_PROVIDER_PRIORITY = {
+    "bangumi": 60,
+    "anilist": 50,
+    "mal": 40,
+    "kitsu": 30,
+    "shikimori": 20,
+    "mangaupdates": 10,
+}
+
+
+def assess_reference_image(image_bytes: bytes) -> ReferenceImageQuality:
+    with Image.open(BytesIO(image_bytes)) as source:
+        image = ImageOps.exif_transpose(source).convert("RGB")
+        width, height = image.size
+        sample = image.copy()
+        sample.thumbnail((512, 512), Image.Resampling.LANCZOS)
+        saturation = ImageStat.Stat(sample.convert("HSV")).mean[1]
+        grayscale = sample.convert("L")
+        contrast = ImageStat.Stat(grayscale).stddev[0]
+        detail = ImageStat.Stat(grayscale.filter(ImageFilter.FIND_EDGES)).mean[0]
+    return ReferenceImageQuality(
+        width=width,
+        height=height,
+        saturation=saturation,
+        detail=detail,
+        colorful=saturation >= 8.0,
+        usable=min(width, height) >= 128 and contrast >= 5.0,
+    )
+
+
+def reference_quality_rank(
+    quality: ReferenceImageQuality,
+    *,
+    confirmed_source: bool,
+    provider: str,
+) -> tuple[int, int, int, int, int, float, int]:
+    """Prefer verified, usable color references before size and detail."""
+    return (
+        int(quality.usable),
+        int(confirmed_source),
+        int(quality.colorful),
+        min(quality.width, quality.height),
+        quality.width * quality.height,
+        quality.detail,
+        REFERENCE_PROVIDER_PRIORITY.get(provider, 0),
+    )
 
 
 class ReferenceImageStore:

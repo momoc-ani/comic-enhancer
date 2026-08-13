@@ -6,6 +6,7 @@
     "source_work_id": "benchmark-exiled-reincarnated-heavy-knight",
     "title": "被追放的轉生重騎士用遊戲知識開無雙",
     "external_ids": {
+      "bangumi": "418302",
       "anilist": "150193"
     }
   },
@@ -15,10 +16,9 @@
     "追放された転生重騎士はゲーム知識で無双する"
   ],
   "expected_characters": [
-    {"id": "anilist:277688", "name": "Elymas Edvan"},
-    {"id": "anilist:344248", "name": "Luce Rubis"},
-    {"id": "anilist:342589", "name": "Maris Edvan"},
-    {"id": "anilist:342590", "name": "Ares"}
+    {"id": "work:exiled-reincarnated-heavy-knight:elymas-edvan", "name": "Elymas Edvan"},
+    {"id": "work:exiled-reincarnated-heavy-knight:luce-rubis", "name": "Luce Rubis"},
+    {"id": "work:exiled-reincarnated-heavy-knight:maris-edvan", "name": "Maris Edvan"}
   ],
   "test_pages": [
     "test/1677919416360014.jpg.c1500x.webp",

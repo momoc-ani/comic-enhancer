@@ -8,6 +8,8 @@ from comic_enhancer.config import Settings
 from comic_enhancer.config import load_settings
 from comic_enhancer.main import create_app, prioritized_metadata_candidates
 from comic_enhancer.models import (
+    ChapterAnalysisResult,
+    CharacterReference,
     MetadataResolution,
     ProcessOptions,
     ProcessingMode,
@@ -19,6 +21,18 @@ from comic_enhancer.models import (
 def png_bytes():
     stream = BytesIO()
     Image.new("RGB", (32, 48), "white").save(stream, format="PNG")
+    return stream.getvalue()
+
+
+def reference_bytes(size, color, *, grayscale=False):
+    stream = BytesIO()
+    mode = "L" if grayscale else "RGB"
+    image = Image.new(mode, size, 235 if grayscale else color)
+    stripe_width = max(1, size[0] // 12)
+    fill = 40 if grayscale else (30, 80, 140)
+    for x in range(0, size[0], stripe_width * 2):
+        image.paste(fill, (x, 0, min(size[0], x + stripe_width), size[1]))
+    image.save(stream, format="PNG")
     return stream.getvalue()
 
 
@@ -235,3 +249,109 @@ def test_exact_external_id_metadata_candidate_has_character_priority():
 
     assert ordered[0].provider == "anilist"
     assert ordered[0].provider_id == "150193"
+
+
+def test_analyze_deduplicates_characters_and_selects_best_color_reference(
+    tmp_path,
+    monkeypatch,
+):
+    identity_index = tmp_path / "identities.json"
+    identity_index.write_text(
+        """{
+          "works": [{
+            "identity_id": "heavy-knight",
+            "title_aliases": ["被追放的轉生重騎士用遊戲知識開無雙"],
+            "external_ids": {"bangumi": "418302", "anilist": "150193"},
+            "characters": [
+              {"identity_id": "elymas", "name": "Elymas Edvan", "aliases": ["エルマ・エドヴァン"], "external_ids": {"bangumi": "173007", "anilist": "277688"}},
+              {"identity_id": "luce", "name": "Luce Rubis", "aliases": ["ルーチェ・ルービス"], "external_ids": {"bangumi": "173008", "anilist": "344248"}},
+              {"identity_id": "maris", "name": "Maris Edvan", "aliases": ["マリス・エドヴァン"], "external_ids": {"bangumi": "173009", "anilist": "342589"}}
+            ]
+          }]
+        }""",
+        encoding="utf-8",
+    )
+    settings = Settings(
+        api_token="test-token",
+        runtime_dir=tmp_path / "runtime",
+        adapter_index=tmp_path / "missing.json",
+        analyzer_enabled=True,
+        work_identity_index=identity_index,
+    )
+    app = create_app(settings)
+    work = WorkIdentity(
+        source="copy_manga",
+        source_work_id="heavy-knight",
+        title="被追放的轉生重騎士用遊戲知識開無雙",
+        external_ids={"bangumi": "418302", "anilist": "150193"},
+    )
+    urls = {
+        "bgm-elymas": reference_bytes((1000, 1400), (120, 70, 50)),
+        "ani-elymas": reference_bytes((230, 345), (220, 60, 90)),
+        "bgm-luce": reference_bytes((690, 1050), (100, 80, 180)),
+        "ani-luce": reference_bytes((230, 345), (230, 30, 100)),
+        "bgm-maris": reference_bytes((700, 1170), (80, 130, 180)),
+        "ani-maris": reference_bytes((230, 345), 0, grayscale=True),
+        "ani-ares": reference_bytes((230, 345), 0, grayscale=True),
+    }
+
+    def character(provider, provider_id, name, url):
+        return CharacterReference(
+            provider=provider,
+            provider_id=provider_id,
+            name=name,
+            image_url=url,
+        )
+
+    resolution = MetadataResolution(
+        work_key=work.key,
+        title=work.title,
+        candidates=[
+            WorkMetadata(
+                provider="bangumi",
+                provider_id="418302",
+                title=work.title,
+                confidence=1.0,
+                characters=[
+                    character("bangumi", "173007", "エルマ・エドヴァン", "bgm-elymas"),
+                    character("bangumi", "173008", "ルーチェ・ルービス", "bgm-luce"),
+                    character("bangumi", "173009", "マリス・エドヴァン", "bgm-maris"),
+                ],
+            ),
+            WorkMetadata(
+                provider="anilist",
+                provider_id="150193",
+                title=work.title,
+                confidence=1.0,
+                characters=[
+                    character("anilist", "277688", "Elymas Edvan", "ani-elymas"),
+                    character("anilist", "344248", "Luce Rubis", "ani-luce"),
+                    character("anilist", "342589", "Maris Edvan", "ani-maris"),
+                    character("anilist", "342590", "Ares", "ani-ares"),
+                ],
+            ),
+        ],
+    )
+    monkeypatch.setattr(app.state.metadata, "resolve", lambda _: resolution)
+    monkeypatch.setattr(app.state.references, "get", lambda url: urls[url])
+    captured = {}
+
+    def analyze(_, character_bank):
+        captured["entries"] = [entry for entry, _ in character_bank]
+        return ChapterAnalysisResult(analyzer_profile="test")
+
+    monkeypatch.setattr(app.state.analyzer, "analyze", analyze)
+    client = TestClient(app)
+    response = client.post(
+        "/v1/pages/analyze",
+        headers={"Authorization": "Bearer test-token"},
+        data={"work_json": work.model_dump_json()},
+        files={"pages": ("page.png", png_bytes(), "image/png")},
+    )
+
+    assert response.status_code == 200
+    selected = {entry.name: entry for entry in captured["entries"]}
+    assert set(selected) == {"Elymas Edvan", "Luce Rubis", "Maris Edvan"}
+    assert {entry.provider for entry in selected.values()} == {"bangumi"}
+    assert selected["Elymas Edvan"].character_id == "work:heavy-knight:elymas"
+    assert selected["Luce Rubis"].image_url == "bgm-luce"
