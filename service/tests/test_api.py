@@ -6,7 +6,11 @@ from PIL import Image
 
 from comic_enhancer.config import Settings
 from comic_enhancer.config import load_settings
-from comic_enhancer.main import create_app, prioritized_metadata_candidates
+from comic_enhancer.main import (
+    create_app,
+    effective_analyzer_profile,
+    prioritized_metadata_candidates,
+)
 from comic_enhancer.models import (
     ChapterAnalysisResult,
     CharacterReference,
@@ -110,6 +114,13 @@ def test_manganinja_mode_is_valid():
     options = ProcessOptions(mode="manganinja")
 
     assert options.mode == ProcessingMode.MANGANINJA
+
+
+def test_effective_analyzer_profile_tracks_reference_selection_revision():
+    assert effective_analyzer_profile(None) is None
+    assert effective_analyzer_profile("magiv2@test") == (
+        "magiv2@test+reference-full-body-v1"
+    )
 
 
 def test_capabilities_declare_processing_modes_and_manganinja_state(
@@ -362,10 +373,10 @@ def test_analyze_deduplicates_characters_and_selects_best_color_reference(
     } == {"bangumi", "anilist"}
     assert {
         entry.image_url for entry in entries if entry.name == "Elymas Edvan"
-    } == {"ani-elymas"}
+    } == {"bgm-elymas"}
     assert {
         entry.image_url for entry in entries if entry.name == "Luce Rubis"
-    } == {"ani-luce"}
+    } == {"bgm-luce"}
     assert {
         entry.image_url for entry in entries if entry.name == "Maris Edvan"
     } == {"bgm-maris"}

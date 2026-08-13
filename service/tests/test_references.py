@@ -72,3 +72,32 @@ def test_reference_quality_prefers_larger_color_image():
         confirmed_source=True,
         provider="anilist",
     )
+
+
+def test_reference_quality_prefers_full_body_composition_over_vivid_portrait():
+    portrait = Image.new("RGB", (230, 345), (220, 40, 80))
+    portrait_source = BytesIO()
+    portrait.save(portrait_source, format="PNG")
+
+    full_body = Image.new("RGB", (690, 1050), "white")
+    for y in range(60, 1020):
+        half_width = 75 if y < 300 else 145
+        for x in range(345 - half_width, 345 + half_width):
+            full_body.putpixel((x, y), (80, 90, 130))
+    full_body_source = BytesIO()
+    full_body.save(full_body_source, format="PNG")
+
+    portrait_quality = assess_reference_image(portrait_source.getvalue())
+    full_body_quality = assess_reference_image(full_body_source.getvalue())
+
+    assert portrait_quality.full_body is False
+    assert full_body_quality.full_body is True
+    assert reference_quality_rank(
+        full_body_quality,
+        confirmed_source=True,
+        provider="bangumi",
+    ) > reference_quality_rank(
+        portrait_quality,
+        confirmed_source=True,
+        provider="anilist",
+    )

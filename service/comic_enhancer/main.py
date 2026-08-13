@@ -41,6 +41,7 @@ from .models import (
     WorkIdentity,
 )
 from .references import (
+    REFERENCE_SELECTION_REVISION,
     ReferenceImageStore,
     assess_reference_image,
     reference_quality_rank,
@@ -48,6 +49,12 @@ from .references import (
 from .workflows import PresetWorkflowLoader
 
 logger = logging.getLogger(__name__)
+
+
+def effective_analyzer_profile(profile: str | None) -> str | None:
+    if profile is None:
+        return None
+    return f"{profile}+{REFERENCE_SELECTION_REVISION}"
 
 
 def prioritized_metadata_candidates(
@@ -232,7 +239,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             and settings.comfyui_reference_enabled
             and analyzer is not None
         ):
-            analyzer_profile = await asyncio.to_thread(analyzer.profile)
+            analyzer_profile = effective_analyzer_profile(
+                await asyncio.to_thread(analyzer.profile)
+            )
             analysis = await asyncio.to_thread(
                 analyses.get,
                 image_bytes,
@@ -296,7 +305,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             page_payloads,
             character_bank,
         )
+        result.analyzer_profile = effective_analyzer_profile(
+            result.analyzer_profile
+        ) or result.analyzer_profile
         for page_analysis in result.pages:
+            page_analysis.analyzer_profile = result.analyzer_profile
             analyses.put(page_analysis, work_key=work.key)
         return result
 
