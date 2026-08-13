@@ -1,0 +1,30 @@
+[project]
+name = "comic-enhancer"
+version = "0.1.0"
+description = "Local-first manga colorization and enhancement service"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "fastapi>=0.115,<1",
+  "httpx>=0.28,<1",
+  "pillow>=11,<12",
+  "pydantic>=2.10,<3",
+  "python-multipart>=0.0.20,<1",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["service/comic_enhancer"]
+
+[tool.pytest.ini_options]
+testpaths = ["service/tests"]
+pythonpath = ["service"]

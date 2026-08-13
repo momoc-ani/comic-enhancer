@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Comic Enhancer",
+  "version": "0.1.0",
+  "description": "使用本地或局域网推理服务进行漫画上色与画质增强",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
+    "*://*.copymanga.com/*",
+    "*://*.copymanga.site/*",
+    "*://*.copymanga.tv/*",
+    "*://*.mangacopy.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Comic Enhancer",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.copymanga.com/*",
+        "*://*.copymanga.site/*",
+        "*://*.copymanga.tv/*",
+        "*://*.mangacopy.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,132 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "${CHECKPOINT_NAME}"
+    }
+  },
+  "2": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["1", 0],
+      "clip": ["1", 1],
+      "lora_name": "${LORA_NAME}",
+      "strength_model": "${LORA_STRENGTH}",
+      "strength_clip": "${LORA_STRENGTH}"
+    }
+  },
+  "3": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "${INPUT_IMAGE}"
+    }
+  },
+  "4": {
+    "class_type": "ImageScaleToTotalPixels",
+    "inputs": {
+      "image": ["3", 0],
+      "upscale_method": "lanczos",
+      "megapixels": "${TARGET_MEGAPIXELS}",
+      "resolution_steps": 8
+    }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["2", 1],
+      "text": "masterpiece, best quality, manga colorization, anime coloring, coherent colors, clean flat shading, detailed background, preserve original composition, preserve facial identity, crisp ink lines"
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["2", 1],
+      "text": "monochrome, grayscale, changed composition, changed pose, extra limbs, deformed hands, distorted face, blurry line art, text artifacts, watermark, logo, oversaturated colors"
+    }
+  },
+  "7": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "${CONTROLNET_NAME}"
+    }
+  },
+  "8": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "control_net": ["7", 0],
+      "image": ["4", 0],
+      "strength": 0.88,
+      "start_percent": 0.0,
+      "end_percent": 0.82,
+      "vae": ["1", 2]
+    }
+  },
+  "9": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": ["4", 0],
+      "vae": ["1", 2]
+    }
+  },
+  "10": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["2", 0],
+      "seed": "${SEED}",
+      "steps": "${STEPS}",
+      "cfg": 5.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "positive": ["8", 0],
+      "negative": ["8", 1],
+      "latent_image": ["9", 0],
+      "denoise": "${DENOISE}"
+    }
+  },
+  "11": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["10", 0],
+      "vae": ["1", 2]
+    }
+  },
+  "12": {
+    "class_type": "UpscaleModelLoader",
+    "inputs": {
+      "model_name": "RealESRGAN_x4plus_anime_6B.pth"
+    }
+  },
+  "13": {
+    "class_type": "ImageUpscaleWithModel",
+    "inputs": {
+      "upscale_model": ["12", 0],
+      "image": ["11", 0]
+    }
+  },
+  "14": {
+    "class_type": "ImageScaleBy",
+    "inputs": {
+      "image": ["13", 0],
+      "upscale_method": "lanczos",
+      "scale_by": 0.5
+    }
+  },
+  "16": {
+    "class_type": "ImageSharpen",
+    "inputs": {
+      "image": ["14", 0],
+      "sharpen_radius": 1,
+      "sigma": 0.8,
+      "alpha": 0.22
+    }
+  },
+  "15": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["16", 0],
+      "filename_prefix": "${OUTPUT_PREFIX}"
+    }
+  }
+}

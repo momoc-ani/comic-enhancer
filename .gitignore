@@ -1,0 +1,16 @@
+.DS_Store
+.idea/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+node_modules/
+dist/
+runtime/
+models/
+adapters/*.safetensors
+adapters/works/
+adapters/cache/
+extension/*.zip
+.env
+config/settings.json

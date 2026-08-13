@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Comic Enhancer</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Comic Enhancer</h1>
+        <p id="status">检查本地服务...</p>
+      </div>
+      <label class="switch" title="启用漫画增强">
+        <input id="enabled" type="checkbox">
+        <span></span>
+      </label>
+    </header>
+
+    <main>
+      <label>
+        模式
+        <select id="mode">
+          <option value="fast">快速</option>
+          <option value="quality">高质量</option>
+        </select>
+      </label>
+      <label>
+        预处理页数
+        <input id="prefetchPages" type="number" min="0" max="8" step="1">
+      </label>
+      <label>
+        推理服务
+        <input id="apiBaseUrl" type="url" spellcheck="false">
+      </label>
+      <label>
+        API Token
+        <input id="apiToken" type="password" autocomplete="off">
+      </label>
+      <label class="check-row">
+        <input id="preferWorkAdapter" type="checkbox">
+        优先使用作品 LoRA
+      </label>
+      <label class="check-row">
+        <input id="allowGenericAdapter" type="checkbox">
+        无作品 LoRA 时使用通用 LoRA
+      </label>
+    </main>
+
+    <footer>
+      <button id="save" type="button">保存并检查</button>
+    </footer>
+    <script src="popup.js"></script>
+  </body>
+</html>

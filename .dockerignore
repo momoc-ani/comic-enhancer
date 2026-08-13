@@ -1,0 +1,13 @@
+.git
+.gitignore
+.idea
+.pytest_cache
+.venv
+__pycache__
+*.pyc
+.env
+config/settings.json
+dist
+models
+runtime
+extension/*.zip
