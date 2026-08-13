@@ -232,11 +232,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             and settings.comfyui_reference_enabled
             and analyzer is not None
         ):
+            analyzer_profile = await asyncio.to_thread(analyzer.profile)
             analysis = await asyncio.to_thread(
                 analyses.get,
                 image_bytes,
                 work_key=work.key,
+                analyzer_profile=analyzer_profile,
             )
+            if analyzer_profile is None:
+                analysis = None
             if analysis is not None:
                 for character in analysis.characters:
                     match = character.match

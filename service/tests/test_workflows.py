@@ -4,7 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from comic_enhancer.backends import ComfyUIBackend, InferenceAssets
+from comic_enhancer.backends import (
+    REFERENCE_PROCESSING_REVISION,
+    ComfyUIBackend,
+    InferenceAssets,
+)
 from comic_enhancer.models import (
     AdapterManifest,
     AdapterSource,
@@ -379,6 +383,38 @@ def test_quality_backend_does_not_probe_reference_profile(tmp_path, monkeypatch)
     assert revision == loader.revision(ProcessOptions(mode="quality"), resolved())
 
 
+def test_reference_cache_revision_includes_processing_algorithm(tmp_path, monkeypatch):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    reference = tmp_path / "reference.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    write_workflow(reference, marker="reference")
+    loader = PresetWorkflowLoader(
+        fast_workflow=fast,
+        quality_workflow=quality,
+        reference_quality_workflow=reference,
+        workflow_root=tmp_path,
+    )
+    backend = ComfyUIBackend(
+        base_url="http://main",
+        reference_base_url="http://reference",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=loader,
+        reference_enabled=True,
+    )
+    monkeypatch.setattr(backend, "_reference_ready", lambda: True)
+
+    revision = backend.cache_revision(
+        ProcessOptions(mode="manganinja"),
+        resolved(),
+        reference_assets(),
+    )
+
+    assert REFERENCE_PROCESSING_REVISION in revision
+
+
 def test_rejected_character_never_selects_reference_workflow(tmp_path, monkeypatch):
     fast = tmp_path / "fast.json"
     quality = tmp_path / "quality.json"
@@ -547,6 +583,41 @@ def test_reference_board_and_target_points_keep_multiple_characters_aligned():
     assert len(reference_points) == len(target_points) == 2
     assert reference_points[0][1] < reference_points[1][1]
     assert target_points[0][1] < target_points[1][1]
+
+
+def test_character_focus_region_keeps_context_inside_panel():
+    character = CharacterInstance(
+        instance_id="character-1",
+        cluster_id="cluster-1",
+        box=BoundingBox(x1=100, y1=100, x2=200, y2=300),
+    )
+    panel = PanelRegion(
+        panel_index=3,
+        box=BoundingBox(x1=50, y1=50, x2=400, y2=400),
+        character_instance_ids=["character-1", "character-2"],
+    )
+
+    focus = ComfyUIBackend._character_focus_region(character, panel)
+
+    assert focus.panel_index == 3
+    assert focus.box == BoundingBox(x1=50, y1=50, x2=260, y2=350)
+    assert focus.character_instance_ids == ["character-1"]
+
+
+def test_character_focus_region_clamps_small_character_padding():
+    character = CharacterInstance(
+        instance_id="character-1",
+        cluster_id="cluster-1",
+        box=BoundingBox(x1=12, y1=14, x2=22, y2=34),
+    )
+    panel = PanelRegion(
+        panel_index=0,
+        box=BoundingBox(x1=0, y1=0, x2=100, y2=100),
+    )
+
+    focus = ComfyUIBackend._character_focus_region(character, panel)
+
+    assert focus.box == BoundingBox(x1=0, y1=0, x2=46, y2=58)
 
 
 def test_reference_assets_require_character_segmentation_mask():

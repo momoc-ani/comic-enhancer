@@ -19,15 +19,24 @@ class PageAnalysisStore:
     def image_hash(image_bytes: bytes) -> str:
         return hashlib.sha256(image_bytes).hexdigest()
 
-    def get(self, image_bytes: bytes, *, work_key: str = "") -> PageAnalysis | None:
+    def get(
+        self,
+        image_bytes: bytes,
+        *,
+        work_key: str = "",
+        analyzer_profile: str | None = None,
+    ) -> PageAnalysis | None:
         image_hash = self.image_hash(image_bytes)
         path = self._path(image_hash, work_key)
         if not path.is_file():
             return None
         try:
-            return PageAnalysis.model_validate_json(path.read_text(encoding="utf-8"))
+            analysis = PageAnalysis.model_validate_json(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
+        if analyzer_profile is not None and analysis.analyzer_profile != analyzer_profile:
+            return None
+        return analysis
 
     def put(self, analysis: PageAnalysis, *, work_key: str = "") -> None:
         path = self._path(analysis.image_hash, work_key)
@@ -51,11 +60,18 @@ class ChapterAnalyzerClient:
         self.timeout_seconds = timeout_seconds
 
     def ready(self) -> bool:
+        return self.profile() is not None
+
+    def profile(self) -> str | None:
         try:
             response = httpx.get(f"{self.base_url}/v1/health", timeout=2)
-            return response.status_code == 200 and bool(response.json().get("ready"))
+            payload = response.json()
+            if response.status_code != 200 or not payload.get("ready"):
+                return None
+            profile = str(payload.get("profile", "")).strip()
+            return profile or None
         except (httpx.HTTPError, ValueError):
-            return False
+            return None
 
     def analyze(
         self,

@@ -32,3 +32,26 @@ def test_page_analysis_store_is_scoped_to_work(tmp_path):
 
     assert store.get(image_bytes, work_key="copy_manga:work-a") == analysis
     assert store.get(image_bytes, work_key="copy_manga:work-b") is None
+
+
+def test_page_analysis_store_rejects_stale_analyzer_profile(tmp_path):
+    store = PageAnalysisStore(tmp_path)
+    image_bytes = b"same-page"
+    analysis = PageAnalysis(
+        image_hash=store.image_hash(image_bytes),
+        width=100,
+        height=200,
+        analyzer_profile="magiv2@old",
+    )
+    store.put(analysis, work_key="copy_manga:work-a")
+
+    assert store.get(
+        image_bytes,
+        work_key="copy_manga:work-a",
+        analyzer_profile="magiv2@current",
+    ) is None
+    assert store.get(
+        image_bytes,
+        work_key="copy_manga:work-a",
+        analyzer_profile="magiv2@old",
+    ) == analysis
