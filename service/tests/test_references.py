@@ -56,7 +56,7 @@ def test_reference_quality_prefers_color_before_resolution():
 
 def test_reference_quality_prefers_larger_color_image():
     small = BytesIO()
-    Image.new("RGB", (230, 345), (220, 40, 80)).save(small, format="PNG")
+    Image.new("RGB", (230, 345), (140, 80, 110)).save(small, format="PNG")
     large = BytesIO()
     Image.new("RGB", (690, 1050), (140, 80, 110)).save(large, format="PNG")
 

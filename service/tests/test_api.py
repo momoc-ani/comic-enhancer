@@ -362,10 +362,10 @@ def test_analyze_deduplicates_characters_and_selects_best_color_reference(
     } == {"bangumi", "anilist"}
     assert {
         entry.image_url for entry in entries if entry.name == "Elymas Edvan"
-    } == {"bgm-elymas"}
+    } == {"ani-elymas"}
     assert {
         entry.image_url for entry in entries if entry.name == "Luce Rubis"
-    } == {"bgm-luce"}
+    } == {"ani-luce"}
     assert {
         entry.image_url for entry in entries if entry.name == "Maris Edvan"
     } == {"bgm-maris"}

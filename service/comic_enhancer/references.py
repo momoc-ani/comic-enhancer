@@ -61,12 +61,13 @@ def reference_quality_rank(
     *,
     confirmed_source: bool,
     provider: str,
-) -> tuple[int, int, int, int, int, float, int]:
-    """Prefer verified, usable color references before size and detail."""
+) -> tuple[int, int, int, float, int, int, float, int]:
+    """Prioritize transferable color information before raw pixel count."""
     return (
         int(quality.usable),
         int(confirmed_source),
         int(quality.colorful),
+        round(quality.saturation, 1),
         min(quality.width, quality.height),
         quality.width * quality.height,
         quality.detail,
