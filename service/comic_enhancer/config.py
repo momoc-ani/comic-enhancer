@@ -63,6 +63,16 @@ def load_settings() -> Settings:
     if config_path.exists():
         values.update(json.loads(config_path.read_text(encoding="utf-8")))
 
+    for field_name in (
+        "adapter_index",
+        "adapter_weights_root",
+        "runtime_dir",
+        "comfyui_workflow_with_lora",
+        "comfyui_workflow_without_lora",
+    ):
+        if field_name in values:
+            values[field_name] = Path(values[field_name])
+
     env_map = {
         "COMIC_ENHANCER_HOST": ("host", str),
         "COMIC_ENHANCER_PORT": ("port", int),

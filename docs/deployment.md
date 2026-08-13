@@ -23,6 +23,8 @@ curl http://127.0.0.1:8765/v1/health
 
 API 容器通过 `host.docker.internal:8190` 复用 ComfyUI。4090 主机统一使用 `/data1/models/ComfyUI/models` 作为宿主机模型根目录：现有 ComfyUI 容器读取该目录，增强 API 将同一目录挂载为 `/models`，并只在 `/models/loras` 中自动下载和校验 LoRA。API 自身不占用 GPU 显存，checkpoint、ControlNet、放大模型和 LoRA 都不打进镜像。
 
+未配置 Gitee 仓库和 Token 时保持 `COMIC_ENHANCER_GITEE_ENABLED=false`，基础上色和本地 LoRA 仍可使用。填写完整 Gitee 配置后再改为 `true` 并重建 API 容器。
+
 插件配置：
 
 ```text

@@ -121,10 +121,13 @@ class ComfyUIBackend(InferenceBackend):
             raise RuntimeError(f"ComfyUI workflow not found: {workflow_path}")
 
         upload_name = f"comic-enhancer-{uuid.uuid4().hex}.png"
+        normalized = BytesIO()
+        with Image.open(BytesIO(image_bytes)) as source:
+            ImageOps.exif_transpose(source).convert("RGB").save(normalized, format="PNG")
         with httpx.Client(base_url=self.base_url, timeout=self.timeout_seconds) as client:
             upload = client.post(
                 "/upload/image",
-                files={"image": (upload_name, image_bytes, "image/png")},
+                files={"image": (upload_name, normalized.getvalue(), "image/png")},
                 data={"type": "input", "overwrite": "true"},
             )
             upload.raise_for_status()

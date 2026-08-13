@@ -1,9 +1,11 @@
 from io import BytesIO
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from comic_enhancer.config import Settings
+from comic_enhancer.config import load_settings
 from comic_enhancer.main import create_app
 
 
@@ -79,3 +81,20 @@ def test_capabilities_require_auth(tmp_path):
     client = TestClient(create_app(settings))
 
     assert client.get("/v1/capabilities").status_code == 401
+
+
+def test_json_config_converts_path_fields(tmp_path, monkeypatch):
+    config = tmp_path / "settings.json"
+    config.write_text(
+        '{"runtime_dir":"runtime","adapter_index":"index.json",'
+        '"adapter_weights_root":"weights",'
+        '"comfyui_workflow_with_lora":"with.json",'
+        '"comfyui_workflow_without_lora":"without.json"}',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("COMIC_ENHANCER_CONFIG", str(config))
+
+    settings = load_settings()
+
+    assert settings.runtime_dir == Path("runtime")
+    assert settings.adapter_index == Path("index.json")
