@@ -34,7 +34,7 @@ CROSS_PAGE_CLUSTER_MAX_DISTANCE = float(
 PROPAGATION_MAX_DISTANCE = float(
     os.environ.get("MAGIV2_PROPAGATION_MAX_DISTANCE", "0.72")
 )
-ANALYZER_PROFILE = f"magiv2@{MODEL_REVISION[:12]}+cluster-v1+multi-view-v1"
+ANALYZER_PROFILE = f"magiv2@{MODEL_REVISION[:12]}+cluster-v1+multi-view-v1+anchor-v2"
 
 
 class CharacterBankEntry(BaseModel):

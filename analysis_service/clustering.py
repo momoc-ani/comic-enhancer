@@ -133,14 +133,7 @@ def propagate_cluster_matches(
             if matches[page_index][character_index].get("status") == "accepted"
             and matches[page_index][character_index].get("character_id")
         }
-        eligible_ids = {
-            candidate.get("character_id")
-            for page_index, character_index in cluster_members
-            if (candidate := candidates[page_index][character_index]) is not None
-            and _eligible(candidate, max_distance=max_distance, min_margin=min_margin)
-        }
-        possible_ids = accepted_ids | eligible_ids
-        if len(possible_ids) > 1:
+        if len(accepted_ids) > 1:
             for page_index, character_index in cluster_members:
                 match = matches[page_index][character_index]
                 match.update(

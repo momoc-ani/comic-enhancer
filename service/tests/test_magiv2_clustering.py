@@ -111,7 +111,13 @@ def test_cluster_conflict_rejects_every_member():
                 "confidence": 0.4,
             }
         ],
-        [{"character_id": None, "status": "rejected", "confidence": 0.0}],
+        [
+            {
+                "character_id": "anilist:344248",
+                "status": "accepted",
+                "confidence": 0.38,
+            }
+        ],
     ]
     candidates = [
         [
@@ -140,3 +146,59 @@ def test_cluster_conflict_rejects_every_member():
 
     assert all(page[0]["status"] == "rejected" for page in propagated)
     assert all(page[0]["character_id"] is None for page in propagated)
+
+
+def test_weak_conflicting_candidate_does_not_invalidate_accepted_anchor():
+    matches = [
+        [
+            {
+                "character_id": "anilist:277688",
+                "character_name": "Elymas Edvan",
+                "reference_url": "https://example/elymas.png",
+                "status": "accepted",
+                "confidence": 0.41,
+            }
+        ],
+        [
+            {
+                "character_id": None,
+                "character_name": "",
+                "reference_url": None,
+                "status": "rejected",
+                "confidence": 0.0,
+            }
+        ],
+    ]
+    candidates = [
+        [
+            {
+                "character_id": "anilist:277688",
+                "character_name": "Elymas Edvan",
+                "reference_url": "https://example/elymas.png",
+                "best_distance": 0.59,
+                "margin": 0.16,
+            }
+        ],
+        [
+            {
+                "character_id": "anilist:344248",
+                "character_name": "Luce Rubis",
+                "reference_url": "https://example/luce.png",
+                "best_distance": 0.68,
+                "margin": 0.16,
+            }
+        ],
+    ]
+
+    propagated = propagate_cluster_matches(
+        matches,
+        candidates,
+        [["chapter-cluster-0"], ["chapter-cluster-0"]],
+        max_distance=0.72,
+        min_margin=0.08,
+    )
+
+    assert propagated[0][0]["status"] == "accepted"
+    assert propagated[0][0]["character_id"] == "anilist:277688"
+    assert propagated[1][0]["status"] == "rejected"
+    assert propagated[1][0]["character_id"] is None
