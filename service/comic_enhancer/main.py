@@ -18,7 +18,17 @@ from .cache import ResultCache
 from .config import Settings, load_settings
 from .jobs import ProcessingService
 from .gitee import GiteeAdapterStore, GiteeError
-from .models import AdapterManifest, Capabilities, ProcessOptions, ProcessResult, WorkIdentity
+from .metadata import (
+    AniListProvider,
+    BangumiProvider,
+    JikanMALProvider,
+    KitsuProvider,
+    MangaUpdatesProvider,
+    MetadataAggregator,
+    ShikimoriProvider,
+)
+from .models import AdapterManifest, Capabilities, MetadataResolution, ProcessOptions, ProcessResult, WorkIdentity
+from .references import ReferenceImageStore
 from .workflows import PresetWorkflowLoader
 
 logger = logging.getLogger(__name__)
@@ -32,9 +42,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             fast_workflow=settings.comfyui_workflow_fast,
             quality_workflow=settings.comfyui_workflow_quality,
             workflow_root=settings.comfyui_workflow_root,
+            reference_quality_workflow=settings.comfyui_workflow_reference_quality,
         )
         backend_options = {
             "base_url": settings.comfyui_url,
+            "reference_base_url": settings.comfyui_reference_url or None,
+            "reference_enabled": settings.comfyui_reference_enabled,
+            "reference_ready_file": settings.comfyui_reference_ready_file,
             "timeout_seconds": settings.comfyui_timeout_seconds,
             "poll_interval_seconds": settings.comfyui_poll_interval_seconds,
             "workflow_loader": workflow_loader,
@@ -46,6 +60,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.adapter_weights_root,
     )
     cache = ResultCache(settings.runtime_dir / "results")
+    references = ReferenceImageStore(settings.runtime_dir / "references")
+    metadata = MetadataAggregator(
+        settings.runtime_dir / "metadata",
+        enabled=settings.metadata_enabled,
+        ttl_seconds=settings.metadata_ttl_seconds,
+        providers=[
+            BangumiProvider(timeout_seconds=settings.metadata_timeout_seconds),
+            AniListProvider(timeout_seconds=settings.metadata_timeout_seconds),
+            KitsuProvider(timeout_seconds=settings.metadata_timeout_seconds),
+            ShikimoriProvider(timeout_seconds=settings.metadata_timeout_seconds),
+            JikanMALProvider(timeout_seconds=settings.metadata_timeout_seconds),
+            MangaUpdatesProvider(
+                api_url=settings.mangaupdates_api_url,
+                api_token=settings.mangaupdates_api_token,
+                timeout_seconds=settings.metadata_timeout_seconds,
+            ),
+        ],
+    )
+    metadata_refresh_tasks: dict[str, asyncio.Task] = {}
     processor = ProcessingService(
         registry=registry,
         cache=cache,
@@ -79,6 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.processor = processor
     app.state.gitee_store = gitee_store
+    app.state.metadata = metadata
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^(chrome-extension|moz-extension)://.*$",
@@ -110,6 +144,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             backend=backend.name,
             ready=backend.ready(),
             adapter_policy=["work", "generic", "none"],
+            model_profiles=list(backend.model_profiles),
             prefetch_pages=settings.prefetch_pages,
             max_parallel_inference=settings.max_parallel_inference,
         )
@@ -134,7 +169,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=413, detail="image exceeds 30 MiB")
         if gitee_store is not None:
             await _ensure_remote_adapter(work, options)
-        return await processor.process(image_bytes, work, options)
+        reference_bytes = None
+        if str(options.mode) == "quality" and settings.comfyui_reference_enabled:
+            reference_url = work.cover_url
+            if reference_url:
+                reference_bytes = await asyncio.to_thread(references.get, reference_url)
+            if reference_bytes is None and settings.metadata_enabled:
+                resolved_metadata = await asyncio.to_thread(metadata.cached, work)
+                if resolved_metadata is None:
+                    # 第三方站点不能阻塞首张图；结果写入缓存后由后续页面使用。
+                    task = metadata_refresh_tasks.get(work.key)
+                    if task is None or task.done():
+                        task = asyncio.create_task(asyncio.to_thread(metadata.resolve, work))
+                        metadata_refresh_tasks[work.key] = task
+                        task.add_done_callback(
+                            lambda completed, key=work.key: metadata_refresh_tasks.pop(
+                                key, None
+                            )
+                        )
+                elif resolved_metadata.selected and resolved_metadata.selected.confidence >= 0.6:
+                    reference_url = resolved_metadata.selected.cover_url
+                    reference_bytes = await asyncio.to_thread(references.get, reference_url)
+        return await processor.process(image_bytes, reference_bytes, work, options)
+
+    @app.post("/v1/metadata/resolve", response_model=MetadataResolution)
+    async def resolve_metadata(
+        work_json: str = Form(),
+        _: None = Depends(authorize),
+    ) -> MetadataResolution:
+        try:
+            work = WorkIdentity.model_validate(json.loads(work_json))
+        except (json.JSONDecodeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return await asyncio.to_thread(metadata.resolve, work)
 
     async def _ensure_remote_adapter(work: WorkIdentity, options: ProcessOptions) -> None:
         for _, manifest in registry.candidates(

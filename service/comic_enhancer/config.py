@@ -25,10 +25,14 @@ class Settings:
     prefetch_pages: int = 3
     max_parallel_inference: int = 1
     comfyui_url: str = "http://comfyui:8188"
+    comfyui_reference_url: str = ""
+    comfyui_reference_enabled: bool = False
+    comfyui_reference_ready_file: Path | None = None
     comfyui_timeout_seconds: int = 180
     comfyui_poll_interval_seconds: float = 0.25
     comfyui_workflow_fast: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json"
     comfyui_workflow_quality: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json"
+    comfyui_workflow_reference_quality: Path | None = None
     comfyui_workflow_root: Path = PROJECT_ROOT / "workflows"
     runtime_dir: Path = PROJECT_ROOT / "runtime"
     adapter_index: Path = PROJECT_ROOT / "adapters" / "index.json"
@@ -42,6 +46,11 @@ class Settings:
     gitee_index_path: str = "adapters/index.json"
     gitee_release_tag: str = "lora"
     gitee_timeout_seconds: int = 60
+    metadata_enabled: bool = True
+    metadata_ttl_seconds: int = 86400
+    metadata_timeout_seconds: int = 8
+    mangaupdates_api_url: str = ""
+    mangaupdates_api_token: str = ""
 
 
 def load_settings() -> Settings:
@@ -61,10 +70,15 @@ def load_settings() -> Settings:
         "runtime_dir",
         "comfyui_workflow_fast",
         "comfyui_workflow_quality",
+        "comfyui_workflow_reference_quality",
+        "comfyui_reference_ready_file",
         "comfyui_workflow_root",
     ):
         if field_name in values:
-            values[field_name] = Path(values[field_name])
+            if values[field_name]:
+                values[field_name] = Path(values[field_name])
+            else:
+                values[field_name] = None
 
     env_map = {
         "COMIC_ENHANCER_HOST": ("host", str),
@@ -83,11 +97,29 @@ def load_settings() -> Settings:
         "COMIC_ENHANCER_GITEE_INDEX_PATH": ("gitee_index_path", str),
         "COMIC_ENHANCER_GITEE_RELEASE_TAG": ("gitee_release_tag", str),
         "COMIC_ENHANCER_GITEE_TIMEOUT": ("gitee_timeout_seconds", int),
+        "COMIC_ENHANCER_METADATA_ENABLED": ("metadata_enabled", lambda value: value.lower() in {"1", "true", "yes", "on"}),
+        "COMIC_ENHANCER_METADATA_TTL": ("metadata_ttl_seconds", int),
+        "COMIC_ENHANCER_METADATA_TIMEOUT": ("metadata_timeout_seconds", int),
+        "COMIC_ENHANCER_MANGAUPDATES_API_URL": ("mangaupdates_api_url", str),
+        "COMIC_ENHANCER_MANGAUPDATES_API_TOKEN": ("mangaupdates_api_token", str),
         "COMIC_ENHANCER_RUNTIME_DIR": ("runtime_dir", Path),
         "COMIC_ENHANCER_COMFYUI_URL": ("comfyui_url", str),
+        "COMIC_ENHANCER_COMFYUI_REFERENCE_URL": ("comfyui_reference_url", str),
+        "COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED": (
+            "comfyui_reference_enabled",
+            lambda value: value.lower() in {"1", "true", "yes", "on"},
+        ),
+        "COMIC_ENHANCER_COMFYUI_REFERENCE_READY_FILE": (
+            "comfyui_reference_ready_file",
+            Path,
+        ),
         "COMIC_ENHANCER_COMFYUI_TIMEOUT": ("comfyui_timeout_seconds", int),
         "COMIC_ENHANCER_WORKFLOW_FAST": ("comfyui_workflow_fast", Path),
         "COMIC_ENHANCER_WORKFLOW_QUALITY": ("comfyui_workflow_quality", Path),
+        "COMIC_ENHANCER_WORKFLOW_REFERENCE_QUALITY": (
+            "comfyui_workflow_reference_quality",
+            Path,
+        ),
         "COMIC_ENHANCER_WORKFLOW_ROOT": ("comfyui_workflow_root", Path),
     }
     for env_name, (field_name, converter) in env_map.items():

@@ -23,6 +23,7 @@ class WorkIdentity(BaseModel):
     author: str = ""
     tags: list[str] = Field(default_factory=list)
     cover_url: str | None = None
+    external_ids: dict[str, str] = Field(default_factory=dict)
 
     @property
     def key(self) -> str:
@@ -73,9 +74,42 @@ class ProcessResult(BaseModel):
     adapter_source: AdapterSource
     adapter_id: str | None
     adapter_applied: bool
+    reference_applied: bool = False
+    model_profile: str = ""
     result_url: str
     elapsed_ms: int
     cached: bool
+
+
+class CharacterReference(BaseModel):
+    provider: str
+    provider_id: str
+    name: str
+    summary: str = ""
+    image_url: str | None = None
+    relation: str = ""
+
+
+class WorkMetadata(BaseModel):
+    provider: str
+    provider_id: str
+    title: str
+    title_aliases: list[str] = Field(default_factory=list)
+    author: str = ""
+    summary: str = ""
+    cover_url: str | None = None
+    source_url: str | None = None
+    characters: list[CharacterReference] = Field(default_factory=list)
+    confidence: float = Field(default=0, ge=0, le=1)
+    fetched_at: str = ""
+
+
+class MetadataResolution(BaseModel):
+    work_key: str
+    title: str
+    selected: WorkMetadata | None = None
+    candidates: list[WorkMetadata] = Field(default_factory=list)
+    errors: dict[str, str] = Field(default_factory=dict)
 
 
 class Capabilities(BaseModel):
@@ -83,5 +117,6 @@ class Capabilities(BaseModel):
     backend: str
     ready: bool
     adapter_policy: list[str]
+    model_profiles: list[str] = Field(default_factory=list)
     prefetch_pages: int
     max_parallel_inference: int

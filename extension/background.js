@@ -1,5 +1,6 @@
 const DEFAULT_SETTINGS = Object.freeze({
   enabled: true,
+  profile: "remote-fast",
   apiBaseUrl: "http://192.168.38.226:8765",
   apiToken: "",
   mode: "fast",
@@ -9,9 +10,20 @@ const DEFAULT_SETTINGS = Object.freeze({
 });
 
 chrome.runtime.onInstalled.addListener(async () => {
-  const current = await chrome.storage.local.get(DEFAULT_SETTINGS);
-  await chrome.storage.local.set(current);
+  const stored = await chrome.storage.local.get(null);
+  const profile = stored.profile || inferLegacyProfile(stored);
+  await chrome.storage.local.set({ ...DEFAULT_SETTINGS, ...stored, profile });
 });
+
+function inferLegacyProfile(settings) {
+  const url = String(settings.apiBaseUrl || "").replace(/\/$/, "");
+  const mode = settings.mode === "quality" ? "quality" : "fast";
+  if (url === "http://192.168.38.226:8765") return `remote-${mode}`;
+  if (url === "http://127.0.0.1:8765" || url === "http://localhost:8765") {
+    return `local-${mode}`;
+  }
+  return url ? "custom" : "remote-fast";
+}
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "COMIC_ENHANCER_SETTINGS") {

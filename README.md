@@ -17,7 +17,9 @@
 - 作品 LoRA、通用 LoRA、无 LoRA 的确定性回退。
 - LoRA 基模兼容、文件存在性和 SHA-256 校验。
 - ComfyUI 上传、提交、轮询和结果下载。
-- SD1.5 + Lineart ControlNet 上色，以及 Real-ESRGAN Anime 6B 增强。
+- 工作流自包含全部模型和采样参数；服务自动发现 `LoadImage` / `SaveImage` 节点。
+- 作品元数据聚合：支持 Bangumi、AniList、Kitsu、Shikimori、Jikan/MAL，MangaUpdates 保留可配置适配器；Bangumi 角色简介可通过 `/v1/metadata/resolve` 获取。
+- SD1.5 + Lineart ControlNet 上色、原始明度/墨线回注，以及 Real-ESRGAN Anime 6B 增强。
 
 ## 本次部署方式
 
@@ -66,9 +68,13 @@ node --check extension/popup.js
 1. 打开 `chrome://extensions`。
 2.启用“开发者模式”。
 3. 选择“加载已解压的扩展程序”，选择 `extension/`。
-4. 在插件中填写 `http://192.168.38.226:8765` 和部署 Token。
-5. 保存配置并授予漫画图片域名读取权限。
+4. 在插件中选择“远端 RTX 4090 · 快速”或“远端 RTX 4090 · 质量”。
+5. 输入部署 Token，保存并连接，然后授予漫画图片域名读取权限。
 6. 打开拷贝漫画章节页面。
+
+插件设置只暴露运行方案：快速/质量模式会选择对应完整工作流；作品 LoRA、通用 LoRA 和无 LoRA 的回退由 API 自动完成。只有选择“自定义服务”时才需要填写服务地址。
+
+外部元数据层可按拷贝漫画封面、Bangumi、AniList、Kitsu、Shikimori、MAL 顺序提供参考候选。当前整页 MangaNinja 实测未通过多格漫画质量验收，因此首版默认关闭参考工作流路由；角色资料仍可用于后续分格上色、调色板和作品 LoRA，不会直接覆盖页面文字或线稿，也不会自动下载和再发布第三方角色图片。
 
 插件后台携带 Token 获取结果，再以页面内数据地址显示，避免 HTTPS 漫画页直接加载局域网 HTTP 图片产生混合内容问题。
 
@@ -83,7 +89,7 @@ docker compose -f compose.nvidia-remote.yaml up -d --build
 
 ## 模型和性能
 
-默认快速模式为约 0.55MP、8 步采样；高质量模式为约 0.85MP、12 步采样。两种模式都输出约 2 倍增强图。缓存命中目标不超过 300ms；RTX 4090 的热模型单页目标为快速模式 P50 不超过 2.5 秒、P95 不超过 4 秒。
+默认快速工作流为约 0.55MP、10 步采样；质量工作流为约 0.85MP、16 步采样。两种模式都输出约 2 倍增强图，并在输出前用原图明度及深色像素蒙版恢复中文、抗锯齿边缘、气泡边界、网点和墨线。缓存命中目标不超过 300ms；RTX 4090 的热模型单页目标为快速模式 P50 不超过 2.5 秒、P95 不超过 4 秒。
 
 这是验收目标，不是尚未实测前的性能承诺。首次加载 checkpoint、ControlNet 或放大模型会明显慢于热模型；连续阅读依靠后续页预推理隐藏等待时间。
 

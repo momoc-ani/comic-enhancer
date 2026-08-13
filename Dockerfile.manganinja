@@ -1,0 +1,32 @@
+FROM xm-register.tencentcloudcr.com/ai/comfyui:20260720-RC2
+
+ARG MANGANINJA_NODE_REF=ab10b8a4e4628d3d778edf115a2ae8fbbe5817d4
+ARG MANGANINJA_NODE_SHA256=6580f7f4f10ea923df4436cc5426d962b1d18da4f84a981214f1697c91561291
+ARG GITHUB_MIRROR=https://ghfast.top/https://github.com
+
+RUN find /root/sd/ComfyUI/custom_nodes -mindepth 1 -maxdepth 1 -exec rm -rf {} + \
+    && curl -fL --retry 5 --retry-all-errors \
+        "${GITHUB_MIRROR}/smthemex/ComfyUI_MangaNinjia/archive/${MANGANINJA_NODE_REF}.tar.gz" \
+        -o /tmp/manganinja-node.tar.gz \
+    && echo "${MANGANINJA_NODE_SHA256}  /tmp/manganinja-node.tar.gz" \
+        | sha256sum --check - \
+    && mkdir -p /root/sd/ComfyUI/custom_nodes/ComfyUI_MangaNinjia \
+    && tar -xzf /tmp/manganinja-node.tar.gz \
+        --strip-components=1 \
+        -C /root/sd/ComfyUI/custom_nodes/ComfyUI_MangaNinjia \
+    && rm /tmp/manganinja-node.tar.gz \
+    && python3 -m pip install --no-cache-dir \
+        accelerate diffusers imageio imageio-ffmpeg importlib-metadata \
+        importlib-resources ipdb kornia omegaconf opencv-python-headless \
+        scikit-image scikit-learn scipy torchmetrics transformers einops
+
+# xformers 0.0.30 is the wheel matched to the base image's torch 2.7.0.
+RUN python3 -m pip install --no-cache-dir --no-deps xformers==0.0.30
+
+EXPOSE 8188
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=12 \
+  CMD test -f /root/sd/ComfyUI/models/MangaNinjia/MangaNinjia.ready \
+      && python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8188/system_stats', timeout=3)"
+
+ENTRYPOINT ["python3", "main.py", "--listen=0.0.0.0", "--port=8188"]

@@ -8,10 +8,14 @@
   "prefetch_pages": 3,
   "max_parallel_inference": 1,
   "comfyui_url": "http://127.0.0.1:8190",
+  "comfyui_reference_url": "http://127.0.0.1:8191",
+  "comfyui_reference_enabled": false,
+  "comfyui_reference_ready_file": "models/MangaNinjia/MangaNinjia.ready",
   "comfyui_timeout_seconds": 180,
   "comfyui_poll_interval_seconds": 0.25,
   "comfyui_workflow_fast": "workflows/sd15-colorize-fast.json",
   "comfyui_workflow_quality": "workflows/sd15-colorize-quality.json",
+  "comfyui_workflow_reference_quality": "workflows/manganinja-reference-quality.json",
   "comfyui_workflow_root": "workflows",
   "runtime_dir": "runtime",
   "adapter_index": "adapters/index.json",
@@ -24,5 +28,10 @@
   "gitee_token": "",
   "gitee_index_path": "adapters/index.json",
   "gitee_release_tag": "lora",
-  "gitee_timeout_seconds": 60
+  "gitee_timeout_seconds": 60,
+  "metadata_enabled": true,
+  "metadata_ttl_seconds": 86400,
+  "metadata_timeout_seconds": 8,
+  "mangaupdates_api_url": "https://api.mangaupdates.com/v1/series/search",
+  "mangaupdates_api_token": ""
 }

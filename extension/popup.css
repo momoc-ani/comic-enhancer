@@ -2,13 +2,13 @@
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
   color: #202124;
-  background: #f7f7f5;
+  background: #f5f6f4;
 }
 
 * { box-sizing: border-box; }
 
 body {
-  width: 330px;
+  width: 348px;
   margin: 0;
 }
 
@@ -16,41 +16,77 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
-  border-bottom: 1px solid #dadbd7;
+  min-height: 70px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #dedfdb;
   background: #fff;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.brand-mark {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 7px;
+  color: #fff;
+  background: #d94632;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 h1 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.25;
   letter-spacing: 0;
 }
 
 p {
-  margin: 4px 0 0;
-  color: #686b66;
-  font-size: 12px;
-  line-height: 1.3;
+  margin: 3px 0 0;
+  color: #696c67;
+  font-size: 11px;
+  line-height: 1.35;
+  letter-spacing: 0;
 }
+
+#status::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #a8aaa6;
+  content: "";
+  vertical-align: 1px;
+}
+
+#status[data-state="connected"]::before { background: #2c8b57; }
+#status[data-state="failed"]::before { background: #c54030; }
 
 main {
   display: grid;
-  gap: 12px;
+  gap: 13px;
   padding: 16px;
 }
 
-label {
+.field {
   display: grid;
   gap: 6px;
+  color: #50534e;
   font-size: 12px;
-  color: #4c4f4a;
 }
 
 input, select, button {
-  min-height: 36px;
-  border: 1px solid #c9cbc6;
+  min-height: 38px;
+  border: 1px solid #c8cac5;
   border-radius: 6px;
   font: inherit;
   letter-spacing: 0;
@@ -58,25 +94,46 @@ input, select, button {
 
 input, select {
   width: 100%;
-  padding: 7px 9px;
+  padding: 8px 10px;
   color: #202124;
+  outline: none;
   background: #fff;
 }
 
-.check-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #202124;
+input:focus, select:focus {
+  border-color: #d94632;
+  box-shadow: 0 0 0 2px rgb(217 70 50 / 12%);
 }
 
-.check-row input {
-  width: 16px;
-  min-height: 16px;
-  accent-color: #d94632;
+.summary {
+  min-height: 50px;
+  padding: 10px 11px;
+  border-left: 3px solid #d94632;
+  border-radius: 0 5px 5px 0;
+  color: #5d605b;
+  background: #fff;
+  font-size: 11px;
+  line-height: 1.5;
 }
+
+.summary strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #252724;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.custom-fields {
+  display: grid;
+  gap: 12px;
+  padding-top: 1px;
+}
+
+.custom-fields[hidden] { display: none; }
 
 .switch input { display: none; }
+
 .switch span {
   display: block;
   position: relative;
@@ -85,8 +142,8 @@ input, select {
   border-radius: 11px;
   background: #b7bab4;
 }
+
 .switch span::after {
-  content: "";
   position: absolute;
   top: 3px;
   left: 3px;
@@ -94,8 +151,10 @@ input, select {
   height: 16px;
   border-radius: 50%;
   background: #fff;
+  content: "";
   transition: transform 140ms ease;
 }
+
 .switch input:checked + span { background: #d94632; }
 .switch input:checked + span::after { transform: translateX(16px); }
 
@@ -105,11 +164,12 @@ footer {
 
 button {
   width: 100%;
-  border-color: #bd3626;
+  border-color: #be3828;
   color: #fff;
   background: #d94632;
   cursor: pointer;
+  font-weight: 600;
 }
 
 button:hover { background: #c83d2b; }
-
+button:disabled { cursor: wait; opacity: 0.65; }

@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from .adapters import AdapterRegistry
-from .backends import InferenceBackend
+from .backends import InferenceAssets, InferenceBackend
 from .cache import ResultCache
 from .models import ProcessOptions, ProcessResult, WorkIdentity
 
@@ -21,24 +21,33 @@ class ProcessingService:
     async def process(
         self,
         image_bytes: bytes,
+        reference_bytes: bytes | None,
         work: WorkIdentity,
         options: ProcessOptions,
     ) -> ProcessResult:
+        assets = InferenceAssets(
+            image_bytes=image_bytes,
+            reference_bytes=reference_bytes,
+        )
+        adapter_policy = self.backend.adapter_policy(assets, options)
         resolved = self.registry.resolve(
             work,
-            prefer_work_adapter=options.prefer_work_adapter,
-            allow_generic_adapter=options.allow_generic_adapter,
-            compatible_base_models=self.backend.supported_base_models,
-            required_workflow=(
-                str(options.mode) if self.backend.applies_adapters else None
+            prefer_work_adapter=(
+                options.prefer_work_adapter and adapter_policy.enabled
             ),
+            allow_generic_adapter=(
+                options.allow_generic_adapter and adapter_policy.enabled
+            ),
+            compatible_base_models=adapter_policy.compatible_base_models,
+            required_workflow=adapter_policy.required_workflow,
         )
         cache_key = self.cache.key(
             image_bytes,
+            reference_bytes,
             work,
             options,
             resolved,
-            self.backend.cache_revision(options, resolved),
+            self.backend.cache_revision(options, resolved, assets),
         )
         output_path = self.cache.result_path(cache_key)
         started = time.perf_counter()
@@ -54,6 +63,8 @@ class ProcessingService:
                 started,
                 cached=True,
                 adapter_applied=bool(metadata.get("adapter_applied", False)),
+                reference_applied=bool(metadata.get("reference_applied", False)),
+                model_profile=str(metadata.get("model_profile", "")),
             )
 
         async with self.semaphore:
@@ -61,7 +72,7 @@ class ProcessingService:
             if not output_path.exists():
                 outcome = await asyncio.to_thread(
                     self.backend.process,
-                    image_bytes,
+                    assets,
                     output_path,
                     options,
                     resolved,
@@ -69,7 +80,11 @@ class ProcessingService:
 
                 self.cache.save_metadata(
                     cache_key,
-                    {"adapter_applied": outcome.adapter_applied},
+                    {
+                        "adapter_applied": outcome.adapter_applied,
+                        "reference_applied": outcome.reference_applied,
+                        "model_profile": outcome.model_profile,
+                    },
                 )
 
         if outcome is None:
@@ -83,6 +98,8 @@ class ProcessingService:
                 started,
                 cached=True,
                 adapter_applied=bool(metadata.get("adapter_applied", False)),
+                reference_applied=bool(metadata.get("reference_applied", False)),
+                model_profile=str(metadata.get("model_profile", "")),
             )
 
         return self._result(
@@ -94,6 +111,8 @@ class ProcessingService:
             started,
             cached=False,
             adapter_applied=outcome.adapter_applied,
+            reference_applied=outcome.reference_applied,
+            model_profile=outcome.model_profile,
         )
 
     def _result(
@@ -107,6 +126,8 @@ class ProcessingService:
         *,
         cached,
         adapter_applied=False,
+        reference_applied=False,
+        model_profile="",
     ) -> ProcessResult:
         return ProcessResult(
             job_id=uuid.uuid4().hex,
@@ -116,6 +137,8 @@ class ProcessingService:
             adapter_source=resolved.source,
             adapter_id=resolved.adapter.adapter_id if resolved.adapter else None,
             adapter_applied=adapter_applied,
+            reference_applied=reference_applied,
+            model_profile=model_profile,
             result_url=f"/v1/results/{output_path.name}",
             elapsed_ms=round((time.perf_counter() - started) * 1000),
             cached=cached,

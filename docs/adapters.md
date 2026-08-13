@@ -2,7 +2,7 @@
 
 ## 回退规则
 
-每一页都执行同一规则：作品级 LoRA → 通用 LoRA → 无 LoRA。不可用包括文件缺失、SHA-256 不匹配、被禁用或基模不兼容。
+每一页都执行同一规则：作品级 LoRA → 通用 LoRA → 无 LoRA。不可用包括文件缺失、SHA-256 不匹配、被禁用、基模不兼容，或缺少当前快速/质量模式的完整工作流。
 
 `adapters/index.json` 只保存清单，不把权重提交到主项目仓库。示例作品主键：
 
@@ -19,11 +19,17 @@
       "recommended_weight": 0.55,
       "license": "项目实际许可证",
       "enabled": true,
-      "work_key": "copy_manga:12345"
+      "work_key": "copy_manga:12345",
+      "workflows": {
+        "fast": "lora/copy-manga-12345-fast.json",
+        "quality": "lora/copy-manga-12345-quality.json"
+      }
     }
   }
 }
 ```
+
+LoRA 强度和加载器节点不再由 Python 注入。每个 LoRA 的 `workflows` 指向完整 API 工作流，因此不同 LoRA 可以使用不同加载器、节点编号和强度；工作流内的 `lora_name` 必须与下载到 ComfyUI `models/loras` 的相对路径一致。若只提供 `fast`，质量模式会继续尝试通用 LoRA，最后回退到质量基础工作流。
 
 ## Gitee 分发设计
 

@@ -16,12 +16,18 @@ class ResultCache:
     def key(
         self,
         image_bytes: bytes,
+        reference_bytes: bytes | None,
         work: WorkIdentity,
         options: ProcessOptions,
         resolved: ResolvedAdapter,
         backend_revision: str = "",
     ) -> str:
         image_hash = hashlib.sha256(image_bytes).hexdigest()
+        reference_hash = (
+            hashlib.sha256(reference_bytes).hexdigest()
+            if reference_bytes is not None
+            else "none"
+        )
         adapter_revision = (
             f"{resolved.adapter.adapter_id}:{resolved.adapter.revision}"
             if resolved.adapter
@@ -30,6 +36,7 @@ class ResultCache:
         payload = "|".join(
             [
                 image_hash,
+                reference_hash,
                 work.key,
                 options.mode,
                 options.palette_version,

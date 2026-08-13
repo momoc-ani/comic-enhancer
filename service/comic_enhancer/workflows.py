@@ -15,14 +15,22 @@ class LoadedWorkflow:
     prompt: dict
     source: Path
     adapter_applied: bool
+    reference_required: bool = False
+    model_profile: str = "sd15-colorize"
 
 
 class WorkflowLoader(ABC):
+    @abstractmethod
+    def supports_reference(self) -> bool:
+        raise NotImplementedError
+
     @abstractmethod
     def load(
         self,
         options: ProcessOptions,
         resolved: ResolvedAdapter,
+        *,
+        reference_available: bool = False,
     ) -> LoadedWorkflow:
         raise NotImplementedError
 
@@ -31,6 +39,8 @@ class WorkflowLoader(ABC):
         self,
         options: ProcessOptions,
         resolved: ResolvedAdapter,
+        *,
+        reference_available: bool = False,
     ) -> str:
         raise NotImplementedError
 
@@ -44,17 +54,35 @@ class PresetWorkflowLoader(WorkflowLoader):
         fast_workflow: Path,
         quality_workflow: Path,
         workflow_root: Path,
+        reference_quality_workflow: Path | None = None,
     ):
         self.fast_workflow = fast_workflow.resolve()
         self.quality_workflow = quality_workflow.resolve()
         self.workflow_root = workflow_root.resolve()
+        self.reference_quality_workflow = (
+            reference_quality_workflow.resolve()
+            if reference_quality_workflow is not None
+            else None
+        )
+
+    def supports_reference(self) -> bool:
+        return bool(
+            self.reference_quality_workflow
+            and self.reference_quality_workflow.is_file()
+        )
 
     def load(
         self,
         options: ProcessOptions,
         resolved: ResolvedAdapter,
+        *,
+        reference_available: bool = False,
     ) -> LoadedWorkflow:
-        path, adapter_applied = self._select(options, resolved)
+        path, adapter_applied, reference_required, model_profile = self._select(
+            options,
+            resolved,
+            reference_available=reference_available,
+        )
 
         if not path.is_file():
             raise RuntimeError(f"ComfyUI workflow not found: {path}")
@@ -69,14 +97,22 @@ class PresetWorkflowLoader(WorkflowLoader):
             prompt=deepcopy(prompt),
             source=path,
             adapter_applied=adapter_applied,
+            reference_required=reference_required,
+            model_profile=model_profile,
         )
 
     def revision(
         self,
         options: ProcessOptions,
         resolved: ResolvedAdapter,
+        *,
+        reference_available: bool = False,
     ) -> str:
-        path, _ = self._select(options, resolved)
+        path, _, _, _ = self._select(
+            options,
+            resolved,
+            reference_available=reference_available,
+        )
         if not path.is_file():
             return f"missing:{path}"
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -85,14 +121,33 @@ class PresetWorkflowLoader(WorkflowLoader):
         self,
         options: ProcessOptions,
         resolved: ResolvedAdapter,
-    ) -> tuple[Path, bool]:
+        *,
+        reference_available: bool,
+    ) -> tuple[Path, bool, bool, str]:
         mode = str(options.mode)
+        if (
+            mode == "quality"
+            and reference_available
+            and self.reference_quality_workflow is not None
+            and self.reference_quality_workflow.is_file()
+        ):
+            return (
+                self.reference_quality_workflow,
+                False,
+                True,
+                "manganinja-reference",
+            )
         path = self.quality_workflow if mode == "quality" else self.fast_workflow
         if resolved.adapter is not None:
             adapter_workflow = resolved.adapter.workflows.get(mode)
             if adapter_workflow:
-                return self._adapter_workflow_path(adapter_workflow), True
-        return path, False
+                return (
+                    self._adapter_workflow_path(adapter_workflow),
+                    True,
+                    False,
+                    "sd15-colorize-lora",
+                )
+        return path, False, False, "sd15-colorize"
 
     def _adapter_workflow_path(self, relative_path: str) -> Path:
         path = (self.workflow_root / relative_path).resolve()

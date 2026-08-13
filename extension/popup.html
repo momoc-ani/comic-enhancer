@@ -3,14 +3,17 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Comic Enhancer</title>
+    <title>漫画增强器</title>
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
     <header>
-      <div>
-        <h1>Comic Enhancer</h1>
-        <p id="status">检查本地服务...</p>
+      <div class="brand">
+        <span class="brand-mark">彩</span>
+        <div>
+          <h1>漫画增强器</h1>
+          <p id="status" data-state="checking">正在检查服务</p>
+        </div>
       </div>
       <label class="switch" title="启用漫画增强">
         <input id="enabled" type="checkbox">
@@ -19,37 +22,45 @@
     </header>
 
     <main>
-      <label>
-        模式
-        <select id="mode">
-          <option value="fast">快速</option>
-          <option value="quality">高质量</option>
+      <label class="field">
+        <span>运行方案</span>
+        <select id="profile">
+          <optgroup label="远端 RTX 4090">
+            <option value="remote-fast">快速模式</option>
+            <option value="remote-quality">质量模式</option>
+          </optgroup>
+          <optgroup label="本机服务">
+            <option value="local-fast">快速模式</option>
+            <option value="local-quality">质量模式</option>
+          </optgroup>
+          <option value="custom">自定义服务</option>
         </select>
       </label>
-      <label>
-        预处理页数
-        <input id="prefetchPages" type="number" min="0" max="8" step="1">
-      </label>
-      <label>
-        推理服务
-        <input id="apiBaseUrl" type="url" spellcheck="false">
-      </label>
-      <label>
-        API Token
-        <input id="apiToken" type="password" autocomplete="off">
-      </label>
-      <label class="check-row">
-        <input id="preferWorkAdapter" type="checkbox">
-        优先使用作品 LoRA
-      </label>
-      <label class="check-row">
-        <input id="allowGenericAdapter" type="checkbox">
-        无作品 LoRA 时使用通用 LoRA
+
+      <div id="profileSummary" class="summary" aria-live="polite"></div>
+
+      <section id="customFields" class="custom-fields" hidden>
+        <label class="field">
+          <span>服务地址</span>
+          <input id="customApiBaseUrl" type="url" spellcheck="false" placeholder="http://192.168.1.10:8765">
+        </label>
+        <label class="field">
+          <span>处理模式</span>
+          <select id="customMode">
+            <option value="fast">快速模式</option>
+            <option value="quality">质量模式</option>
+          </select>
+        </label>
+      </section>
+
+      <label class="field">
+        <span>API Token</span>
+        <input id="apiToken" type="password" autocomplete="off" placeholder="输入推理服务 Token">
       </label>
     </main>
 
     <footer>
-      <button id="save" type="button">保存并检查</button>
+      <button id="save" type="button">保存并连接</button>
     </footer>
     <script src="popup.js"></script>
   </body>

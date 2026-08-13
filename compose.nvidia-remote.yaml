@@ -1,4 +1,19 @@
 services:
+  comfyui-manganinja:
+    build:
+      context: .
+      dockerfile: Dockerfile.manganinja
+    container_name: comic-enhancer-comfyui-manganinja
+    restart: unless-stopped
+    gpus: all
+    ipc: host
+    environment:
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+    ports:
+      - "8191:8188"
+    volumes:
+      - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/root/sd/ComfyUI/models
+
   comic-enhancer-api:
     build:
       context: .
@@ -12,11 +27,15 @@ services:
       COMIC_ENHANCER_TOKEN: ${COMIC_ENHANCER_TOKEN:?请在.env中设置COMIC_ENHANCER_TOKEN}
       COMIC_ENHANCER_ADMIN_TOKEN: ${COMIC_ENHANCER_ADMIN_TOKEN:?请在.env中设置管理Token}
       COMIC_ENHANCER_COMFYUI_URL: http://host.docker.internal:8190
+      COMIC_ENHANCER_COMFYUI_REFERENCE_URL: http://comfyui-manganinja:8188
+      COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED: ${COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED:-false}
+      COMIC_ENHANCER_COMFYUI_REFERENCE_READY_FILE: /models/MangaNinjia/MangaNinjia.ready
       COMIC_ENHANCER_ADAPTER_INDEX: /app/runtime/adapters/index.json
       COMIC_ENHANCER_ADAPTER_WEIGHTS_ROOT: /models/loras
       COMIC_ENHANCER_RUNTIME_DIR: /app/runtime
       COMIC_ENHANCER_WORKFLOW_FAST: /app/workflows/sd15-colorize-fast.json
       COMIC_ENHANCER_WORKFLOW_QUALITY: /app/workflows/sd15-colorize-quality.json
+      COMIC_ENHANCER_WORKFLOW_REFERENCE_QUALITY: /app/workflows/manganinja-reference-quality.json
       COMIC_ENHANCER_WORKFLOW_ROOT: /app/workflows
       COMIC_ENHANCER_GITEE_ENABLED: ${COMIC_ENHANCER_GITEE_ENABLED:-true}
       COMIC_ENHANCER_GITEE_OWNER: ${COMIC_ENHANCER_GITEE_OWNER:-}

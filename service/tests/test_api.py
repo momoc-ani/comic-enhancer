@@ -61,6 +61,8 @@ def test_process_uses_generic_adapter_and_cache(tmp_path):
     assert first.status_code == 200
     assert first.json()["adapter_source"] == "generic"
     assert first.json()["adapter_applied"] is False
+    assert first.json()["reference_applied"] is False
+    assert first.json()["model_profile"] == "passthrough"
     assert first.json()["cached"] is False
     assert second.json()["cached"] is True
     assert second.json()["adapter_applied"] is False
@@ -81,6 +83,27 @@ def test_capabilities_require_auth(tmp_path):
     client = TestClient(create_app(settings))
 
     assert client.get("/v1/capabilities").status_code == 401
+
+
+def test_metadata_resolve_requires_auth_and_returns_cached_shape(tmp_path):
+    settings = Settings(
+        api_token="test-token",
+        runtime_dir=tmp_path / "runtime",
+        adapter_index=tmp_path / "missing.json",
+        metadata_enabled=False,
+    )
+    client = TestClient(create_app(settings))
+    payload = {"work_json": '{"source":"copy_manga","source_work_id":"123","title":"测试作品"}'}
+
+    assert client.post("/v1/metadata/resolve", data=payload).status_code == 401
+    response = client.post(
+        "/v1/metadata/resolve",
+        headers={"Authorization": "Bearer test-token"},
+        data=payload,
+    )
+    assert response.status_code == 200
+    assert response.json()["work_key"] == "copy_manga:123"
+    assert response.json()["selected"] is None
 
 
 def test_cache_key_changes_with_backend_revision(tmp_path):
@@ -120,8 +143,11 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     config.write_text(
         '{"runtime_dir":"runtime","adapter_index":"index.json",'
         '"adapter_weights_root":"weights",'
+        '"comfyui_reference_enabled":true,'
         '"comfyui_workflow_fast":"fast.json",'
         '"comfyui_workflow_quality":"quality.json",'
+        '"comfyui_workflow_reference_quality":"reference.json",'
+        '"comfyui_reference_ready_file":"models/ready",'
         '"comfyui_workflow_root":"workflows"}',
         encoding="utf-8",
     )
@@ -131,5 +157,8 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
 
     assert settings.runtime_dir == Path("runtime")
     assert settings.adapter_index == Path("index.json")
+    assert settings.comfyui_reference_enabled is True
     assert settings.comfyui_workflow_fast == Path("fast.json")
+    assert settings.comfyui_workflow_reference_quality == Path("reference.json")
+    assert settings.comfyui_reference_ready_file == Path("models/ready")
     assert settings.comfyui_workflow_root == Path("workflows")
