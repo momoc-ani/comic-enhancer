@@ -48,20 +48,40 @@ class FakeImage {
     return { width: 1124, height: 1600, bottom: this.index < 8 ? -100 : 100 };
   }
   before(wrapper) { wrapper.append(this); }
+  remove() {
+    if (!this.parentElement) return;
+    this.parentElement.children = this.parentElement.children.filter(
+      (child) => child !== this,
+    );
+    this.parentElement = null;
+  }
   addEventListener(type, listener) {
     if (type === "load") queueMicrotask(listener);
   }
 }
 
 test("analyzes the eight-page window containing the current manga page", async () => {
+  let viewportStart = 0;
+  let scrollListener = null;
   const images = Array.from({ length: 10 }, (_, index) => new FakeImage(index));
+  for (const image of images) {
+    image.getBoundingClientRect = () => ({
+      width: 1124,
+      height: 1600,
+      bottom: image.index < viewportStart ? -100 : 100,
+    });
+  }
   const events = [];
   globalThis.location = {
     hostname: "www.mangacopy.com",
     pathname: "/comic/work/chapter/one",
     href: "https://www.mangacopy.com/comic/work/chapter/one",
   };
-  globalThis.window = { addEventListener() {} };
+  globalThis.window = {
+    addEventListener(type, listener) {
+      if (type === "scroll") scrollListener = listener;
+    },
+  };
   globalThis.document = {
     title: "测试漫画",
     documentElement: {},
@@ -113,6 +133,19 @@ test("analyzes the eight-page window containing the current manga page", async (
   assert.deepEqual(events, [
     [
       "analyze",
+      images.slice(0, 8).map((image) => `https://img.example/page-${image.index}.webp`),
+    ],
+    ["process", 0],
+  ]);
+  assert.equal(images[0].parentElement.dataset.state, "completed");
+
+  viewportStart = 8;
+  scrollListener();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.deepEqual(events.slice(2), [
+    [
+      "analyze",
       [
         "https://img.example/page-8.webp",
         "https://img.example/page-9.webp",
@@ -121,5 +154,9 @@ test("analyzes the eight-page window containing the current manga page", async (
     ["process", 8],
   ]);
   assert.equal(images[8].parentElement.dataset.state, "completed");
-  assert.equal(images[0].parentElement, null);
+  assert.equal(images[0].parentElement.dataset.state, undefined);
+  assert.equal(
+    images[0].parentElement.querySelector(":scope > .comic-enhancer-result"),
+    null,
+  );
 });

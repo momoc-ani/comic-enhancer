@@ -9,6 +9,8 @@
   let sequence = 0;
   let scheduler = null;
   let settingsVersion = 0;
+  const retainedPagesBehind = 2;
+  const minimumRetainedPagesAhead = 3;
 
   class CopyMangaAdapter {
     static matches() {
@@ -180,9 +182,26 @@
       );
       const start = firstBelowViewport < 0 ? 0 : firstBelowViewport;
       const count = Math.max(0, Number(settings.prefetchPages) || 0);
-      this.analyzeWindow(images, start);
       images.slice(start, start + count + 1).forEach((image, offset) => {
         this.enqueue(image, offset);
+      });
+      this.releaseDistantResults(images, start, count);
+    }
+
+    releaseDistantResults(images, start, prefetchCount) {
+      const keepStart = Math.max(0, start - retainedPagesBehind);
+      const keepEnd = start + Math.max(prefetchCount, minimumRetainedPagesAhead);
+      images.forEach((image, index) => {
+        if (index >= keepStart && index <= keepEnd) return;
+        const entry = entriesByImage.get(image);
+        if (!entry || entry.state !== "completed") return;
+        const wrapper = image.parentElement;
+        wrapper?.querySelector(":scope > .comic-enhancer-result")?.remove();
+        if (wrapper) {
+          delete wrapper.dataset.state;
+          wrapper.title = "";
+        }
+        entry.state = "idle";
       });
     }
 
