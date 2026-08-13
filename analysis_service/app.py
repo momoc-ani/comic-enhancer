@@ -16,6 +16,7 @@ from scipy.spatial.distance import cdist
 from transformers import AutoModel
 
 from .clustering import propagate_cluster_matches, stable_cross_page_clusters
+from .matching import ranked_identity_candidates
 
 
 MODEL_PATH = Path(os.environ.get("MAGIV2_MODEL_PATH", "/models/magiv2"))
@@ -33,7 +34,7 @@ CROSS_PAGE_CLUSTER_MAX_DISTANCE = float(
 PROPAGATION_MAX_DISTANCE = float(
     os.environ.get("MAGIV2_PROPAGATION_MAX_DISTANCE", "0.72")
 )
-ANALYZER_PROFILE = f"magiv2@{MODEL_REVISION[:12]}+cluster-v1"
+ANALYZER_PROFILE = f"magiv2@{MODEL_REVISION[:12]}+cluster-v1+multi-view-v1"
 
 
 class CharacterBankEntry(BaseModel):
@@ -235,12 +236,13 @@ def match_characters(character_embeddings, raw_results, bank_arrays, bank):
     flat = []
     flat_candidates = []
     for row in distances:
-        order = np.argsort(row)
-        best_index = int(order[0])
-        best = float(row[best_index])
-        second = float(row[int(order[1])]) if len(order) > 1 else 2.0
+        identity_candidates = ranked_identity_candidates(row, bank)
+        best, best_index = identity_candidates[0]
+        second = identity_candidates[1][0] if len(identity_candidates) > 1 else 2.0
         margin = max(0.0, second - best)
-        accepted = best <= MAX_DISTANCE and (len(order) == 1 or margin >= MIN_MARGIN)
+        accepted = best <= MAX_DISTANCE and (
+            len(identity_candidates) == 1 or margin >= MIN_MARGIN
+        )
         entry = bank[best_index]
         candidate = {
             "character_id": entry.character_id,

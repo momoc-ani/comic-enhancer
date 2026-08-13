@@ -350,8 +350,30 @@ def test_analyze_deduplicates_characters_and_selects_best_color_reference(
     )
 
     assert response.status_code == 200
-    selected = {entry.name: entry for entry in captured["entries"]}
-    assert set(selected) == {"Elymas Edvan", "Luce Rubis", "Maris Edvan"}
-    assert {entry.provider for entry in selected.values()} == {"bangumi"}
-    assert selected["Elymas Edvan"].character_id == "work:heavy-knight:elymas"
-    assert selected["Luce Rubis"].image_url == "bgm-luce"
+    entries = captured["entries"]
+    assert len(entries) == 6
+    assert {entry.name for entry in entries} == {
+        "Elymas Edvan",
+        "Luce Rubis",
+        "Maris Edvan",
+    }
+    assert {
+        entry.provider for entry in entries if entry.name == "Elymas Edvan"
+    } == {"bangumi", "anilist"}
+    assert {
+        entry.image_url for entry in entries if entry.name == "Elymas Edvan"
+    } == {"bgm-elymas"}
+    assert {
+        entry.image_url for entry in entries if entry.name == "Luce Rubis"
+    } == {"bgm-luce"}
+    assert {
+        entry.image_url for entry in entries if entry.name == "Maris Edvan"
+    } == {"bgm-maris"}
+    assert {
+        entry.character_id for entry in entries if entry.name == "Elymas Edvan"
+    } == {"work:heavy-knight:elymas"}
+    assert [entry.name for entry in entries[:3]] == [
+        "Elymas Edvan",
+        "Luce Rubis",
+        "Maris Edvan",
+    ]

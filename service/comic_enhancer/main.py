@@ -334,7 +334,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     }
                 )
                 seen.add(key)
-        entries: list[tuple[CharacterBankEntry, bytes]] = []
+        entry_groups: list[list[tuple[CharacterBankEntry, bytes]]] = []
         decisions: list[dict[str, object]] = []
         for character_id, candidates in grouped.items():
             eligible = [
@@ -358,17 +358,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
             )
             quality = best["quality"]
-            entries.append(
-                (
-                    CharacterBankEntry(
-                        character_id=character_id,
-                        name=str(best["name"]),
-                        image_url=str(best["image_url"]),
-                        provider=str(best["provider"]),
-                    ),
-                    best["image_bytes"],
-                )
+            match_views = [item for item in candidates if item["quality"].usable]
+            match_views.sort(
+                key=lambda item: reference_quality_rank(
+                    item["quality"],
+                    confirmed_source=bool(item["confirmed_source"]),
+                    provider=str(item["provider"]),
+                ),
+                reverse=True,
             )
+            character_entries = []
+            for view in match_views:
+                character_entries.append(
+                    (
+                        CharacterBankEntry(
+                            character_id=character_id,
+                            name=str(best["name"]),
+                            image_url=str(best["image_url"]),
+                            provider=str(view["provider"]),
+                        ),
+                        view["image_bytes"],
+                    )
+                )
+            entry_groups.append(character_entries)
             decisions.append(
                 {
                     "character_id": character_id,
@@ -377,6 +389,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "size": f"{quality.width}x{quality.height}",
                     "saturation": round(quality.saturation, 1),
                     "alternatives": len(candidates),
+                    "match_views": len(match_views),
                 }
             )
         logger.info(
@@ -384,9 +397,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             work.key,
             json.dumps(decisions[:16], ensure_ascii=False),
         )
-        entries.sort(key=lambda item: item[0].character_id)
+        entries = [
+            group[view_index]
+            for view_index in range(max((len(group) for group in entry_groups), default=0))
+            for group in entry_groups
+            if view_index < len(group)
+        ]
         if len(entries) > 16:
-            logger.warning("角色参考图超过 16 个，仅保留前 16 个: work=%s", work.key)
+            logger.warning("角色匹配视图超过 16 个，仅保留前 16 个: work=%s", work.key)
             return entries[:16]
         return entries
 
