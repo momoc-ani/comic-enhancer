@@ -580,9 +580,27 @@ def test_reference_board_and_target_points_keep_multiple_characters_aligned():
 
     with Image.open(BytesIO(board)) as image:
         assert image.size == (512, 512)
-    assert len(reference_points) == len(target_points) == 2
-    assert reference_points[0][1] < reference_points[1][1]
-    assert target_points[0][1] < target_points[1][1]
+    assert len(reference_points) == len(target_points) == 8
+    assert reference_points[0][1] == reference_points[3][1]
+    assert reference_points[0][1] < reference_points[4][1]
+    assert target_points[0][1] == target_points[3][1]
+    assert target_points[0][1] < target_points[4][1]
+
+
+def test_character_anchor_points_fall_back_when_too_small():
+    panel = PanelRegion(
+        panel_index=0,
+        box=BoundingBox(x1=0, y1=0, x2=512, y2=512),
+    )
+    character = CharacterInstance(
+        instance_id="tiny",
+        cluster_id="cluster",
+        box=BoundingBox(x1=10, y1=10, x2=11, y2=11),
+    )
+
+    points = ComfyUIBackend._target_points([character], panel)
+
+    assert points == [[10, 10]]
 
 
 def test_character_focus_region_keeps_context_inside_panel():

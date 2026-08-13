@@ -19,7 +19,8 @@ from .workflows import WorkflowLoader
 
 
 logger = logging.getLogger(__name__)
-REFERENCE_PROCESSING_REVISION = "reference-focus-v1"
+REFERENCE_PROCESSING_REVISION = "reference-focus-anchors-v2"
+CHARACTER_ANCHOR_FRACTIONS = (0.18, 0.40, 0.65, 0.82)
 
 
 class InferenceBackend(ABC):
@@ -344,11 +345,12 @@ class ComfyUIBackend(InferenceBackend):
                 for character in reversed(selected):
                     focus = self._character_focus_region(character, panel)
                     focus_bytes = self._crop_bytes(source, focus)
+                    target_points = self._target_points([character], focus)
                     reference_board, reference_points = self._reference_board(
                         [character],
                         assets.character_references,
+                        anchors_per_character=len(target_points),
                     )
-                    target_points = self._target_points([character], focus)
                     generated = self._run_reference_prompt(
                         client,
                         focus_bytes,
@@ -451,7 +453,12 @@ class ComfyUIBackend(InferenceBackend):
         )
 
     @staticmethod
-    def _reference_board(selected, references: dict[str, bytes]) -> tuple[bytes, list[list[int]]]:
+    def _reference_board(
+        selected,
+        references: dict[str, bytes],
+        *,
+        anchors_per_character: int = 4,
+    ) -> tuple[bytes, list[list[int]]]:
         board = Image.new("RGB", (512, 512), "white")
         slot_width = 512 // len(selected)
         points: list[list[int]] = []
@@ -466,8 +473,14 @@ class ComfyUIBackend(InferenceBackend):
             left = index * slot_width + (slot_width - reference.width) // 2
             top = (512 - reference.height) // 2
             board.paste(reference, (left, top))
-            # MangaNinja upstream writes the first coordinate as the matrix row.
-            points.append([top + reference.height // 2, left + reference.width // 2])
+            points.extend(
+                ComfyUIBackend._vertical_anchor_points(
+                    center_x=left + reference.width // 2,
+                    top=top,
+                    height=reference.height,
+                    count=anchors_per_character,
+                )
+            )
         stream = BytesIO()
         board.save(stream, format="PNG", optimize=True)
         return stream.getvalue(), points
@@ -481,13 +494,42 @@ class ComfyUIBackend(InferenceBackend):
         rendered_height = round(height * scale)
         offset_x = (512 - rendered_width) // 2
         offset_y = (512 - rendered_height) // 2
-        return [
+        points: list[list[int]] = []
+        for item in selected:
+            top = round((item.box.y1 - panel.box.y1) * scale) + offset_y
+            bottom = round((item.box.y2 - panel.box.y1) * scale) + offset_y
+            center_x = round((item.box.center[0] - panel.box.x1) * scale) + offset_x
+            anchors = ComfyUIBackend._vertical_anchor_points(
+                center_x=center_x,
+                top=top,
+                height=max(1, bottom - top),
+                count=4,
+            )
+            points.extend(anchors if len(anchors) == 4 else [[(top + bottom) // 2, center_x]])
+        return points
+
+    @staticmethod
+    def _vertical_anchor_points(
+        *,
+        center_x: int,
+        top: int,
+        height: int,
+        count: int,
+    ) -> list[list[int]]:
+        if count == 1:
+            fractions = (0.5,)
+        elif count == 4:
+            fractions = CHARACTER_ANCHOR_FRACTIONS
+        else:
+            raise ValueError("character anchors must contain 1 or 4 points")
+        points = [
             [
-                max(0, min(511, round((item.box.center[1] - panel.box.y1) * scale) + offset_y)),
-                max(0, min(511, round((item.box.center[0] - panel.box.x1) * scale) + offset_x)),
+                max(0, min(511, round(top + height * fraction))),
+                max(0, min(511, center_x)),
             ]
-            for item in selected
+            for fraction in fractions
         ]
+        return points if len({tuple(point) for point in points}) == len(points) else []
 
     @staticmethod
     def _bind_runtime_values(workflow: dict, values: dict[str, str]) -> None:
