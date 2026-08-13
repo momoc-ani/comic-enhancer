@@ -1,0 +1,59 @@
+services:
+  comfyui-amd:
+    build:
+      context: .
+      dockerfile: Dockerfile.amd
+    container_name: comic-enhancer-comfyui-amd
+    restart: unless-stopped
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - render
+    ipc: host
+    security_opt:
+      - seccomp=unconfined
+    environment:
+      HSA_OVERRIDE_GFX_VERSION: ${HSA_OVERRIDE_GFX_VERSION:-10.3.0}
+      PYTORCH_HIP_ALLOC_CONF: expandable_segments:True
+    ports:
+      - "8188:8188"
+    volumes:
+      - ./models:/opt/ComfyUI/models
+      - ./runtime/comfyui-input:/opt/ComfyUI/input
+      - ./runtime/comfyui-output:/opt/ComfyUI/output
+
+  comic-enhancer-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: comic-enhancer-api-amd
+    restart: unless-stopped
+    depends_on:
+      comfyui-amd:
+        condition: service_healthy
+    environment:
+      COMIC_ENHANCER_BACKEND: comfyui
+      COMIC_ENHANCER_TOKEN: ${COMIC_ENHANCER_TOKEN:?请在.env中设置COMIC_ENHANCER_TOKEN}
+      COMIC_ENHANCER_ADMIN_TOKEN: ${COMIC_ENHANCER_ADMIN_TOKEN:?请在.env中设置管理Token}
+      COMIC_ENHANCER_COMFYUI_URL: http://comfyui-amd:8188
+      COMIC_ENHANCER_ADAPTER_INDEX: /app/runtime/adapters/index.json
+      COMIC_ENHANCER_ADAPTER_WEIGHTS_ROOT: /models/loras
+      COMIC_ENHANCER_RUNTIME_DIR: /app/runtime
+      COMIC_ENHANCER_COMFYUI_OUTPUT_NODE: "15"
+      COMIC_ENHANCER_GITEE_ENABLED: ${COMIC_ENHANCER_GITEE_ENABLED:-true}
+      COMIC_ENHANCER_GITEE_OWNER: ${COMIC_ENHANCER_GITEE_OWNER:?请在.env中设置Gitee仓库所有者}
+      COMIC_ENHANCER_GITEE_REPO: ${COMIC_ENHANCER_GITEE_REPO:?请在.env中设置Gitee仓库名}
+      COMIC_ENHANCER_GITEE_BRANCH: ${COMIC_ENHANCER_GITEE_BRANCH:-main}
+      COMIC_ENHANCER_GITEE_TOKEN: ${COMIC_ENHANCER_GITEE_TOKEN:?请在.env中设置Gitee专用Token}
+      COMIC_ENHANCER_GITEE_INDEX_PATH: ${COMIC_ENHANCER_GITEE_INDEX_PATH:-adapters/index.json}
+      COMIC_ENHANCER_GITEE_RELEASE_TAG: ${COMIC_ENHANCER_GITEE_RELEASE_TAG:-lora}
+    ports:
+      - "8765:8765"
+    volumes:
+      - comic-enhancer-amd-runtime:/app/runtime
+      - ./models:/models
+
+volumes:
+  comic-enhancer-amd-runtime:

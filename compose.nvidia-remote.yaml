@@ -1,0 +1,35 @@
+services:
+  comic-enhancer-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: comic-enhancer-api
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      COMIC_ENHANCER_BACKEND: comfyui
+      COMIC_ENHANCER_TOKEN: ${COMIC_ENHANCER_TOKEN:?请在.env中设置COMIC_ENHANCER_TOKEN}
+      COMIC_ENHANCER_ADMIN_TOKEN: ${COMIC_ENHANCER_ADMIN_TOKEN:?请在.env中设置管理Token}
+      COMIC_ENHANCER_COMFYUI_URL: http://host.docker.internal:8190
+      COMIC_ENHANCER_ADAPTER_INDEX: /app/runtime/adapters/index.json
+      COMIC_ENHANCER_ADAPTER_WEIGHTS_ROOT: /models/loras
+      COMIC_ENHANCER_RUNTIME_DIR: /app/runtime
+      COMIC_ENHANCER_COMFYUI_CHECKPOINT: SD1.5/SD1.5_GhostMix_V2.0.safetensors
+      COMIC_ENHANCER_COMFYUI_CONTROLNET: SD1.5/control_v11p_sd15_lineart_fp16.safetensors
+      COMIC_ENHANCER_COMFYUI_OUTPUT_NODE: "15"
+      COMIC_ENHANCER_GITEE_ENABLED: ${COMIC_ENHANCER_GITEE_ENABLED:-true}
+      COMIC_ENHANCER_GITEE_OWNER: ${COMIC_ENHANCER_GITEE_OWNER:?请在.env中设置Gitee仓库所有者}
+      COMIC_ENHANCER_GITEE_REPO: ${COMIC_ENHANCER_GITEE_REPO:?请在.env中设置Gitee仓库名}
+      COMIC_ENHANCER_GITEE_BRANCH: ${COMIC_ENHANCER_GITEE_BRANCH:-main}
+      COMIC_ENHANCER_GITEE_TOKEN: ${COMIC_ENHANCER_GITEE_TOKEN:?请在.env中设置Gitee专用Token}
+      COMIC_ENHANCER_GITEE_INDEX_PATH: ${COMIC_ENHANCER_GITEE_INDEX_PATH:-adapters/index.json}
+      COMIC_ENHANCER_GITEE_RELEASE_TAG: ${COMIC_ENHANCER_GITEE_RELEASE_TAG:-lora}
+    ports:
+      - "8765:8765"
+    volumes:
+      - comic-enhancer-runtime:/app/runtime
+      - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/models
+
+volumes:
+  comic-enhancer-runtime:

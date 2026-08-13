@@ -1,0 +1,20 @@
+FROM rocm/pytorch:rocm6.4.2_ubuntu24.04_py3.12_pytorch_release_2.6.0
+
+ARG COMFYUI_REF=v0.10.0
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt
+RUN git clone --depth 1 --branch "${COMFYUI_REF}" https://github.com/Comfy-Org/ComfyUI.git
+
+WORKDIR /opt/ComfyUI
+RUN python -m pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 8188
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=12 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8188/system_stats', timeout=3)"
+
+CMD ["python", "main.py", "--listen", "0.0.0.0", "--port", "8188"]
