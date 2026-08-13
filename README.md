@@ -99,3 +99,4 @@ docker compose -f compose.nvidia-remote.yaml up -d --build
 这是验收目标，不是尚未实测前的性能承诺。首次加载 checkpoint、ControlNet 或放大模型会明显慢于热模型；连续阅读依靠后续页预推理隐藏等待时间。
 
 模型选择、LoRA 发布和基准测试见 [docs/model-roadmap.md](docs/model-roadmap.md) 与 [docs/adapters.md](docs/adapters.md)。
+完整 API 冒烟与 100 页质量准入门禁见 [benchmarks/README.md](benchmarks/README.md)。

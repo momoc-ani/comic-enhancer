@@ -16,6 +16,8 @@
 
 使用至少 100 页、经过授权的测试集比较：
 
+当前已增加 `scripts/benchmark_api.py` 和 `benchmarks/` 清单格式，可记录完整 API 的实际模型档位、LoRA/角色参考生效情况、耗时、尺寸、明度与深色墨线保留。现有 3 页仅作为本地非商用冒烟集；详细准入门禁见 `benchmarks/README.md`。
+
 - DDColor-Tiny：ONNX 速度基线，不作为漫画最佳效果的默认结论。
 - manga-colorization-v2：漫画专项研究基线，发布前必须重新核对代码和权重许可证。
 - SD1.5 Anime + Lineart ControlNet + IP-Adapter：8GB 主力候选。
