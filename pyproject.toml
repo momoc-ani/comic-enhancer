@@ -27,4 +27,4 @@ packages = ["service/comic_enhancer"]
 
 [tool.pytest.ini_options]
 testpaths = ["service/tests"]
-pythonpath = ["service"]
+pythonpath = ["service", "."]

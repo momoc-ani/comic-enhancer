@@ -1,4 +1,23 @@
 services:
+  magiv2-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile.magiv2
+    container_name: comic-enhancer-magiv2-analyzer
+    restart: unless-stopped
+    gpus: all
+    ipc: host
+    environment:
+      MAGIV2_MODEL_PATH: /models/magiv2
+      MAGIV2_REVISION: fbc890fec52977142e8ee00bfe26e9458b65517c
+      MAGIV2_CLUSTER_MAX_DISTANCE: "0.50"
+      MAGIV2_PROPAGATION_MAX_DISTANCE: "0.72"
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+    ports:
+      - "127.0.0.1:8770:8770"
+    volumes:
+      - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/models
+
   comfyui-manganinja:
     build:
       context: .
@@ -30,6 +49,10 @@ services:
       COMIC_ENHANCER_COMFYUI_REFERENCE_URL: http://comfyui-manganinja:8188
       COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED: ${COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED:-false}
       COMIC_ENHANCER_COMFYUI_REFERENCE_READY_FILE: /models/MangaNinjia/MangaNinjia.ready
+      COMIC_ENHANCER_ANALYZER_ENABLED: ${COMIC_ENHANCER_ANALYZER_ENABLED:-false}
+      COMIC_ENHANCER_ANALYZER_URL: http://magiv2-analyzer:8770
+      COMIC_ENHANCER_ANALYZER_TIMEOUT: 300
+      COMIC_ENHANCER_WORK_IDENTITY_INDEX: /app/config/work-identities.json
       COMIC_ENHANCER_ADAPTER_INDEX: /app/runtime/adapters/index.json
       COMIC_ENHANCER_ADAPTER_WEIGHTS_ROOT: /models/loras
       COMIC_ENHANCER_RUNTIME_DIR: /app/runtime

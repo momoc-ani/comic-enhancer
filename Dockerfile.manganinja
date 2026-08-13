@@ -23,6 +23,9 @@ RUN find /root/sd/ComfyUI/custom_nodes -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 # xformers 0.0.30 is the wheel matched to the base image's torch 2.7.0.
 RUN python3 -m pip install --no-cache-dir --no-deps xformers==0.0.30
 
+COPY comfyui_nodes/manganinja_api_points \
+    /root/sd/ComfyUI/custom_nodes/manganinja_api_points
+
 EXPOSE 8188
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=12 \

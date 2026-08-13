@@ -19,6 +19,9 @@
 - ComfyUI 上传、提交、轮询和结果下载。
 - 工作流自包含全部模型和采样参数；服务自动发现 `LoadImage` / `SaveImage` 节点。
 - 作品元数据聚合：支持 Bangumi、AniList、Kitsu、Shikimori、Jikan/MAL，MangaUpdates 保留可配置适配器；Bangumi 角色简介可通过 `/v1/metadata/resolve` 获取。
+- MAGIv2 批量分格、人物检测、跨页保守聚类和角色拒绝机制；精确外部 ID 角色库优先。
+- 可配置作品长标题别名映射，为不提供外部 ID 的漫画站补全已确认 AniList/Bangumi 身份。
+- MangaNinja 分格多角色参考板与 PointNet 对应点，失败时自动回退主质量工作流。
 - SD1.5 + Lineart ControlNet 上色、原始明度/墨线回注，以及 Real-ESRGAN Anime 6B 增强。
 
 ## 本次部署方式
@@ -74,7 +77,7 @@ node --check extension/popup.js
 
 插件设置只暴露运行方案：快速/质量模式会选择对应完整工作流；作品 LoRA、通用 LoRA 和无 LoRA 的回退由 API 自动完成。只有选择“自定义服务”时才需要填写服务地址。
 
-外部元数据层可按拷贝漫画封面、Bangumi、AniList、Kitsu、Shikimori、MAL 顺序提供参考候选。当前整页 MangaNinja 实测未通过多格漫画质量验收，因此首版默认关闭参考工作流路由；角色资料仍可用于后续分格上色、调色板和作品 LoRA，不会直接覆盖页面文字或线稿，也不会自动下载和再发布第三方角色图片。
+外部元数据层可提供作品和角色参考候选；显式 `external_ids` 精确命中的数据源优先。质量模式可预分析最多 8 页，只为可靠绑定的分格生成角色参考板；歧义人物保持拒绝。生成后回注原图中文、网点和墨线。该参考工作流仍默认关闭，角色图片只缓存于运行目录，不会自动进入 Git/Gitee 或被重新发布。
 
 插件后台携带 Token 获取结果，再以页面内数据地址显示，避免 HTTPS 漫画页直接加载局域网 HTTP 图片产生混合内容问题。
 

@@ -1,0 +1,24 @@
+FROM xm-register.tencentcloudcr.com/ai/comfyui:20260720-RC2
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MAGIV2_MODEL_PATH=/models/magiv2
+
+WORKDIR /app
+
+RUN python3 -m pip install --no-cache-dir \
+    'fastapi>=0.115,<1' \
+    'python-multipart>=0.0.20,<1' \
+    'pulp>=2.9,<4' \
+    'scipy>=1.13,<2' \
+    'shapely>=2,<3' \
+    'uvicorn[standard]>=0.34,<1'
+
+COPY analysis_service ./analysis_service
+
+EXPOSE 8770
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=180s --retries=12 \
+  CMD python3 -c "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8770/v1/health', timeout=3)); assert data['ready']"
+
+ENTRYPOINT ["python3", "-m", "uvicorn", "analysis_service.app:app", "--host=0.0.0.0", "--port=8770"]

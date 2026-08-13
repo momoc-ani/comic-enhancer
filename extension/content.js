@@ -4,6 +4,8 @@
   let active = false;
   let settings = null;
   let sequence = 0;
+  let analysisStarted = false;
+  let analysisPromise = null;
 
   class CopyMangaAdapter {
     static matches() {
@@ -124,7 +126,27 @@
           this.observer.observe(image);
         }
       });
+      this.analyzeWindow(images);
       this.prefetchAroundViewport(images);
+    }
+
+    analyzeWindow(images) {
+      if (analysisStarted || settings.mode !== "quality") return;
+      const imageUrls = images
+        .slice(0, 8)
+        .map((image) => this.adapter.imageUrl(image))
+        .filter(Boolean);
+      if (imageUrls.length === 0) return;
+      analysisStarted = true;
+      analysisPromise = chrome.runtime
+        .sendMessage({
+          type: "COMIC_ENHANCER_ANALYZE",
+          payload: { imageUrls, work: this.work },
+        })
+        .then((response) => {
+          if (!response?.ok) console.warn("Comic Enhancer analysis:", response?.error);
+        })
+        .catch((error) => console.warn("Comic Enhancer analysis:", error));
     }
 
     prefetchAroundViewport(images) {
@@ -163,6 +185,9 @@
       entry.state = "processing";
       markState(task.image, "processing");
       try {
+        if (settings.mode === "quality" && analysisPromise) {
+          await analysisPromise;
+        }
         const response = await chrome.runtime.sendMessage({
           type: "COMIC_ENHANCER_PROCESS",
           payload: {
@@ -198,6 +223,7 @@
     overlay.dataset.adapterSource = result.adapter_source;
     overlay.dataset.adapterId = result.adapter_id || "none";
     overlay.dataset.adapterApplied = String(result.adapter_applied);
+    overlay.dataset.processedPanels = String(result.processed_panels || 0);
     overlay.addEventListener("load", () => markState(image, "completed"), { once: true });
   }
 

@@ -8,6 +8,11 @@ from comic_enhancer.backends import ComfyUIBackend, InferenceAssets
 from comic_enhancer.models import (
     AdapterManifest,
     AdapterSource,
+    BoundingBox,
+    CharacterInstance,
+    CharacterMatch,
+    PageAnalysis,
+    PanelRegion,
     ProcessOptions,
     ResolvedAdapter,
 )
@@ -40,6 +45,41 @@ def resolved(adapter=None):
         source=AdapterSource.WORK if adapter else AdapterSource.NONE,
         adapter=adapter,
         reason="test",
+    )
+
+
+def reference_assets():
+    return InferenceAssets(
+        image_bytes=b"page",
+        analysis=PageAnalysis(
+            image_hash="0" * 64,
+            width=100,
+            height=100,
+            analyzer_profile="test",
+            panels=[
+                PanelRegion(
+                    panel_index=0,
+                    box=BoundingBox(x1=0, y1=0, x2=100, y2=100),
+                    character_instance_ids=["character-1"],
+                )
+            ],
+            characters=[
+                CharacterInstance(
+                    instance_id="character-1",
+                    cluster_id="cluster-1",
+                    box=BoundingBox(x1=10, y1=10, x2=50, y2=90),
+                    panel_index=0,
+                    match=CharacterMatch(
+                        character_id="bangumi:1",
+                        character_name="角色一",
+                        reference_url="https://example.com/1.png",
+                        status="accepted",
+                        confidence=0.9,
+                    ),
+                )
+            ],
+        ),
+        character_references={"bangumi:1": b"reference"},
     )
 
 
@@ -227,18 +267,206 @@ def test_reference_profile_requires_ready_marker(tmp_path, monkeypatch):
         reference_enabled=True,
         reference_ready_file=ready,
     )
-    assets = InferenceAssets(image_bytes=b"page", reference_bytes=b"cover")
+    assets = reference_assets()
 
     unavailable = backend.adapter_policy(assets, ProcessOptions(mode="quality"))
     assert unavailable.enabled is True
+    assert unavailable.required_workflow == "quality"
     assert calls == []
 
     ready.touch()
     available = backend.adapter_policy(assets, ProcessOptions(mode="quality"))
-    assert available.enabled is False
+    assert available.enabled is True
     cached = backend.adapter_policy(assets, ProcessOptions(mode="quality"))
-    assert cached.enabled is False
-    assert len(calls) == 1
+    assert cached.enabled is True
+    assert calls == []
+
+
+def test_rejected_character_never_enables_reference_profile(tmp_path, monkeypatch):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    reference = tmp_path / "reference.json"
+    ready = tmp_path / "MangaNinjia.ready"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    write_workflow(reference, marker="reference")
+    ready.touch()
+    loader = PresetWorkflowLoader(
+        fast_workflow=fast,
+        quality_workflow=quality,
+        reference_quality_workflow=reference,
+        workflow_root=tmp_path,
+    )
+    monkeypatch.setattr(
+        "comic_enhancer.backends.httpx.get",
+        lambda *args, **kwargs: SimpleNamespace(status_code=200),
+    )
+    backend = ComfyUIBackend(
+        base_url="http://fast",
+        reference_base_url="http://reference",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=loader,
+        reference_enabled=True,
+        reference_ready_file=ready,
+    )
+    assets = reference_assets()
+    assets.analysis.characters[0].match.status = "rejected"
+
+    policy = backend.adapter_policy(assets, ProcessOptions(mode="quality"))
+
+    assert policy.enabled is True
+
+
+def test_reference_failure_falls_back_to_selected_quality_workflow(tmp_path, monkeypatch):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    reference = tmp_path / "reference.json"
+    ready = tmp_path / "MangaNinjia.ready"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    write_workflow(reference, marker="reference")
+    ready.touch()
+    loader = PresetWorkflowLoader(
+        fast_workflow=fast,
+        quality_workflow=quality,
+        reference_quality_workflow=reference,
+        workflow_root=tmp_path,
+    )
+    backend = ComfyUIBackend(
+        base_url="http://main",
+        reference_base_url="http://reference",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=loader,
+        reference_enabled=True,
+        reference_ready_file=ready,
+    )
+    assets = reference_assets()
+    monkeypatch.setattr(backend, "_reference_ready", lambda: True)
+    monkeypatch.setattr(
+        backend,
+        "_process_reference_panels",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("reference failed")),
+    )
+
+    requested = {}
+
+    class FakeResponse:
+        content = b""
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"prompt_id": "prompt-1"}
+
+    class FakeClient:
+        def __init__(self, *, base_url, timeout):
+            requested["base_url"] = base_url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def post(self, path, **kwargs):
+            if path == "/upload/image":
+                return SimpleNamespace(
+                    raise_for_status=lambda: None,
+                    json=lambda: {"name": "page.png", "subfolder": ""},
+                )
+            requested["prompt"] = kwargs["json"]["prompt"]
+            return FakeResponse()
+
+        def get(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr("comic_enhancer.backends.httpx.Client", FakeClient)
+    monkeypatch.setattr(
+        backend,
+        "_wait_for_output",
+        lambda *args: {"filename": "result.png", "subfolder": "", "type": "output"},
+    )
+    monkeypatch.setattr(backend, "_upload", lambda *args: "uploaded/page.png")
+    monkeypatch.setattr(
+        "comic_enhancer.backends.Image.open",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("not reached")),
+    )
+
+    with pytest.raises(AssertionError, match="not reached"):
+        backend.process(
+            assets,
+            tmp_path / "output.webp",
+            ProcessOptions(mode="quality"),
+            resolved(),
+        )
+
+    assert requested["base_url"] == "http://main"
+    assert requested["prompt"]["marker"]["inputs"]["value"] == "quality"
+
+
+def test_reference_board_and_target_points_keep_multiple_characters_aligned():
+    assets = reference_assets()
+    second = CharacterInstance(
+        instance_id="character-2",
+        cluster_id="cluster-2",
+        box=BoundingBox(x1=60, y1=20, x2=90, y2=80),
+        panel_index=0,
+        match=CharacterMatch(
+            character_id="bangumi:2",
+            character_name="角色二",
+            reference_url="https://example.com/2.png",
+            status="accepted",
+            confidence=0.8,
+        ),
+    )
+    selected = [assets.analysis.characters[0], second]
+    from io import BytesIO
+    from PIL import Image
+
+    stream1 = BytesIO()
+    Image.new("RGB", (100, 200), "red").save(stream1, format="PNG")
+    stream2 = BytesIO()
+    Image.new("RGB", (200, 100), "blue").save(stream2, format="PNG")
+    board, reference_points = ComfyUIBackend._reference_board(
+        selected,
+        {"bangumi:1": stream1.getvalue(), "bangumi:2": stream2.getvalue()},
+    )
+    target_points = ComfyUIBackend._target_points(
+        selected,
+        assets.analysis.panels[0],
+    )
+
+    with Image.open(BytesIO(board)) as image:
+        assert image.size == (512, 512)
+    assert len(reference_points) == len(target_points) == 2
+    assert reference_points[0][1] < reference_points[1][1]
+    assert target_points[0][1] < target_points[1][1]
+
+
+def test_bind_runtime_values_requires_titled_nodes():
+    workflow = {
+        "1": {
+            "class_type": "MangaNinjaApiPoints",
+            "inputs": {"points_json": "[]"},
+            "_meta": {"title": "REFERENCE_POINTS", "runtime_input": "points_json"},
+        },
+        "2": {
+            "class_type": "MangaNinjaApiPoints",
+            "inputs": {"points_json": "[]"},
+            "_meta": {"title": "TARGET_POINTS", "runtime_input": "points_json"},
+        },
+    }
+
+    ComfyUIBackend._bind_runtime_values(
+        workflow,
+        {"REFERENCE_POINTS": "[[1,2]]", "TARGET_POINTS": "[[3,4]]"},
+    )
+
+    assert workflow["1"]["inputs"]["points_json"] == "[[1,2]]"
+    assert workflow["2"]["inputs"]["points_json"] == "[[3,4]]"
 
 
 @pytest.mark.parametrize(
@@ -282,4 +510,9 @@ def test_manganinja_workflow_declares_page_and_reference_inputs():
     )
     assert sampler["inputs"]["width"] == 512
     assert sampler["inputs"]["height"] == 512
+    assert sampler["inputs"]["guidance_scale_point"] > 0
+    assert any(
+        node.get("_meta", {}).get("title") == "REFERENCE_POINTS"
+        for node in workflow.values()
+    )
     assert any(node["class_type"] == "SaveImage" for node in workflow.values())

@@ -20,7 +20,7 @@
   "3": {
     "class_type": "MangaNinjiaLoader",
     "inputs": {
-      "checkpoint": "v1-5-pruned-emaonly.safetensors",
+      "checkpoint": "SD1.5/SD1.5_GhostMix_V2.0.safetensors",
       "clip": "clip_l.safetensors",
       "controlnet": "SD1.5/control_v11p_sd15_lineart_fp16.safetensors"
     }
@@ -44,9 +44,17 @@
       "width": 512,
       "height": 512,
       "guidance_scale_ref": 9.0,
-      "guidance_scale_point": 0.0,
-      "steps": 12,
-      "is_lineart": true
+      "guidance_scale_point": 12.0,
+      "steps": 25,
+      "is_lineart": false,
+      "xy_data_ref": [
+        "9",
+        0
+      ],
+      "xy_data_lineart": [
+        "10",
+        0
+      ]
     }
   },
   "5": {
@@ -87,6 +95,26 @@
         0
       ],
       "filename_prefix": "comic-enhancer/manganinja"
+    }
+  },
+  "9": {
+    "class_type": "MangaNinjaApiPoints",
+    "inputs": {
+      "points_json": "[]"
+    },
+    "_meta": {
+      "title": "REFERENCE_POINTS",
+      "runtime_input": "points_json"
+    }
+  },
+  "10": {
+    "class_type": "MangaNinjaApiPoints",
+    "inputs": {
+      "points_json": "[]"
+    },
+    "_meta": {
+      "title": "TARGET_POINTS",
+      "runtime_input": "points_json"
     }
   }
 }

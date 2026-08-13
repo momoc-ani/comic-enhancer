@@ -149,6 +149,48 @@ def test_anilist_and_kitsu_map_titles(monkeypatch):
     assert KitsuProvider().search(work()).provider_id == "38"
 
 
+def test_anilist_exact_id_does_not_send_title_search(monkeypatch):
+    captured = {}
+
+    def post(self, url, **kwargs):
+        captured.update(kwargs["json"]["variables"])
+        response = httpx.Response(
+            200,
+            json={
+                "data": {
+                    "Page": {
+                        "media": [
+                            {
+                                "id": 150193,
+                                "title": {
+                                    "romaji": "Tsuihou sareta Tensei Juukishi wa Game Chishiki de Musou suru",
+                                    "native": "追放された転生重騎士はゲーム知識で無双する",
+                                    "userPreferred": "Tsuihou sareta Tensei Juukishi wa Game Chishiki de Musou suru",
+                                },
+                                "synonyms": [],
+                                "description": "",
+                                "coverImage": {},
+                                "staff": {"edges": []},
+                                "characters": {"edges": []},
+                            }
+                        ]
+                    }
+                }
+            },
+        )
+        response.request = httpx.Request("POST", url)
+        return response
+
+    monkeypatch.setattr(httpx.Client, "post", post)
+
+    result = AniListProvider().search(
+        work(external_ids={"anilist": "150193"})
+    )
+
+    assert result.provider_id == "150193"
+    assert captured == {"id": 150193}
+
+
 def test_aggregator_caches_provider_failures(tmp_path: Path):
     class BrokenProvider:
         name = "broken"

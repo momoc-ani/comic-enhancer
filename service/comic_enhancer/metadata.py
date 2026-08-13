@@ -178,7 +178,7 @@ class AniListProvider(MetadataProvider):
     name = "anilist"
     api_url = "https://graphql.anilist.co"
     query = """
-    query ($search: String!, $id: Int) {
+    query ($search: String, $id: Int) {
       Page(perPage: 5) {
         media(search: $search, id: $id, type: MANGA) {
           id title { romaji english native userPreferred } synonyms description
@@ -191,9 +191,11 @@ class AniListProvider(MetadataProvider):
     """
 
     def search(self, work: WorkIdentity) -> WorkMetadata | None:
-        variables: dict[str, Any] = {"search": work.title}
+        variables: dict[str, Any] = {}
         if value := work.external_ids.get(self.name):
             variables["id"] = int(value)
+        else:
+            variables["search"] = work.title
         with httpx.Client(timeout=self.timeout_seconds, headers={"User-Agent": "ComicEnhancer/0.1"}) as client:
             response = client.post(self.api_url, json={"query": self.query, "variables": variables})
             response.raise_for_status()

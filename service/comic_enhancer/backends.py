@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import hashlib
 from io import BytesIO
 import json
+import logging
 from pathlib import Path
 import re
 import time
@@ -12,8 +14,11 @@ import uuid
 import httpx
 from PIL import Image, ImageEnhance, ImageOps
 
-from .models import ProcessOptions, ResolvedAdapter
+from .models import PageAnalysis, PanelRegion, ProcessOptions, ResolvedAdapter
 from .workflows import WorkflowLoader
+
+
+logger = logging.getLogger(__name__)
 
 
 class InferenceBackend(ABC):
@@ -61,6 +66,7 @@ class InferenceBackend(ABC):
 class InferenceOutcome:
     adapter_applied: bool
     reference_applied: bool = False
+    processed_panels: int = 0
     model_profile: str = ""
 
 
@@ -68,6 +74,23 @@ class InferenceOutcome:
 class InferenceAssets:
     image_bytes: bytes
     reference_bytes: bytes | None = None
+    analysis: PageAnalysis | None = None
+    character_references: dict[str, bytes] | None = None
+
+    @property
+    def has_panel_references(self) -> bool:
+        if self.analysis is None or not self.character_references:
+            return False
+        accepted = {
+            item.instance_id
+            for item in self.analysis.characters
+            if item.match.status == "accepted"
+            and item.match.character_id in self.character_references
+        }
+        return any(
+            accepted.intersection(panel.character_instance_ids)
+            for panel in self.analysis.panels
+        )
 
 
 @dataclass(frozen=True)
@@ -143,31 +166,33 @@ class ComfyUIBackend(InferenceBackend):
         assets: InferenceAssets | None = None,
     ) -> str:
         reference_available = bool(
-            assets and assets.reference_bytes and self._reference_ready()
+            assets and assets.has_panel_references and self._reference_ready()
         )
-        return self.workflow_loader.revision(
+        workflow_revision = self.workflow_loader.revision(
             options,
             resolved,
             reference_available=reference_available,
         )
+        if not reference_available or assets is None or assets.analysis is None:
+            return workflow_revision
+        analysis_hash = hashlib.sha256(
+            assets.analysis.model_dump_json().encode("utf-8")
+        ).hexdigest()
+        reference_hashes = [
+            f"{key}:{hashlib.sha256(value).hexdigest()}"
+            for key, value in sorted((assets.character_references or {}).items())
+        ]
+        return ":".join([workflow_revision, analysis_hash, *reference_hashes])
 
     def adapter_policy(
         self,
         assets: InferenceAssets,
         options: ProcessOptions,
     ) -> AdapterPolicy:
-        reference_profile = (
-            str(options.mode) == "quality"
-            and assets.reference_bytes is not None
-            and self.workflow_loader.supports_reference()
-            and self._reference_ready()
-        )
         return AdapterPolicy(
-            enabled=not reference_profile,
-            compatible_base_models=(
-                self.supported_base_models if not reference_profile else frozenset()
-            ),
-            required_workflow=(str(options.mode) if not reference_profile else None),
+            enabled=True,
+            compatible_base_models=self.supported_base_models,
+            required_workflow=str(options.mode),
         )
 
     def process(
@@ -178,7 +203,7 @@ class ComfyUIBackend(InferenceBackend):
         resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
         reference_available = bool(
-            assets.reference_bytes and self._reference_ready()
+            assets.has_panel_references and self._reference_ready()
         )
         loaded_workflow = self.workflow_loader.load(
             options,
@@ -186,8 +211,25 @@ class ComfyUIBackend(InferenceBackend):
             reference_available=reference_available,
         )
 
-        if loaded_workflow.reference_required and assets.reference_bytes is None:
-            raise RuntimeError("reference workflow requires a reference image")
+        if loaded_workflow.reference_required and not assets.has_panel_references:
+            raise RuntimeError("reference workflow requires matched panel characters")
+        if loaded_workflow.reference_required:
+            try:
+                return self._process_reference_panels(
+                    assets,
+                    output_path,
+                    loaded_workflow.prompt,
+                    loaded_workflow.model_profile,
+                )
+            except Exception:
+                logger.exception(
+                    "MangaNinja 分格参考工作流失败，回退到主质量工作流"
+                )
+                loaded_workflow = self.workflow_loader.load(
+                    options,
+                    resolved,
+                    reference_available=False,
+                )
         base_url = (
             self.reference_base_url
             if loaded_workflow.reference_required
@@ -241,6 +283,190 @@ class ComfyUIBackend(InferenceBackend):
             reference_applied=loaded_workflow.reference_required,
             model_profile=loaded_workflow.model_profile,
         )
+
+    def _process_reference_panels(
+        self,
+        assets: InferenceAssets,
+        output_path: Path,
+        workflow_template: dict,
+        model_profile: str,
+    ) -> InferenceOutcome:
+        if assets.analysis is None or not assets.character_references:
+            raise RuntimeError("panel analysis and character references are required")
+        with Image.open(BytesIO(assets.image_bytes)) as source_file:
+            source = ImageOps.exif_transpose(source_file).convert("RGB")
+        composite = source.copy()
+        characters = {item.instance_id: item for item in assets.analysis.characters}
+        processed_panels = 0
+
+        with httpx.Client(
+            base_url=self.reference_base_url,
+            timeout=self.timeout_seconds,
+        ) as client:
+            for panel in assets.analysis.panels:
+                selected = [
+                    characters[instance_id]
+                    for instance_id in panel.character_instance_ids
+                    if instance_id in characters
+                    and characters[instance_id].match.status == "accepted"
+                    and characters[instance_id].match.character_id
+                    in assets.character_references
+                ]
+                selected.sort(
+                    key=lambda item: (
+                        item.match.confidence,
+                        (item.box.x2 - item.box.x1) * (item.box.y2 - item.box.y1),
+                    ),
+                    reverse=True,
+                )
+                selected = selected[:4]
+                if not selected:
+                    continue
+                panel_bytes = self._crop_bytes(source, panel)
+                reference_board, reference_points = self._reference_board(
+                    selected,
+                    assets.character_references,
+                )
+                target_points = self._target_points(selected, panel)
+                generated = self._run_reference_prompt(
+                    client,
+                    panel_bytes,
+                    reference_board,
+                    reference_points,
+                    target_points,
+                    workflow_template,
+                )
+                restored = self._restore_geometry(panel_bytes, generated)
+                protected = self._protect_source_structure(panel_bytes, restored)
+                composite.paste(
+                    protected,
+                    (panel.box.x1, panel.box.y1, panel.box.x2, panel.box.y2),
+                )
+                processed_panels += 1
+
+        if processed_panels == 0:
+            raise RuntimeError("no panel has an accepted character reference")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = output_path.with_suffix(".tmp.webp")
+        composite.save(temporary, format="WEBP", quality=93, method=4)
+        temporary.replace(output_path)
+        return InferenceOutcome(
+            adapter_applied=False,
+            reference_applied=True,
+            processed_panels=processed_panels,
+            model_profile=model_profile,
+        )
+
+    def _run_reference_prompt(
+        self,
+        client: httpx.Client,
+        panel_bytes: bytes,
+        reference_bytes: bytes,
+        reference_points: list[list[int]],
+        target_points: list[list[int]],
+        workflow_template: dict,
+    ) -> Image.Image:
+        workflow = json.loads(json.dumps(workflow_template))
+        comfy_inputs = {
+            "INPUT_IMAGE": self._upload(client, self._pad_square(panel_bytes), "panel"),
+            "REFERENCE_IMAGE": self._upload(
+                client,
+                reference_bytes,
+                "character-board",
+            ),
+        }
+        output_nodes = self._bind_io(
+            workflow,
+            input_images=comfy_inputs,
+            output_prefix=f"comic-enhancer/panel-{uuid.uuid4().hex}",
+        )
+        self._bind_runtime_values(
+            workflow,
+            {
+                "REFERENCE_POINTS": json.dumps(reference_points),
+                "TARGET_POINTS": json.dumps(target_points),
+            },
+        )
+        queued = client.post(
+            "/prompt",
+            json={"prompt": workflow, "client_id": uuid.uuid4().hex},
+        )
+        queued.raise_for_status()
+        image_info = self._wait_for_output(
+            client,
+            queued.json()["prompt_id"],
+            output_nodes,
+        )
+        result = client.get("/view", params=image_info)
+        result.raise_for_status()
+        with Image.open(BytesIO(result.content)) as generated_file:
+            return ImageOps.exif_transpose(generated_file).convert("RGB").copy()
+
+    @staticmethod
+    def _crop_bytes(source: Image.Image, panel: PanelRegion) -> bytes:
+        stream = BytesIO()
+        source.crop(
+            (panel.box.x1, panel.box.y1, panel.box.x2, panel.box.y2)
+        ).save(stream, format="PNG")
+        return stream.getvalue()
+
+    @staticmethod
+    def _reference_board(selected, references: dict[str, bytes]) -> tuple[bytes, list[list[int]]]:
+        board = Image.new("RGB", (512, 512), "white")
+        slot_width = 512 // len(selected)
+        points: list[list[int]] = []
+        for index, character in enumerate(selected):
+            character_id = character.match.character_id
+            with Image.open(BytesIO(references[character_id])) as reference_file:
+                reference = ImageOps.contain(
+                    ImageOps.exif_transpose(reference_file).convert("RGB"),
+                    (slot_width - 8, 504),
+                    Image.Resampling.LANCZOS,
+                )
+            left = index * slot_width + (slot_width - reference.width) // 2
+            top = (512 - reference.height) // 2
+            board.paste(reference, (left, top))
+            # MangaNinja upstream writes the first coordinate as the matrix row.
+            points.append([top + reference.height // 2, left + reference.width // 2])
+        stream = BytesIO()
+        board.save(stream, format="PNG", optimize=True)
+        return stream.getvalue(), points
+
+    @staticmethod
+    def _target_points(selected, panel: PanelRegion) -> list[list[int]]:
+        width = panel.box.x2 - panel.box.x1
+        height = panel.box.y2 - panel.box.y1
+        scale = min(512 / width, 512 / height)
+        rendered_width = round(width * scale)
+        rendered_height = round(height * scale)
+        offset_x = (512 - rendered_width) // 2
+        offset_y = (512 - rendered_height) // 2
+        return [
+            [
+                max(0, min(511, round((item.box.center[1] - panel.box.y1) * scale) + offset_y)),
+                max(0, min(511, round((item.box.center[0] - panel.box.x1) * scale) + offset_x)),
+            ]
+            for item in selected
+        ]
+
+    @staticmethod
+    def _bind_runtime_values(workflow: dict, values: dict[str, str]) -> None:
+        discovered: set[str] = set()
+        for node in workflow.values():
+            if not isinstance(node, dict):
+                continue
+            meta = node.get("_meta", {})
+            role = str(meta.get("title", "")).strip().upper()
+            input_name = str(meta.get("runtime_input", "")).strip()
+            if role in values and input_name:
+                node.setdefault("inputs", {})[input_name] = values[role]
+                discovered.add(role)
+        missing = sorted(set(values) - discovered)
+        if missing:
+            raise RuntimeError(
+                "ComfyUI workflow is missing runtime value nodes: "
+                + ", ".join(missing)
+            )
 
     def _reference_ready(self) -> bool:
         if not self.reference_enabled:

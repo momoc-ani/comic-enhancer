@@ -13,11 +13,13 @@ from fastapi.responses import FileResponse
 
 from . import __version__
 from .adapters import AdapterRegistry
+from .analysis import ChapterAnalyzerClient, PageAnalysisStore
 from .backends import create_backend
 from .cache import ResultCache
 from .config import Settings, load_settings
 from .jobs import ProcessingService
 from .gitee import GiteeAdapterStore, GiteeError
+from .identities import WorkIdentityRegistry
 from .metadata import (
     AniListProvider,
     BangumiProvider,
@@ -27,11 +29,39 @@ from .metadata import (
     MetadataAggregator,
     ShikimoriProvider,
 )
-from .models import AdapterManifest, Capabilities, MetadataResolution, ProcessOptions, ProcessResult, WorkIdentity
+from .models import (
+    AdapterManifest,
+    Capabilities,
+    ChapterAnalysisResult,
+    CharacterBankEntry,
+    MetadataResolution,
+    ProcessOptions,
+    ProcessResult,
+    WorkIdentity,
+)
 from .references import ReferenceImageStore
 from .workflows import PresetWorkflowLoader
 
 logger = logging.getLogger(__name__)
+
+
+def prioritized_metadata_candidates(
+    resolution: MetadataResolution,
+    work: WorkIdentity,
+):
+    """Prefer an explicitly identified provider before title-search candidates."""
+    indexed = list(enumerate(resolution.candidates))
+    indexed.sort(
+        key=lambda item: (
+            -int(
+                work.external_ids.get(item[1].provider)
+                == item[1].provider_id
+            ),
+            -item[1].confidence,
+            item[0],
+        )
+    )
+    return [candidate for _, candidate in indexed]
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -61,6 +91,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     cache = ResultCache(settings.runtime_dir / "results")
     references = ReferenceImageStore(settings.runtime_dir / "references")
+    analyses = PageAnalysisStore(settings.runtime_dir / "analysis")
+    analyzer = (
+        ChapterAnalyzerClient(
+            settings.analyzer_url,
+            timeout_seconds=settings.analyzer_timeout_seconds,
+        )
+        if settings.analyzer_enabled
+        else None
+    )
     metadata = MetadataAggregator(
         settings.runtime_dir / "metadata",
         enabled=settings.metadata_enabled,
@@ -78,7 +117,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
         ],
     )
-    metadata_refresh_tasks: dict[str, asyncio.Task] = {}
+    identities = WorkIdentityRegistry(settings.work_identity_index)
     processor = ProcessingService(
         registry=registry,
         cache=cache,
@@ -113,6 +152,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.processor = processor
     app.state.gitee_store = gitee_store
     app.state.metadata = metadata
+    app.state.analyzer = analyzer
+    app.state.identities = identities
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^(chrome-extension|moz-extension)://.*$",
@@ -157,7 +198,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _: None = Depends(authorize),
     ) -> ProcessResult:
         try:
-            work = WorkIdentity.model_validate(json.loads(work_json))
+            work = identities.enrich(
+                WorkIdentity.model_validate(json.loads(work_json))
+            )
             options = ProcessOptions.model_validate(json.loads(options_json))
         except (json.JSONDecodeError, ValueError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
@@ -169,28 +212,111 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=413, detail="image exceeds 30 MiB")
         if gitee_store is not None:
             await _ensure_remote_adapter(work, options)
-        reference_bytes = None
-        if str(options.mode) == "quality" and settings.comfyui_reference_enabled:
-            reference_url = work.cover_url
-            if reference_url:
-                reference_bytes = await asyncio.to_thread(references.get, reference_url)
-            if reference_bytes is None and settings.metadata_enabled:
-                resolved_metadata = await asyncio.to_thread(metadata.cached, work)
-                if resolved_metadata is None:
-                    # 第三方站点不能阻塞首张图；结果写入缓存后由后续页面使用。
-                    task = metadata_refresh_tasks.get(work.key)
-                    if task is None or task.done():
-                        task = asyncio.create_task(asyncio.to_thread(metadata.resolve, work))
-                        metadata_refresh_tasks[work.key] = task
-                        task.add_done_callback(
-                            lambda completed, key=work.key: metadata_refresh_tasks.pop(
-                                key, None
-                            )
-                        )
-                elif resolved_metadata.selected and resolved_metadata.selected.confidence >= 0.6:
-                    reference_url = resolved_metadata.selected.cover_url
-                    reference_bytes = await asyncio.to_thread(references.get, reference_url)
-        return await processor.process(image_bytes, reference_bytes, work, options)
+        analysis = None
+        character_references: dict[str, bytes] = {}
+        if (
+            str(options.mode) == "quality"
+            and settings.comfyui_reference_enabled
+            and analyzer is not None
+        ):
+            analysis = await asyncio.to_thread(
+                analyses.get,
+                image_bytes,
+                work_key=work.key,
+            )
+            if analysis is not None:
+                for character in analysis.characters:
+                    match = character.match
+                    if (
+                        match.status != "accepted"
+                        or not match.character_id
+                        or not match.reference_url
+                        or match.character_id in character_references
+                    ):
+                        continue
+                    reference = await asyncio.to_thread(
+                        references.get,
+                        match.reference_url,
+                    )
+                    if reference is not None:
+                        character_references[match.character_id] = reference
+        return await processor.process(
+            image_bytes,
+            None,
+            work,
+            options,
+            analysis=analysis,
+            character_references=character_references,
+        )
+
+    @app.post("/v1/pages/analyze", response_model=ChapterAnalysisResult)
+    async def analyze_pages(
+        pages: list[UploadFile] = File(),
+        work_json: str = Form(),
+        _: None = Depends(authorize),
+    ) -> ChapterAnalysisResult:
+        if analyzer is None:
+            raise HTTPException(status_code=409, detail="人物分析服务未启用")
+        if not 1 <= len(pages) <= 8:
+            raise HTTPException(status_code=422, detail="一次只能分析 1 到 8 页")
+        try:
+            work = identities.enrich(
+                WorkIdentity.model_validate(json.loads(work_json))
+            )
+        except (json.JSONDecodeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        page_payloads = []
+        for index, page in enumerate(pages):
+            image_bytes = await page.read()
+            if not image_bytes:
+                raise HTTPException(status_code=422, detail="empty image")
+            page_payloads.append((page.filename or f"page-{index}.img", image_bytes))
+
+        resolved_metadata = await asyncio.to_thread(metadata.resolve, work)
+        character_bank = await _character_bank(resolved_metadata, work)
+        result = await asyncio.to_thread(
+            analyzer.analyze,
+            page_payloads,
+            character_bank,
+        )
+        for page_analysis in result.pages:
+            analyses.put(page_analysis, work_key=work.key)
+        return result
+
+    async def _character_bank(
+        resolution: MetadataResolution,
+        work: WorkIdentity,
+    ):
+        entries: list[tuple[CharacterBankEntry, bytes]] = []
+        seen: set[str] = set()
+        for candidate in prioritized_metadata_candidates(resolution, work):
+            if candidate.confidence < 0.6:
+                continue
+            for character in candidate.characters:
+                key = f"{character.provider}:{character.provider_id}"
+                if key in seen or not character.image_url:
+                    continue
+                image_bytes = await asyncio.to_thread(
+                    references.get,
+                    character.image_url,
+                )
+                if image_bytes is None:
+                    continue
+                entries.append(
+                    (
+                        CharacterBankEntry(
+                            character_id=key,
+                            name=character.name,
+                            image_url=character.image_url,
+                            provider=character.provider,
+                        ),
+                        image_bytes,
+                    )
+                )
+                seen.add(key)
+                if len(entries) >= 16:
+                    return entries
+        return entries
 
     @app.post("/v1/metadata/resolve", response_model=MetadataResolution)
     async def resolve_metadata(
@@ -198,7 +324,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _: None = Depends(authorize),
     ) -> MetadataResolution:
         try:
-            work = WorkIdentity.model_validate(json.loads(work_json))
+            work = identities.enrich(
+                WorkIdentity.model_validate(json.loads(work_json))
+            )
         except (json.JSONDecodeError, ValueError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         return await asyncio.to_thread(metadata.resolve, work)

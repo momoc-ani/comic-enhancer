@@ -28,6 +28,9 @@ class Settings:
     comfyui_reference_url: str = ""
     comfyui_reference_enabled: bool = False
     comfyui_reference_ready_file: Path | None = None
+    analyzer_enabled: bool = False
+    analyzer_url: str = "http://magiv2-analyzer:8770"
+    analyzer_timeout_seconds: int = 300
     comfyui_timeout_seconds: int = 180
     comfyui_poll_interval_seconds: float = 0.25
     comfyui_workflow_fast: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json"
@@ -49,6 +52,7 @@ class Settings:
     metadata_enabled: bool = True
     metadata_ttl_seconds: int = 86400
     metadata_timeout_seconds: int = 8
+    work_identity_index: Path | None = PROJECT_ROOT / "config" / "work-identities.json"
     mangaupdates_api_url: str = ""
     mangaupdates_api_token: str = ""
 
@@ -73,6 +77,7 @@ def load_settings() -> Settings:
         "comfyui_workflow_reference_quality",
         "comfyui_reference_ready_file",
         "comfyui_workflow_root",
+        "work_identity_index",
     ):
         if field_name in values:
             if values[field_name]:
@@ -100,6 +105,7 @@ def load_settings() -> Settings:
         "COMIC_ENHANCER_METADATA_ENABLED": ("metadata_enabled", lambda value: value.lower() in {"1", "true", "yes", "on"}),
         "COMIC_ENHANCER_METADATA_TTL": ("metadata_ttl_seconds", int),
         "COMIC_ENHANCER_METADATA_TIMEOUT": ("metadata_timeout_seconds", int),
+        "COMIC_ENHANCER_WORK_IDENTITY_INDEX": ("work_identity_index", Path),
         "COMIC_ENHANCER_MANGAUPDATES_API_URL": ("mangaupdates_api_url", str),
         "COMIC_ENHANCER_MANGAUPDATES_API_TOKEN": ("mangaupdates_api_token", str),
         "COMIC_ENHANCER_RUNTIME_DIR": ("runtime_dir", Path),
@@ -113,6 +119,12 @@ def load_settings() -> Settings:
             "comfyui_reference_ready_file",
             Path,
         ),
+        "COMIC_ENHANCER_ANALYZER_ENABLED": (
+            "analyzer_enabled",
+            lambda value: value.lower() in {"1", "true", "yes", "on"},
+        ),
+        "COMIC_ENHANCER_ANALYZER_URL": ("analyzer_url", str),
+        "COMIC_ENHANCER_ANALYZER_TIMEOUT": ("analyzer_timeout_seconds", int),
         "COMIC_ENHANCER_COMFYUI_TIMEOUT": ("comfyui_timeout_seconds", int),
         "COMIC_ENHANCER_WORKFLOW_FAST": ("comfyui_workflow_fast", Path),
         "COMIC_ENHANCER_WORKFLOW_QUALITY": ("comfyui_workflow_quality", Path),

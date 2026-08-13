@@ -6,7 +6,8 @@ from PIL import Image
 
 from comic_enhancer.config import Settings
 from comic_enhancer.config import load_settings
-from comic_enhancer.main import create_app
+from comic_enhancer.main import create_app, prioritized_metadata_candidates
+from comic_enhancer.models import MetadataResolution, WorkIdentity, WorkMetadata
 
 
 def png_bytes():
@@ -148,6 +149,7 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
         '"comfyui_workflow_quality":"quality.json",'
         '"comfyui_workflow_reference_quality":"reference.json",'
         '"comfyui_reference_ready_file":"models/ready",'
+        '"work_identity_index":"identities.json",'
         '"comfyui_workflow_root":"workflows"}',
         encoding="utf-8",
     )
@@ -161,4 +163,37 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     assert settings.comfyui_workflow_fast == Path("fast.json")
     assert settings.comfyui_workflow_reference_quality == Path("reference.json")
     assert settings.comfyui_reference_ready_file == Path("models/ready")
+    assert settings.work_identity_index == Path("identities.json")
     assert settings.comfyui_workflow_root == Path("workflows")
+
+
+def test_exact_external_id_metadata_candidate_has_character_priority():
+    work = WorkIdentity(
+        source="copy_manga",
+        source_work_id="heavy-knight",
+        title="被追放的轉生重騎士用遊戲知識開無雙",
+        external_ids={"anilist": "150193"},
+    )
+    resolution = MetadataResolution(
+        work_key=work.key,
+        title=work.title,
+        candidates=[
+            WorkMetadata(
+                provider="bangumi",
+                provider_id="other",
+                title=work.title,
+                confidence=1.0,
+            ),
+            WorkMetadata(
+                provider="anilist",
+                provider_id="150193",
+                title="追放された転生重騎士はゲーム知識で無双する",
+                confidence=0.8,
+            ),
+        ],
+    )
+
+    ordered = prioritized_metadata_candidates(resolution, work)
+
+    assert ordered[0].provider == "anilist"
+    assert ordered[0].provider_id == "150193"

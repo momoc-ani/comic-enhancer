@@ -75,6 +75,7 @@ class ProcessResult(BaseModel):
     adapter_id: str | None
     adapter_applied: bool
     reference_applied: bool = False
+    processed_panels: int = 0
     model_profile: str = ""
     result_url: str
     elapsed_ms: int
@@ -120,3 +121,61 @@ class Capabilities(BaseModel):
     model_profiles: list[str] = Field(default_factory=list)
     prefetch_pages: int
     max_parallel_inference: int
+
+
+class BoundingBox(BaseModel):
+    x1: int = Field(ge=0)
+    y1: int = Field(ge=0)
+    x2: int = Field(gt=0)
+    y2: int = Field(gt=0)
+
+    @property
+    def center(self) -> tuple[int, int]:
+        return ((self.x1 + self.x2) // 2, (self.y1 + self.y2) // 2)
+
+
+class CharacterMatch(BaseModel):
+    character_id: str | None = None
+    character_name: str = ""
+    reference_url: str | None = None
+    status: str = "rejected"
+    confidence: float = Field(default=0, ge=0, le=1)
+    best_distance: float | None = Field(default=None, ge=0)
+    second_distance: float | None = Field(default=None, ge=0)
+    margin: float | None = Field(default=None, ge=0)
+    reason: str = ""
+
+
+class CharacterInstance(BaseModel):
+    instance_id: str
+    cluster_id: str
+    box: BoundingBox
+    panel_index: int | None = Field(default=None, ge=0)
+    match: CharacterMatch = Field(default_factory=CharacterMatch)
+
+
+class PanelRegion(BaseModel):
+    panel_index: int = Field(ge=0)
+    box: BoundingBox
+    character_instance_ids: list[str] = Field(default_factory=list)
+
+
+class PageAnalysis(BaseModel):
+    image_hash: str
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    analyzer_profile: str
+    panels: list[PanelRegion] = Field(default_factory=list)
+    characters: list[CharacterInstance] = Field(default_factory=list)
+
+
+class CharacterBankEntry(BaseModel):
+    character_id: str
+    name: str
+    image_url: str
+    provider: str = ""
+
+
+class ChapterAnalysisResult(BaseModel):
+    analyzer_profile: str
+    pages: list[PageAnalysis] = Field(default_factory=list)

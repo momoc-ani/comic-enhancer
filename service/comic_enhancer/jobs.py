@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from .adapters import AdapterRegistry
 from .backends import InferenceAssets, InferenceBackend
 from .cache import ResultCache
-from .models import ProcessOptions, ProcessResult, WorkIdentity
+from .models import PageAnalysis, ProcessOptions, ProcessResult, WorkIdentity
 
 
 @dataclass
@@ -24,10 +24,14 @@ class ProcessingService:
         reference_bytes: bytes | None,
         work: WorkIdentity,
         options: ProcessOptions,
+        analysis: PageAnalysis | None = None,
+        character_references: dict[str, bytes] | None = None,
     ) -> ProcessResult:
         assets = InferenceAssets(
             image_bytes=image_bytes,
             reference_bytes=reference_bytes,
+            analysis=analysis,
+            character_references=character_references,
         )
         adapter_policy = self.backend.adapter_policy(assets, options)
         resolved = self.registry.resolve(
@@ -64,6 +68,7 @@ class ProcessingService:
                 cached=True,
                 adapter_applied=bool(metadata.get("adapter_applied", False)),
                 reference_applied=bool(metadata.get("reference_applied", False)),
+                processed_panels=int(metadata.get("processed_panels", 0)),
                 model_profile=str(metadata.get("model_profile", "")),
             )
 
@@ -83,6 +88,7 @@ class ProcessingService:
                     {
                         "adapter_applied": outcome.adapter_applied,
                         "reference_applied": outcome.reference_applied,
+                        "processed_panels": outcome.processed_panels,
                         "model_profile": outcome.model_profile,
                     },
                 )
@@ -99,6 +105,7 @@ class ProcessingService:
                 cached=True,
                 adapter_applied=bool(metadata.get("adapter_applied", False)),
                 reference_applied=bool(metadata.get("reference_applied", False)),
+                processed_panels=int(metadata.get("processed_panels", 0)),
                 model_profile=str(metadata.get("model_profile", "")),
             )
 
@@ -112,6 +119,7 @@ class ProcessingService:
             cached=False,
             adapter_applied=outcome.adapter_applied,
             reference_applied=outcome.reference_applied,
+            processed_panels=outcome.processed_panels,
             model_profile=outcome.model_profile,
         )
 
@@ -127,6 +135,7 @@ class ProcessingService:
         cached,
         adapter_applied=False,
         reference_applied=False,
+        processed_panels=0,
         model_profile="",
     ) -> ProcessResult:
         return ProcessResult(
@@ -138,6 +147,7 @@ class ProcessingService:
             adapter_id=resolved.adapter.adapter_id if resolved.adapter else None,
             adapter_applied=adapter_applied,
             reference_applied=reference_applied,
+            processed_panels=processed_panels,
             model_profile=model_profile,
             result_url=f"/v1/results/{output_path.name}",
             elapsed_ms=round((time.perf_counter() - started) * 1000),
