@@ -128,7 +128,6 @@
       this.adapter = adapter;
       this.work = work;
       this.chapter = chapter;
-      this.analysisPromises = new Map();
       this.observer = new IntersectionObserver(
         (observations) => {
           for (const observation of observations) {
@@ -150,33 +149,6 @@
         }
       });
       this.prefetchAroundViewport(images);
-    }
-
-    analyzeWindow(images, pageIndex) {
-      if (settings.mode !== "manganinja") return null;
-      const windowStart = Math.floor(pageIndex / 8) * 8;
-      if (this.analysisPromises.has(windowStart)) {
-        return this.analysisPromises.get(windowStart);
-      }
-      const imageUrls = images
-        .slice(windowStart, windowStart + 8)
-        .map((image) => this.adapter.imageUrl(image))
-        .filter(Boolean);
-      if (imageUrls.length === 0) return null;
-      const promise = chrome.runtime
-        .sendMessage({
-          type: "COMIC_ENHANCER_ANALYZE",
-          payload: { imageUrls, work: this.work },
-        })
-        .then((response) => {
-          if (!response?.ok) throw new Error(response?.error || "人物分析失败");
-        })
-        .catch((error) => {
-          this.analysisPromises.delete(windowStart);
-          console.warn("Comic Enhancer analysis:", error);
-        });
-      this.analysisPromises.set(windowStart, promise);
-      return promise;
     }
 
     prefetchAroundViewport(images) {
@@ -223,7 +195,6 @@
     resetForSettingsChange() {
       settingsVersion += 1;
       pending.length = 0;
-      this.analysisPromises.clear();
       for (const image of this.adapter.findImages()) {
         const entry = entriesByImage.get(image);
         if (!entry) continue;
@@ -266,13 +237,6 @@
       entry.state = "processing";
       markState(task.image, "processing");
       try {
-        if (settings.mode === "manganinja") {
-          const analysis = this.analyzeWindow(
-            this.adapter.findImages(),
-            task.index,
-          );
-          if (analysis) await analysis;
-        }
         if (task.settingsVersion !== settingsVersion) return;
         const response = await chrome.runtime.sendMessage({
           type: "COMIC_ENHANCER_PROCESS",

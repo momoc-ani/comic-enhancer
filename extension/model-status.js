@@ -1,6 +1,5 @@
 const PROFILE_LABELS = Object.freeze({
   "sd15-colorize": "SD1.5 Anime + Lineart",
-  "manganinja-reference": "MangaNinja 角色参考",
   cobra: "Cobra 多参考上色",
   "flux2-klein-4b": "FLUX.2 Klein 4B",
   passthrough: "开发透传后端",
@@ -9,7 +8,6 @@ const PROFILE_LABELS = Object.freeze({
 const MODE_TITLES = Object.freeze({
   fast: "快速档",
   quality: "质量档",
-  manganinja: "MangaNinja 档",
   cobra: "Cobra 档",
   flux2: "最高质量档",
 });
@@ -39,7 +37,6 @@ export function describeModelTier(settings, execution, capabilities = null) {
     const unavailable = Boolean(
       capabilities &&
         ((Array.isArray(advertisedModes) && !advertisedModes.includes(mode)) ||
-          (mode === "manganinja" && capabilities.manganinja_available === false) ||
           (mode === "cobra" && capabilities.cobra_available === false) ||
           (mode === "flux2" && capabilities.flux2_available === false)),
     );
@@ -99,7 +96,7 @@ function normalizeUrl(value) {
 }
 
 function normalizeMode(value) {
-  return ["fast", "quality", "manganinja", "cobra", "flux2"].includes(value)
+  return ["fast", "quality", "cobra", "flux2"].includes(value)
     ? value
     : "fast";
 }

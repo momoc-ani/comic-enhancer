@@ -78,7 +78,7 @@ def test_summary_reports_actual_model_and_fallback_state():
             "client_elapsed_ms": 2100,
             "service_elapsed_ms": 2000,
             "cached": True,
-            "model_profile": "manganinja-reference",
+            "model_profile": "flux2-klein-4b",
             "adapter_source": "work",
             "reference_applied": True,
             "processed_panels": 2,
@@ -95,41 +95,9 @@ def test_summary_reports_actual_model_and_fallback_state():
     assert summary["client_p50_ms"] == 1600
     assert summary["client_p95_ms"] == 2100
     assert summary["minimum_dark_pixel_retention"] == 0.97
-    assert summary["model_profiles"] == ["manganinja-reference", "sd15-colorize"]
+    assert summary["model_profiles"] == ["flux2-klein-4b", "sd15-colorize"]
     assert summary["reference_pages"] == 1
     assert summary["processed_panels"] == 2
-
-
-def test_summary_keeps_failures_and_manganinja_fallback_visible():
-    results = [
-        {
-            "client_elapsed_ms": 100,
-            "service_elapsed_ms": 90,
-            "cached": False,
-            "model_profile": "sd15-colorize",
-            "adapter_source": "none",
-            "reference_applied": False,
-            "processed_panels": 0,
-            "requested_mode": "manganinja",
-            "metrics": {
-                "dark_pixel_retention": 1,
-                "mid_dark_pixel_retention": 1,
-                "white_pixel_retention": 1,
-                "luminance_mae": 1,
-                "saturated_pixel_ratio": 0.02,
-                "active_hue_bins": 4,
-                "dominant_hue_ratio": 0.4,
-            },
-        }
-    ]
-
-    summary = summarize(results, [{"page_index": 1, "reason": "timeout"}])
-
-    assert summary["pages"] == 2
-    assert summary["failed_pages"] == 1
-    assert summary["failure_rate"] == 0.5
-    assert summary["fallback_pages"] == 1
-    assert summary["fallback_rate"] == 1
 
 
 def test_resource_samples_parse_and_report_growth():
@@ -148,7 +116,7 @@ def test_resource_samples_parse_and_report_growth():
 def test_three_page_manifest_can_only_produce_smoke_result():
     admission = evaluate_admission(
         manifest={"admission_eligible": False},
-        mode="manganinja",
+        mode="quality",
         phase="warm",
         summary={"pages": 3},
         resource_summary=None,

@@ -84,7 +84,6 @@ test("retries failed pages with the real lazy-load URL after settings change", a
   const image = new FakeImage();
   const runtimeListeners = [];
   const processUrls = [];
-  let analysisCalls = 0;
   let processAttempt = 0;
   let releaseSlowRequest;
   let markSlowRequestStarted;
@@ -150,10 +149,6 @@ test("retries failed pages with the real lazy-load URL after settings change", a
           }
           return success;
         }
-        if (message.type === "COMIC_ENHANCER_ANALYZE") {
-          analysisCalls += 1;
-          return { ok: true, result: null };
-        }
         return { ok: true };
       },
     },
@@ -211,7 +206,7 @@ test("retries failed pages with the real lazy-load URL after settings change", a
       settings: {
         enabled: true,
         apiBaseUrl: "http://enhancer.example",
-        mode: "manganinja",
+        mode: "flux2",
         prefetchPages: 0,
       },
     },
@@ -221,7 +216,6 @@ test("retries failed pages with the real lazy-load URL after settings change", a
   releaseSlowRequest();
   await new Promise((resolve) => setTimeout(resolve, 10));
 
-  assert.equal(analysisCalls, 1);
   assert.equal(processUrls.length, 4);
   assert.equal(image.parentElement.dataset.state, "completed");
 });

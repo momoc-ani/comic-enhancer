@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class ProcessingMode(StrEnum):
     FAST = "fast"
     QUALITY = "quality"
-    MANGANINJA = "manganinja"
     COBRA = "cobra"
     FLUX2 = "flux2"
 
@@ -123,75 +122,10 @@ class Capabilities(BaseModel):
     adapter_policy: list[str]
     model_profiles: list[str] = Field(default_factory=list)
     processing_modes: list[ProcessingMode] = Field(default_factory=list)
-    manganinja_available: bool = False
     cobra_available: bool = False
     flux2_available: bool = False
     prefetch_pages: int
     max_parallel_inference: int
-
-
-class BoundingBox(BaseModel):
-    x1: int = Field(ge=0)
-    y1: int = Field(ge=0)
-    x2: int = Field(gt=0)
-    y2: int = Field(gt=0)
-
-    @property
-    def center(self) -> tuple[int, int]:
-        return ((self.x1 + self.x2) // 2, (self.y1 + self.y2) // 2)
-
-
-class CharacterMatch(BaseModel):
-    character_id: str | None = None
-    character_name: str = ""
-    reference_url: str | None = None
-    portrait_reference_url: str | None = None
-    full_body_reference_url: str | None = None
-    status: str = "rejected"
-    confidence: float = Field(default=0, ge=0, le=1)
-    best_distance: float | None = Field(default=None, ge=0)
-    second_distance: float | None = Field(default=None, ge=0)
-    margin: float | None = Field(default=None, ge=0)
-    reason: str = ""
-
-
-class CharacterMask(BaseModel):
-    width: int = Field(gt=0)
-    height: int = Field(gt=0)
-    counts: list[int] = Field(min_length=1)
-    score: float = Field(ge=0, le=1)
-
-    @model_validator(mode="after")
-    def validate_counts(self):
-        if any(count < 0 for count in self.counts):
-            raise ValueError("character mask counts must be non-negative")
-        if sum(self.counts) != self.width * self.height:
-            raise ValueError("character mask counts do not match dimensions")
-        return self
-
-
-class CharacterInstance(BaseModel):
-    instance_id: str
-    cluster_id: str
-    box: BoundingBox
-    panel_index: int | None = Field(default=None, ge=0)
-    match: CharacterMatch = Field(default_factory=CharacterMatch)
-    mask: CharacterMask | None = None
-
-
-class PanelRegion(BaseModel):
-    panel_index: int = Field(ge=0)
-    box: BoundingBox
-    character_instance_ids: list[str] = Field(default_factory=list)
-
-
-class PageAnalysis(BaseModel):
-    image_hash: str
-    width: int = Field(gt=0)
-    height: int = Field(gt=0)
-    analyzer_profile: str
-    panels: list[PanelRegion] = Field(default_factory=list)
-    characters: list[CharacterInstance] = Field(default_factory=list)
 
 
 class CharacterBankEntry(BaseModel):
@@ -201,8 +135,3 @@ class CharacterBankEntry(BaseModel):
     provider: str = ""
     portrait_reference_url: str | None = None
     full_body_reference_url: str | None = None
-
-
-class ChapterAnalysisResult(BaseModel):
-    analyzer_profile: str
-    pages: list[PageAnalysis] = Field(default_factory=list)

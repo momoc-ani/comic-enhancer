@@ -80,14 +80,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type === "COMIC_ENHANCER_ANALYZE") {
-    analyzePages(message.payload).then(
-      (result) => sendResponse({ ok: true, result }),
-      (error) => sendResponse({ ok: false, error: normalizeError(error) }),
-    );
-    return true;
-  }
-
   return false;
 });
 
@@ -168,34 +160,6 @@ async function processPage(payload) {
     ...result,
     image_data_url: await responseToDataUrl(imageResponse),
   };
-}
-
-async function analyzePages(payload) {
-  const settings = await getActiveSettings();
-  if (!settings.enabled || settings.mode !== "manganinja") return null;
-  const form = new FormData();
-  for (const [index, imageUrl] of payload.imageUrls.entries()) {
-    const sourceResponse = await fetch(imageUrl, {
-      credentials: "include",
-      cache: "force-cache",
-    });
-    if (!sourceResponse.ok) {
-      throw new Error(`分析原图下载失败：${sourceResponse.status}`);
-    }
-    form.append("pages", await sourceResponse.blob(), `page-${index}.img`);
-  }
-  form.append("work_json", JSON.stringify(payload.work));
-  const apiBaseUrl = settings.apiBaseUrl.replace(/\/$/, "");
-  const response = await fetch(`${apiBaseUrl}/v1/pages/analyze`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${settings.apiToken}` },
-    body: form,
-  });
-  if (response.status === 409) return null;
-  if (!response.ok) {
-    throw new Error(`人物分析失败：${response.status} ${await response.text()}`);
-  }
-  return response.json();
 }
 
 async function responseToDataUrl(response) {

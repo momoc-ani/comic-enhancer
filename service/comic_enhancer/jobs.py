@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from .adapters import AdapterRegistry
 from .backends import InferenceAssets, InferenceBackend
 from .cache import ResultCache
-from .models import PageAnalysis, ProcessOptions, ProcessResult, WorkIdentity
+from .models import ProcessOptions, ProcessResult, WorkIdentity
 
 
 @dataclass
@@ -24,13 +24,11 @@ class ProcessingService:
         reference_bytes: bytes | None,
         work: WorkIdentity,
         options: ProcessOptions,
-        analysis: PageAnalysis | None = None,
         character_references: dict[str, bytes] | None = None,
     ) -> ProcessResult:
         assets = InferenceAssets(
             image_bytes=image_bytes,
             reference_bytes=reference_bytes,
-            analysis=analysis,
             character_references=character_references,
         )
         adapter_policy = self.backend.adapter_policy(assets, options)

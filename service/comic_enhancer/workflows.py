@@ -21,10 +21,6 @@ class LoadedWorkflow:
 
 class WorkflowLoader(ABC):
     @abstractmethod
-    def supports_reference(self) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
     def supports_cobra(self) -> bool:
         raise NotImplementedError
 
@@ -61,29 +57,17 @@ class PresetWorkflowLoader(WorkflowLoader):
         fast_workflow: Path,
         quality_workflow: Path,
         workflow_root: Path,
-        reference_quality_workflow: Path | None = None,
         cobra_workflow: Path | None = None,
         flux2_workflow: Path | None = None,
     ):
         self.fast_workflow = fast_workflow.resolve()
         self.quality_workflow = quality_workflow.resolve()
         self.workflow_root = workflow_root.resolve()
-        self.reference_quality_workflow = (
-            reference_quality_workflow.resolve()
-            if reference_quality_workflow is not None
-            else None
-        )
         self.cobra_workflow = (
             cobra_workflow.resolve() if cobra_workflow is not None else None
         )
         self.flux2_workflow = (
             flux2_workflow.resolve() if flux2_workflow is not None else None
-        )
-
-    def supports_reference(self) -> bool:
-        return bool(
-            self.reference_quality_workflow
-            and self.reference_quality_workflow.is_file()
         )
 
     def supports_cobra(self) -> bool:
@@ -146,18 +130,6 @@ class PresetWorkflowLoader(WorkflowLoader):
         reference_available: bool,
     ) -> tuple[Path, bool, bool, str]:
         mode = str(options.mode)
-        if (
-            mode == "manganinja"
-            and reference_available
-            and self.reference_quality_workflow is not None
-            and self.reference_quality_workflow.is_file()
-        ):
-            return (
-                self.reference_quality_workflow,
-                False,
-                True,
-                "manganinja-reference",
-            )
         if mode == "cobra" and self.cobra_workflow is not None:
             return (
                 self.cobra_workflow,
@@ -173,7 +145,7 @@ class PresetWorkflowLoader(WorkflowLoader):
                 "flux2-klein-4b",
             )
         fallback_mode = (
-            "quality" if mode in {"manganinja", "cobra", "flux2"} else mode
+            "quality" if mode in {"cobra", "flux2"} else mode
         )
         path = self.quality_workflow if fallback_mode == "quality" else self.fast_workflow
         if resolved.adapter is not None:

@@ -12,17 +12,18 @@ import time
 import uuid
 
 import httpx
-from PIL import Image, ImageChops, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageEnhance, ImageOps
 
-from .models import CharacterMask, PageAnalysis, PanelRegion, ProcessOptions, ResolvedAdapter
+from .models import (
+    ProcessingMode,
+    ProcessOptions,
+    ResolvedAdapter,
+)
 from .workflows import WorkflowLoader
 
 
 logger = logging.getLogger(__name__)
-REFERENCE_PROCESSING_REVISION = "quality-base-reference-overlay-v5"
-CHARACTER_ANCHOR_FRACTIONS = (0.18, 0.40, 0.65, 0.82)
-REFERENCE_CHROMA_SCALE = 0.62
-REFERENCE_CHROMA_LIMIT = 64
+FLUX2_PROCESSING_REVISION = "flux2-full-color-ink-overlay-v2"
 
 
 class InferenceBackend(ABC):
@@ -33,9 +34,6 @@ class InferenceBackend(ABC):
 
     def ready(self) -> bool:
         return True
-
-    def reference_profile_ready(self) -> bool:
-        return False
 
     def cobra_profile_ready(self) -> bool:
         return False
@@ -87,24 +85,7 @@ class InferenceOutcome:
 class InferenceAssets:
     image_bytes: bytes
     reference_bytes: bytes | None = None
-    analysis: PageAnalysis | None = None
     character_references: dict[str, bytes] | None = None
-
-    @property
-    def has_panel_references(self) -> bool:
-        if self.analysis is None or not self.character_references:
-            return False
-        accepted = {
-            item.instance_id
-            for item in self.analysis.characters
-            if item.match.status == "accepted"
-            and item.match.character_id in self.character_references
-            and item.mask is not None
-        }
-        return any(
-            accepted.intersection(panel.character_instance_ids)
-            for panel in self.analysis.panels
-        )
 
 
 @dataclass(frozen=True)
@@ -112,6 +93,148 @@ class AdapterPolicy:
     enabled: bool
     compatible_base_models: frozenset[str]
     required_workflow: str | None
+
+
+class ComfyUIModeStrategy(ABC):
+    """Owns one processing mode while reusing transport primitives from the backend."""
+
+    mode: ProcessingMode
+    adapter_workflow: str
+
+    @abstractmethod
+    def available(self, backend: "ComfyUIBackend") -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
+    def cache_revision(
+        self,
+        backend: "ComfyUIBackend",
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+        assets: InferenceAssets | None,
+    ) -> str:
+        raise NotImplementedError
+
+    def adapter_policy(self, backend: "ComfyUIBackend") -> AdapterPolicy:
+        return AdapterPolicy(
+            enabled=True,
+            compatible_base_models=backend.supported_base_models,
+            required_workflow=self.adapter_workflow,
+        )
+
+    @abstractmethod
+    def process(
+        self,
+        backend: "ComfyUIBackend",
+        assets: InferenceAssets,
+        output_path: Path,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> InferenceOutcome:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class PresetModeStrategy(ComfyUIModeStrategy):
+    mode: ProcessingMode
+
+    @property
+    def adapter_workflow(self) -> str:
+        return str(self.mode)
+
+    def available(self, backend: "ComfyUIBackend") -> bool:
+        return backend.ready()
+
+    def cache_revision(
+        self,
+        backend: "ComfyUIBackend",
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+        assets: InferenceAssets | None,
+    ) -> str:
+        return backend._preset_cache_revision(options, resolved)
+
+    def process(
+        self,
+        backend: "ComfyUIBackend",
+        assets: InferenceAssets,
+        output_path: Path,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> InferenceOutcome:
+        return backend._process_preset(assets, output_path, options, resolved)
+
+
+class CobraModeStrategy(ComfyUIModeStrategy):
+    mode = ProcessingMode.COBRA
+    adapter_workflow = "quality"
+
+    def available(self, backend: "ComfyUIBackend") -> bool:
+        return backend._workflow_profile_ready(
+            str(self.mode),
+            enabled=backend.cobra_enabled,
+            workflow_supported=backend.workflow_loader.supports_cobra(),
+        )
+
+    def cache_revision(
+        self,
+        backend: "ComfyUIBackend",
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+        assets: InferenceAssets | None,
+    ) -> str:
+        return backend._reference_model_cache_revision(options, resolved, assets)
+
+    def process(
+        self,
+        backend: "ComfyUIBackend",
+        assets: InferenceAssets,
+        output_path: Path,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> InferenceOutcome:
+        try:
+            return backend._process_cobra(assets, output_path, resolved)
+        except Exception:
+            logger.exception("Cobra 实验档失败，回退到质量工作流")
+            return backend._fallback_to_quality(assets, output_path, options, resolved)
+
+
+class Flux2ModeStrategy(ComfyUIModeStrategy):
+    mode = ProcessingMode.FLUX2
+    adapter_workflow = "quality"
+
+    def available(self, backend: "ComfyUIBackend") -> bool:
+        return backend._workflow_profile_ready(
+            str(self.mode),
+            enabled=backend.flux2_enabled,
+            workflow_supported=backend.workflow_loader.supports_flux2(),
+        )
+
+    def cache_revision(
+        self,
+        backend: "ComfyUIBackend",
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+        assets: InferenceAssets | None,
+    ) -> str:
+        revision = backend._reference_model_cache_revision(options, resolved, assets)
+        return f"{revision}:{FLUX2_PROCESSING_REVISION}"
+
+    def process(
+        self,
+        backend: "ComfyUIBackend",
+        assets: InferenceAssets,
+        output_path: Path,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> InferenceOutcome:
+        try:
+            backend._unload_cobra_worker()
+            return backend._process_flux2(assets, output_path, resolved)
+        except Exception:
+            logger.exception("FLUX.2 最高质量档失败，回退到质量工作流")
+            return backend._fallback_to_quality(assets, output_path, options, resolved)
 
 
 class PassthroughBackend(InferenceBackend):
@@ -129,7 +252,7 @@ class PassthroughBackend(InferenceBackend):
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with Image.open(BytesIO(assets.image_bytes)) as source:
             image = ImageOps.exif_transpose(source).convert("RGB")
-            if options.mode in {"quality", "manganinja"}:
+            if options.mode == "quality":
                 image = ImageEnhance.Contrast(image).enhance(1.04)
                 image = ImageEnhance.Sharpness(image).enhance(1.08)
             image.save(output_path, format="WEBP", quality=92, method=4)
@@ -145,7 +268,6 @@ class ComfyUIBackend(InferenceBackend):
     supported_base_models = frozenset({"sd15-anime"})
     model_profiles = (
         "sd15-colorize",
-        "manganinja-reference",
         "cobra",
         "flux2-klein-4b",
     )
@@ -157,8 +279,6 @@ class ComfyUIBackend(InferenceBackend):
         timeout_seconds: int,
         poll_interval_seconds: float,
         workflow_loader: WorkflowLoader,
-        reference_enabled: bool = False,
-        reference_ready_file: Path | None = None,
         cobra_enabled: bool = False,
         cobra_workflow: Path | None = None,
         cobra_reference_limit: int = 12,
@@ -167,23 +287,23 @@ class ComfyUIBackend(InferenceBackend):
         flux2_reference_limit: int = 3,
     ):
         self.base_url = base_url.rstrip("/")
-        self.reference_enabled = reference_enabled
-        self.reference_ready_file = reference_ready_file
         self.timeout_seconds = timeout_seconds
         self.poll_interval_seconds = poll_interval_seconds
         self.workflow_loader = workflow_loader
-        self._reference_ready_cached_until = 0.0
-        self._reference_ready_cached_value = False
         self.cobra_enabled = cobra_enabled
         self.cobra_workflow = cobra_workflow
         self.cobra_reference_limit = max(1, min(12, cobra_reference_limit))
-        self._cobra_ready_cached_until = 0.0
-        self._cobra_ready_cached_value = False
         self.flux2_enabled = flux2_enabled
         self.flux2_workflow = flux2_workflow
         self.flux2_reference_limit = max(1, min(3, flux2_reference_limit))
-        self._flux2_ready_cached_until = 0.0
-        self._flux2_ready_cached_value = False
+        self._profile_ready_cache: dict[str, tuple[float, bool]] = {}
+        strategies: tuple[ComfyUIModeStrategy, ...] = (
+            PresetModeStrategy(ProcessingMode.FAST),
+            PresetModeStrategy(ProcessingMode.QUALITY),
+            CobraModeStrategy(),
+            Flux2ModeStrategy(),
+        )
+        self._mode_strategies = {strategy.mode: strategy for strategy in strategies}
 
     def ready(self) -> bool:
         try:
@@ -192,39 +312,44 @@ class ComfyUIBackend(InferenceBackend):
         except httpx.HTTPError:
             return False
 
-    def reference_profile_ready(self) -> bool:
-        return bool(
-            self.workflow_loader.supports_reference() and self._reference_ready()
-        )
-
     def cobra_profile_ready(self) -> bool:
-        if not self.cobra_enabled or not self.workflow_loader.supports_cobra():
-            return False
-        now = time.monotonic()
-        if now < self._cobra_ready_cached_until:
-            return self._cobra_ready_cached_value
-        try:
-            response = httpx.get(f"{self.base_url}/system_stats", timeout=2)
-            ready = response.status_code == 200
-        except httpx.HTTPError:
-            ready = False
-        self._cobra_ready_cached_value = ready
-        self._cobra_ready_cached_until = now + (5 if ready else 1)
-        return ready
+        return self.mode_available(ProcessingMode.COBRA)
 
     def flux2_profile_ready(self) -> bool:
-        if not self.flux2_enabled or not self.workflow_loader.supports_flux2():
+        return self.mode_available(ProcessingMode.FLUX2)
+
+    def mode_available(self, mode: ProcessingMode | str) -> bool:
+        return self._strategy(mode).available(self)
+
+    def _strategy(self, mode: ProcessingMode | str) -> ComfyUIModeStrategy:
+        normalized = ProcessingMode(mode)
+        try:
+            return self._mode_strategies[normalized]
+        except KeyError as error:
+            raise ValueError(f"unsupported processing mode: {normalized}") from error
+
+    def _workflow_profile_ready(
+        self,
+        cache_key: str,
+        *,
+        enabled: bool,
+        workflow_supported: bool,
+    ) -> bool:
+        if not enabled or not workflow_supported:
             return False
         now = time.monotonic()
-        if now < self._flux2_ready_cached_until:
-            return self._flux2_ready_cached_value
+        cached_until, cached_value = self._profile_ready_cache.get(
+            cache_key,
+            (0.0, False),
+        )
+        if now < cached_until:
+            return cached_value
         try:
             response = httpx.get(f"{self.base_url}/system_stats", timeout=2)
             ready = response.status_code == 200
         except httpx.HTTPError:
             ready = False
-        self._flux2_ready_cached_value = ready
-        self._flux2_ready_cached_until = now + (5 if ready else 1)
+        self._profile_ready_cache[cache_key] = (now + (5 if ready else 1), ready)
         return ready
 
     def cache_revision(
@@ -233,63 +358,49 @@ class ComfyUIBackend(InferenceBackend):
         resolved: ResolvedAdapter,
         assets: InferenceAssets | None = None,
     ) -> str:
-        if str(options.mode) in {"cobra", "flux2"}:
-            reference_hashes = []
-            if assets is not None:
-                reference_hashes = sorted(
-                    hashlib.sha256(value).hexdigest()
-                    for value in (assets.character_references or {}).values()
-                )
-            workflow_revision = self.workflow_loader.revision(
-                options,
-                resolved,
-                reference_available=False,
-            )
-            return ":".join([workflow_revision, *reference_hashes])
-        reference_available = self._reference_available(options, assets)
-        workflow_revision = self.workflow_loader.revision(
+        return self._strategy(options.mode).cache_revision(
+            self,
             options,
             resolved,
-            reference_available=reference_available,
+            assets,
         )
-        if not reference_available or assets is None or assets.analysis is None:
-            return workflow_revision
-        analysis_hash = hashlib.sha256(
-            assets.analysis.model_dump_json().encode("utf-8")
-        ).hexdigest()
-        reference_hashes = [
-            f"{key}:{hashlib.sha256(value).hexdigest()}"
-            for key, value in sorted((assets.character_references or {}).items())
-        ]
-        base_workflow_revision = self.workflow_loader.revision(
+
+    def _preset_cache_revision(
+        self,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> str:
+        return self.workflow_loader.revision(
             options,
             resolved,
             reference_available=False,
         )
-        return ":".join(
-            [
-                workflow_revision,
-                base_workflow_revision,
-                REFERENCE_PROCESSING_REVISION,
-                analysis_hash,
-                *reference_hashes,
-            ]
+
+    def _reference_model_cache_revision(
+        self,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+        assets: InferenceAssets | None,
+    ) -> str:
+        reference_hashes = []
+        if assets is not None:
+            reference_hashes = sorted(
+                hashlib.sha256(value).hexdigest()
+                for value in (assets.character_references or {}).values()
+            )
+        workflow_revision = self.workflow_loader.revision(
+            options,
+            resolved,
+            reference_available=False,
         )
+        return ":".join([workflow_revision, *reference_hashes])
 
     def adapter_policy(
         self,
         assets: InferenceAssets,
         options: ProcessOptions,
     ) -> AdapterPolicy:
-        return AdapterPolicy(
-            enabled=True,
-            compatible_base_models=self.supported_base_models,
-            required_workflow=(
-                "quality"
-                if str(options.mode) in {"manganinja", "cobra", "flux2"}
-                else str(options.mode)
-            ),
-        )
+        return self._strategy(options.mode).adapter_policy(self)
 
     def process(
         self,
@@ -298,63 +409,36 @@ class ComfyUIBackend(InferenceBackend):
         options: ProcessOptions,
         resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
-        if str(options.mode) == "cobra":
-            try:
-                return self._process_cobra(assets, output_path, resolved)
-            except Exception:
-                logger.exception("Cobra 实验档失败，回退到质量工作流")
-                quality_options = options.model_copy(update={"mode": "quality"})
-                return self.process(assets, output_path, quality_options, resolved)
-        if str(options.mode) == "flux2":
-            try:
-                self._unload_cobra_worker()
-                return self._process_flux2(assets, output_path, resolved)
-            except Exception:
-                logger.exception("FLUX.2 最高质量档失败，回退到质量工作流")
-                quality_options = options.model_copy(update={"mode": "quality"})
-                return self.process(assets, output_path, quality_options, resolved)
-        reference_available = self._reference_available(options, assets)
+        return self._strategy(options.mode).process(
+            self,
+            assets,
+            output_path,
+            options,
+            resolved,
+        )
+
+    def _fallback_to_quality(
+        self,
+        assets: InferenceAssets,
+        output_path: Path,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> InferenceOutcome:
+        quality_options = options.model_copy(update={"mode": ProcessingMode.QUALITY})
+        return self.process(assets, output_path, quality_options, resolved)
+
+    def _process_preset(
+        self,
+        assets: InferenceAssets,
+        output_path: Path,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> InferenceOutcome:
         loaded_workflow = self.workflow_loader.load(
             options,
             resolved,
-            reference_available=reference_available,
+            reference_available=False,
         )
-
-        if loaded_workflow.reference_required and not assets.has_panel_references:
-            raise RuntimeError("reference workflow requires matched panel characters")
-        if loaded_workflow.reference_required:
-            base_workflow = self.workflow_loader.load(
-                options,
-                resolved,
-                reference_available=False,
-            )
-            base_generated = self._run_page_prompt(
-                self.base_url,
-                assets.image_bytes,
-                base_workflow.prompt,
-            )
-            base_image = self._protect_source_structure(
-                assets.image_bytes,
-                base_generated,
-            )
-            try:
-                return self._process_reference_panels(
-                    assets,
-                    output_path,
-                    loaded_workflow.prompt,
-                    loaded_workflow.model_profile,
-                    base_image,
-                    base_workflow.adapter_applied,
-                )
-            except Exception:
-                logger.exception(
-                    "MangaNinja 分格参考工作流失败，回退到主质量工作流"
-                )
-                self._save_output(base_image, output_path)
-                return InferenceOutcome(
-                    adapter_applied=base_workflow.adapter_applied,
-                    model_profile=base_workflow.model_profile,
-                )
         generated = self._run_page_prompt(
             self.base_url,
             assets.image_bytes,
@@ -434,7 +518,7 @@ class ComfyUIBackend(InferenceBackend):
         )
         generated = self._restore_geometry(assets.image_bytes, generated)
         self._save_output(
-            self._protect_source_structure(assets.image_bytes, generated),
+            self._protect_flux2_structure(assets.image_bytes, generated),
             output_path,
         )
         return InferenceOutcome(
@@ -626,6 +710,25 @@ class ComfyUIBackend(InferenceBackend):
         structure_mask = ImageChops.lighter(ink_mask, paper_mask)
         return Image.composite(source, colorized, structure_mask)
 
+    @staticmethod
+    def _protect_flux2_structure(source_bytes: bytes, generated: Image.Image) -> Image.Image:
+        """Restore original ink without replacing FLUX.2's generated colors."""
+        with Image.open(BytesIO(source_bytes)) as source_file:
+            source = ImageOps.exif_transpose(source_file).convert("RGB")
+        generated = generated.convert("RGB").resize(
+            source.size,
+            Image.Resampling.LANCZOS,
+        )
+        source_y, _, _ = source.convert("YCbCr").split()
+        ink_mask = source_y.point(
+            lambda value: (
+                255
+                if value <= 32
+                else max(0, min(192, round((80 - value) * 192 / 48)))
+            )
+        )
+        return Image.composite(source, generated, ink_mask)
+
     def _run_page_prompt(
         self,
         base_url: str,
@@ -658,308 +761,6 @@ class ComfyUIBackend(InferenceBackend):
         temporary = output_path.with_suffix(".tmp.webp")
         image.save(temporary, format="WEBP", quality=93, method=4)
         temporary.replace(output_path)
-
-    def _process_reference_panels(
-        self,
-        assets: InferenceAssets,
-        output_path: Path,
-        workflow_template: dict,
-        model_profile: str,
-        base_image: Image.Image,
-        base_adapter_applied: bool,
-    ) -> InferenceOutcome:
-        if assets.analysis is None or not assets.character_references:
-            raise RuntimeError("panel analysis and character references are required")
-        with Image.open(BytesIO(assets.image_bytes)) as source_file:
-            source = ImageOps.exif_transpose(source_file).convert("RGB")
-        composite = base_image.convert("RGB").resize(
-            source.size,
-            Image.Resampling.LANCZOS,
-        )
-        characters = {item.instance_id: item for item in assets.analysis.characters}
-        processed_panel_indexes: set[int] = set()
-
-        with httpx.Client(
-            base_url=self.base_url,
-            timeout=self.timeout_seconds,
-        ) as client:
-            for panel in assets.analysis.panels:
-                selected = [
-                    characters[instance_id]
-                    for instance_id in panel.character_instance_ids
-                    if instance_id in characters
-                    and characters[instance_id].match.status == "accepted"
-                    and characters[instance_id].match.character_id
-                    in assets.character_references
-                    and characters[instance_id].mask is not None
-                ]
-                selected.sort(
-                    key=lambda item: (
-                        item.match.confidence,
-                        (item.box.x2 - item.box.x1) * (item.box.y2 - item.box.y1),
-                    ),
-                    reverse=True,
-                )
-                selected = selected[:4]
-                if not selected:
-                    continue
-                # A full panel can make a small character too weak for reference-color
-                # transfer. Process one focused character region at a time, then only
-                # composite pixels accepted by that character's SAM mask.
-                for character in reversed(selected):
-                    focus = self._character_focus_region(character, panel)
-                    focus_bytes = self._crop_bytes(source, focus)
-                    target_points = self._target_points([character], focus)
-                    reference_bytes = self._character_reference(
-                        character,
-                        panel,
-                        assets.character_references,
-                    )
-                    reference_board, reference_points = self._reference_board(
-                        [character],
-                        {character.match.character_id: reference_bytes},
-                        anchors_per_character=len(target_points),
-                    )
-                    generated = self._run_reference_prompt(
-                        client,
-                        focus_bytes,
-                        reference_board,
-                        reference_points,
-                        target_points,
-                        workflow_template,
-                    )
-                    restored = self._restore_geometry(focus_bytes, generated)
-                    protected = self._protect_masked_structure(focus_bytes, restored)
-                    character_mask = self._panel_character_mask([character], focus)
-                    composite.paste(
-                        protected,
-                        (focus.box.x1, focus.box.y1, focus.box.x2, focus.box.y2),
-                        character_mask,
-                    )
-                    processed_panel_indexes.add(panel.panel_index)
-
-        if not processed_panel_indexes:
-            raise RuntimeError("no panel has an accepted character reference")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = output_path.with_suffix(".tmp.webp")
-        composite.save(temporary, format="WEBP", quality=93, method=4)
-        temporary.replace(output_path)
-        return InferenceOutcome(
-            adapter_applied=base_adapter_applied,
-            reference_applied=True,
-            processed_panels=len(processed_panel_indexes),
-            model_profile=model_profile,
-        )
-
-    def _run_reference_prompt(
-        self,
-        client: httpx.Client,
-        panel_bytes: bytes,
-        reference_bytes: bytes,
-        reference_points: list[list[int]],
-        target_points: list[list[int]],
-        workflow_template: dict,
-    ) -> Image.Image:
-        workflow = json.loads(json.dumps(workflow_template))
-        comfy_inputs = {
-            "INPUT_IMAGE": self._upload(client, self._pad_square(panel_bytes), "panel"),
-            "REFERENCE_IMAGE": self._upload(
-                client,
-                reference_bytes,
-                "character-board",
-            ),
-        }
-        output_nodes = self._bind_io(
-            workflow,
-            input_images=comfy_inputs,
-            output_prefix=f"comic-enhancer/panel-{uuid.uuid4().hex}",
-        )
-        self._bind_runtime_values(
-            workflow,
-            {
-                "REFERENCE_POINTS": json.dumps(reference_points),
-                "TARGET_POINTS": json.dumps(target_points),
-            },
-        )
-        queued = client.post(
-            "/prompt",
-            json={"prompt": workflow, "client_id": uuid.uuid4().hex},
-        )
-        queued.raise_for_status()
-        image_info = self._wait_for_output(
-            client,
-            queued.json()["prompt_id"],
-            output_nodes,
-        )
-        result = client.get("/view", params=image_info)
-        result.raise_for_status()
-        with Image.open(BytesIO(result.content)) as generated_file:
-            return ImageOps.exif_transpose(generated_file).convert("RGB").copy()
-
-    @staticmethod
-    def _crop_bytes(source: Image.Image, panel: PanelRegion) -> bytes:
-        stream = BytesIO()
-        source.crop(
-            (panel.box.x1, panel.box.y1, panel.box.x2, panel.box.y2)
-        ).save(stream, format="PNG")
-        return stream.getvalue()
-
-    @staticmethod
-    def _character_focus_region(character, panel: PanelRegion) -> PanelRegion:
-        width = character.box.x2 - character.box.x1
-        height = character.box.y2 - character.box.y1
-        padding_x = max(24, round(width * 0.6))
-        padding_y = max(24, round(height * 0.25))
-        return PanelRegion(
-            panel_index=panel.panel_index,
-            box={
-                "x1": max(panel.box.x1, character.box.x1 - padding_x),
-                "y1": max(panel.box.y1, character.box.y1 - padding_y),
-                "x2": min(panel.box.x2, character.box.x2 + padding_x),
-                "y2": min(panel.box.y2, character.box.y2 + padding_y),
-            },
-            character_instance_ids=[character.instance_id],
-        )
-
-    @staticmethod
-    def _character_reference(character, panel, references: dict[str, bytes]) -> bytes:
-        character_id = character.match.character_id
-        width = character.box.x2 - character.box.x1
-        height = character.box.y2 - character.box.y1
-        panel_width = panel.box.x2 - panel.box.x1
-        is_portrait = height / max(1, width) < 1.4 or width / panel_width >= 0.8
-        variant = "portrait" if is_portrait else "full-body"
-        return references.get(f"{character_id}:{variant}") or references[character_id]
-
-    @staticmethod
-    def _reference_board(
-        selected,
-        references: dict[str, bytes],
-        *,
-        anchors_per_character: int = 4,
-    ) -> tuple[bytes, list[list[int]]]:
-        board = Image.new("RGB", (512, 512), "white")
-        slot_width = 512 // len(selected)
-        points: list[list[int]] = []
-        for index, character in enumerate(selected):
-            character_id = character.match.character_id
-            with Image.open(BytesIO(references[character_id])) as reference_file:
-                reference = ImageOps.contain(
-                    ImageOps.exif_transpose(reference_file).convert("RGB"),
-                    (slot_width - 8, 504),
-                    Image.Resampling.LANCZOS,
-                )
-            left = index * slot_width + (slot_width - reference.width) // 2
-            top = (512 - reference.height) // 2
-            board.paste(reference, (left, top))
-            points.extend(
-                ComfyUIBackend._vertical_anchor_points(
-                    center_x=left + reference.width // 2,
-                    top=top,
-                    height=reference.height,
-                    count=anchors_per_character,
-                )
-            )
-        stream = BytesIO()
-        board.save(stream, format="PNG", optimize=True)
-        return stream.getvalue(), points
-
-    @staticmethod
-    def _target_points(selected, panel: PanelRegion) -> list[list[int]]:
-        width = panel.box.x2 - panel.box.x1
-        height = panel.box.y2 - panel.box.y1
-        scale = min(512 / width, 512 / height)
-        rendered_width = round(width * scale)
-        rendered_height = round(height * scale)
-        offset_x = (512 - rendered_width) // 2
-        offset_y = (512 - rendered_height) // 2
-        points: list[list[int]] = []
-        for item in selected:
-            top = round((item.box.y1 - panel.box.y1) * scale) + offset_y
-            bottom = round((item.box.y2 - panel.box.y1) * scale) + offset_y
-            center_x = round((item.box.center[0] - panel.box.x1) * scale) + offset_x
-            anchors = ComfyUIBackend._vertical_anchor_points(
-                center_x=center_x,
-                top=top,
-                height=max(1, bottom - top),
-                count=4,
-            )
-            points.extend(anchors if len(anchors) == 4 else [[(top + bottom) // 2, center_x]])
-        return points
-
-    @staticmethod
-    def _vertical_anchor_points(
-        *,
-        center_x: int,
-        top: int,
-        height: int,
-        count: int,
-    ) -> list[list[int]]:
-        if count == 1:
-            fractions = (0.5,)
-        elif count == 4:
-            fractions = CHARACTER_ANCHOR_FRACTIONS
-        else:
-            raise ValueError("character anchors must contain 1 or 4 points")
-        points = [
-            [
-                max(0, min(511, round(top + height * fraction))),
-                max(0, min(511, center_x)),
-            ]
-            for fraction in fractions
-        ]
-        return points if len({tuple(point) for point in points}) == len(points) else []
-
-    @staticmethod
-    def _bind_runtime_values(workflow: dict, values: dict[str, str]) -> None:
-        discovered: set[str] = set()
-        for node in workflow.values():
-            if not isinstance(node, dict):
-                continue
-            meta = node.get("_meta", {})
-            role = str(meta.get("title", "")).strip().upper()
-            input_name = str(meta.get("runtime_input", "")).strip()
-            if role in values and input_name:
-                node.setdefault("inputs", {})[input_name] = values[role]
-                discovered.add(role)
-        missing = sorted(set(values) - discovered)
-        if missing:
-            raise RuntimeError(
-                "ComfyUI workflow is missing runtime value nodes: "
-                + ", ".join(missing)
-            )
-
-    def _reference_ready(self) -> bool:
-        if not self.reference_enabled:
-            return False
-        if self.reference_ready_file is not None and not self.reference_ready_file.is_file():
-            return False
-        now = time.monotonic()
-        if now < self._reference_ready_cached_until:
-            return self._reference_ready_cached_value
-        try:
-            response = httpx.get(
-                f"{self.base_url}/system_stats",
-                timeout=1,
-            )
-            ready = response.status_code == 200
-        except httpx.HTTPError:
-            ready = False
-        self._reference_ready_cached_value = ready
-        self._reference_ready_cached_until = now + (5 if ready else 1)
-        return ready
-
-    def _reference_available(
-        self,
-        options: ProcessOptions,
-        assets: InferenceAssets | None,
-    ) -> bool:
-        return bool(
-            str(options.mode) == "manganinja"
-            and assets is not None
-            and assets.has_panel_references
-            and self._reference_ready()
-        )
 
     def _upload(self, client: httpx.Client, image_bytes: bytes, role: str) -> str:
         upload_name = f"comic-enhancer-{role}-{uuid.uuid4().hex}.png"
@@ -1124,103 +925,6 @@ class ComfyUIBackend(InferenceBackend):
             )
         )
         return Image.composite(source, colorized, dark_mask)
-
-    @staticmethod
-    def _protect_masked_structure(source_bytes: bytes, generated: Image.Image) -> Image.Image:
-        with Image.open(BytesIO(source_bytes)) as source_file:
-            source = ImageOps.exif_transpose(source_file).convert("RGB")
-        generated = generated.resize(source.size, Image.Resampling.LANCZOS)
-
-        source_y, _, _ = source.convert("YCbCr").split()
-        _, generated_cb, generated_cr = generated.convert("YCbCr").split()
-        generated_cb, generated_cr = ComfyUIBackend._limit_reference_chroma(
-            generated_cb,
-            generated_cr,
-        )
-        neutral = Image.new("L", source.size, 128)
-        chroma = ImageChops.lighter(
-            ImageChops.difference(generated_cb, neutral),
-            ImageChops.difference(generated_cr, neutral),
-        )
-        luminance_drop = chroma.point(lambda value: min(24, round(value * 0.3)))
-        bright_mask = source_y.point(
-            lambda value: max(0, min(255, round((value - 160) * 255 / 80)))
-        )
-        colored_y = ImageChops.subtract(
-            source_y,
-            ImageChops.multiply(luminance_drop, bright_mask),
-        )
-        colorized = Image.merge(
-            "YCbCr",
-            (colored_y, generated_cb, generated_cr),
-        ).convert("RGB")
-        ink_mask = source_y.point(
-            lambda value: (
-                255
-                if value <= 80
-                else max(0, min(255, round((128 - value) * 255 / 48)))
-            )
-        )
-        return Image.composite(source, colorized, ink_mask)
-
-    @staticmethod
-    def _limit_reference_chroma(
-        generated_cb: Image.Image,
-        generated_cr: Image.Image,
-    ) -> tuple[Image.Image, Image.Image]:
-        """Reduce reference color overshoot without flattening ordinary anime colors."""
-        neutral = 128
-
-        def limit(value: int) -> int:
-            delta = value - neutral
-            delta = round(delta * REFERENCE_CHROMA_SCALE)
-            delta = max(-REFERENCE_CHROMA_LIMIT, min(REFERENCE_CHROMA_LIMIT, delta))
-            return neutral + delta
-
-        return (
-            generated_cb.point(limit),
-            generated_cr.point(limit),
-        )
-
-    @staticmethod
-    def _decode_character_mask(mask: CharacterMask) -> Image.Image:
-        pixels = bytearray(mask.width * mask.height)
-        offset = 0
-        value = 0
-        for count in mask.counts:
-            if value:
-                pixels[offset : offset + count] = b"\xff" * count
-            offset += count
-            value = 1 - value
-        return Image.frombytes("L", (mask.width, mask.height), bytes(pixels))
-
-    @staticmethod
-    def _panel_character_mask(selected, panel: PanelRegion) -> Image.Image:
-        width = panel.box.x2 - panel.box.x1
-        height = panel.box.y2 - panel.box.y1
-        panel_mask = Image.new("L", (width, height), 0)
-        for character in selected:
-            if character.mask is None:
-                continue
-            mask = ComfyUIBackend._decode_character_mask(character.mask)
-            box_width = character.box.x2 - character.box.x1
-            box_height = character.box.y2 - character.box.y1
-            if mask.size != (box_width, box_height):
-                continue
-            positioned = Image.new("L", panel_mask.size, 0)
-            positioned.paste(
-                mask,
-                (
-                    character.box.x1 - panel.box.x1,
-                    character.box.y1 - panel.box.y1,
-                ),
-            )
-            panel_mask = ImageChops.lighter(
-                panel_mask,
-                positioned,
-            )
-        feather = min(1.5, min(panel_mask.size) * 0.005)
-        return panel_mask.filter(ImageFilter.GaussianBlur(feather))
 
     @staticmethod
     def _comfy_path(uploaded: dict) -> str:

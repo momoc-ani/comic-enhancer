@@ -28,37 +28,6 @@ def test_structure_protection_restores_black_text_and_source_luminance():
     assert min(white_pixel) >= 245
 
 
-def test_masked_structure_colors_light_regions_and_preserves_black_ink():
-    source = Image.new("RGB", (8, 8), "white")
-    source.putpixel((3, 3), (0, 0, 0))
-    generated = Image.new("RGB", (16, 16), (40, 120, 240))
-
-    result = ComfyUIBackend._protect_masked_structure(
-        image_bytes(source),
-        generated,
-    )
-
-    assert max(result.getpixel((3, 3))) <= 16
-    colored = result.getpixel((0, 0))
-    assert colored[2] > colored[0] + 40
-    assert min(colored) < 220
-
-
-def test_reference_chroma_is_limited_but_anime_color_remains_visible():
-    source = Image.new("RGB", (8, 8), "white")
-    generated = Image.new("RGB", (8, 8), (0, 255, 255))
-
-    result = ComfyUIBackend._protect_masked_structure(
-        image_bytes(source),
-        generated,
-    )
-
-    pixel = result.getpixel((0, 0))
-    assert max(pixel) - min(pixel) < 190
-    assert pixel[1] > pixel[0] + 35
-    assert pixel[2] > pixel[0] + 35
-
-
 def test_cobra_structure_preserves_dark_text_without_flattening_color():
     source = Image.new("RGB", (8, 8), (210, 210, 210))
     for y in range(2, 6):
@@ -116,7 +85,23 @@ def test_cobra_structure_removes_generated_neutral_text_ghosts():
     assert min(result.getpixel((4, 4))) >= 250
 
 
-def test_manganinja_geometry_round_trip_preserves_portrait_ratio():
+def test_flux2_structure_keeps_full_color_and_restores_black_ink():
+    source = Image.new("RGB", (8, 8), "white")
+    source.putpixel((3, 3), (0, 0, 0))
+    generated = Image.new("RGB", (8, 8), (35, 120, 240))
+
+    result = ComfyUIBackend._protect_flux2_structure(
+        image_bytes(source),
+        generated,
+    )
+
+    assert max(result.getpixel((3, 3))) <= 16
+    colored = result.getpixel((0, 0))
+    assert colored[2] >= 235
+    assert colored[2] > colored[0] + 180
+
+
+def test_geometry_round_trip_preserves_portrait_ratio():
     source = Image.new("RGB", (100, 200), "red")
 
     padded_bytes = ComfyUIBackend._pad_square(image_bytes(source))
@@ -131,7 +116,7 @@ def test_manganinja_geometry_round_trip_preserves_portrait_ratio():
     assert restored.getpixel((50, 100))[2] >= 250
 
 
-def test_manganinja_geometry_round_trip_preserves_landscape_ratio():
+def test_geometry_round_trip_preserves_landscape_ratio():
     source = Image.new("RGB", (200, 100), "red")
     generated = Image.new("RGB", (1024, 1024), "blue")
 

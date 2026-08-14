@@ -310,7 +310,7 @@ def main() -> None:
                     )
                 else:
                     geometry_image = raw_image
-                    protected_image = ComfyUIBackend._protect_source_structure(
+                    protected_image = ComfyUIBackend._protect_flux2_structure(
                         source_bytes,
                         geometry_image,
                     )

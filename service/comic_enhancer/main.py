@@ -13,7 +13,6 @@ from fastapi.responses import FileResponse
 
 from . import __version__
 from .adapters import AdapterRegistry
-from .analysis import ChapterAnalyzerClient, PageAnalysisStore
 from .backends import create_backend
 from .cache import ResultCache
 from .config import Settings, load_settings
@@ -32,7 +31,6 @@ from .metadata import (
 from .models import (
     AdapterManifest,
     Capabilities,
-    ChapterAnalysisResult,
     CharacterBankEntry,
     MetadataResolution,
     ProcessingMode,
@@ -40,24 +38,10 @@ from .models import (
     ProcessResult,
     WorkIdentity,
 )
-from .references import (
-    REFERENCE_SELECTION_REVISION,
-    ReferenceImageStore,
-    assess_reference_image,
-    reference_quality_rank,
-)
+from .references import ReferenceImageStore, assess_reference_image, reference_quality_rank
 from .workflows import PresetWorkflowLoader
 
 logger = logging.getLogger(__name__)
-INTERNAL_ANALYZER_URL = "http://magiv2-analyzer:8770"
-
-
-def effective_analyzer_profile(profile: str | None) -> str | None:
-    if profile is None:
-        return None
-    return f"{profile}+{REFERENCE_SELECTION_REVISION}"
-
-
 def prioritized_metadata_candidates(
     resolution: MetadataResolution,
     work: WorkIdentity,
@@ -85,14 +69,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             fast_workflow=settings.comfyui_workflow_fast,
             quality_workflow=settings.comfyui_workflow_quality,
             workflow_root=settings.comfyui_workflow_root,
-            reference_quality_workflow=settings.comfyui_workflow_reference_quality,
             cobra_workflow=settings.comfyui_workflow_cobra,
             flux2_workflow=settings.comfyui_workflow_flux2,
         )
         backend_options = {
             "base_url": settings.comfyui_url,
-            "reference_enabled": settings.comfyui_reference_enabled,
-            "reference_ready_file": settings.comfyui_reference_ready_file,
             "cobra_enabled": settings.comfyui_cobra_enabled,
             "cobra_workflow": settings.comfyui_workflow_cobra,
             "cobra_reference_limit": settings.cobra_reference_limit,
@@ -111,15 +92,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     cache = ResultCache(settings.runtime_dir / "results")
     references = ReferenceImageStore(settings.runtime_dir / "references")
-    analyses = PageAnalysisStore(settings.runtime_dir / "analysis")
-    analyzer = (
-        ChapterAnalyzerClient(
-            INTERNAL_ANALYZER_URL,
-            timeout_seconds=settings.analyzer_timeout_seconds,
-        )
-        if settings.analyzer_enabled
-        else None
-    )
     metadata = MetadataAggregator(
         settings.runtime_dir / "metadata",
         enabled=settings.metadata_enabled,
@@ -172,7 +144,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.processor = processor
     app.state.gitee_store = gitee_store
     app.state.metadata = metadata
-    app.state.analyzer = analyzer
     app.state.identities = identities
     app.state.references = references
     app.add_middleware(
@@ -215,12 +186,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             adapter_policy=["work", "generic", "none"],
             model_profiles=list(backend.model_profiles),
             processing_modes=processing_modes,
-            manganinja_available=bool(
-                settings.comfyui_reference_enabled
-                and analyzer is not None
-                and analyzer.ready()
-                and backend.reference_profile_ready()
-            ),
             cobra_available=cobra_available,
             flux2_available=flux2_available,
             prefetch_pages=settings.prefetch_pages,
@@ -249,52 +214,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=413, detail="image exceeds 30 MiB")
         if gitee_store is not None:
             await _ensure_remote_adapter(work, options)
-        analysis = None
         character_references: dict[str, bytes] = {}
-        if (
-            str(options.mode) == "manganinja"
-            and settings.comfyui_reference_enabled
-            and analyzer is not None
-        ):
-            analyzer_profile = effective_analyzer_profile(
-                await asyncio.to_thread(analyzer.profile)
-            )
-            analysis = await asyncio.to_thread(
-                analyses.get,
-                image_bytes,
-                work_key=work.key,
-                analyzer_profile=analyzer_profile,
-            )
-            if analyzer_profile is None:
-                analysis = None
-            if analysis is not None:
-                for character in analysis.characters:
-                    match = character.match
-                    if (
-                        match.status != "accepted"
-                        or not match.character_id
-                        or not match.reference_url
-                    ):
-                        continue
-                    reference_urls = {
-                        match.character_id: match.reference_url,
-                        f"{match.character_id}:portrait": (
-                            match.portrait_reference_url
-                        ),
-                        f"{match.character_id}:full-body": (
-                            match.full_body_reference_url
-                        ),
-                    }
-                    for reference_key, reference_url in reference_urls.items():
-                        if reference_key in character_references or not reference_url:
-                            continue
-                        reference = await asyncio.to_thread(
-                            references.get,
-                            reference_url,
-                        )
-                        if reference is not None:
-                            character_references[reference_key] = reference
-        elif str(options.mode) in {"cobra", "flux2"}:
+        if str(options.mode) in {"cobra", "flux2"}:
             resolution = await asyncio.to_thread(metadata.resolve, work)
             reference_limit = (
                 settings.cobra_reference_limit
@@ -310,47 +231,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             None,
             work,
             options,
-            analysis=analysis,
             character_references=character_references,
         )
-
-    @app.post("/v1/pages/analyze", response_model=ChapterAnalysisResult)
-    async def analyze_pages(
-        pages: list[UploadFile] = File(),
-        work_json: str = Form(),
-        _: None = Depends(authorize),
-    ) -> ChapterAnalysisResult:
-        if analyzer is None:
-            raise HTTPException(status_code=409, detail="人物分析服务未启用")
-        if not 1 <= len(pages) <= 8:
-            raise HTTPException(status_code=422, detail="一次只能分析 1 到 8 页")
-        try:
-            work = identities.enrich(
-                WorkIdentity.model_validate(json.loads(work_json))
-            )
-        except (json.JSONDecodeError, ValueError) as error:
-            raise HTTPException(status_code=422, detail=str(error)) from error
-        page_payloads = []
-        for index, page in enumerate(pages):
-            image_bytes = await page.read()
-            if not image_bytes:
-                raise HTTPException(status_code=422, detail="empty image")
-            page_payloads.append((page.filename or f"page-{index}.img", image_bytes))
-
-        resolved_metadata = await asyncio.to_thread(metadata.resolve, work)
-        character_bank = await _character_bank(resolved_metadata, work)
-        result = await asyncio.to_thread(
-            analyzer.analyze,
-            page_payloads,
-            character_bank,
-        )
-        result.analyzer_profile = effective_analyzer_profile(
-            result.analyzer_profile
-        ) or result.analyzer_profile
-        for page_analysis in result.pages:
-            page_analysis.analyzer_profile = result.analyzer_profile
-            analyses.put(page_analysis, work_key=work.key)
-        return result
 
     async def _character_bank(
         resolution: MetadataResolution,
@@ -506,7 +388,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def _ensure_remote_adapter(work: WorkIdentity, options: ProcessOptions) -> None:
         required_workflow = (
             "quality"
-            if str(options.mode) in {"manganinja", "cobra"}
+            if str(options.mode) in {"cobra", "flux2"}
             else str(options.mode)
         )
         for _, manifest in registry.candidates(

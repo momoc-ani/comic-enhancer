@@ -169,11 +169,6 @@ def summarize(
         if float(result["metrics"].get("saturated_pixel_ratio", 0)) >= 0.005
     ]
     total_pages = len(results) + len(failures)
-    fallback_pages = sum(
-        str(result["model_profile"]) != "manganinja-reference"
-        for result in results
-        if str(result.get("requested_mode", "")) == "manganinja"
-    )
     return {
         "pages": total_pages,
         "successful_pages": len(results),
@@ -211,8 +206,6 @@ def summarize(
             / max(1, len(results)),
             4,
         ),
-        "fallback_pages": fallback_pages,
-        "fallback_rate": round(fallback_pages / max(1, len(results)), 4),
         "processed_panels": sum(int(result["processed_panels"]) for result in results),
     }
 
@@ -366,7 +359,7 @@ def evaluate_admission(
         ),
         _admission_check("luminance_mae_p95", float(summary["luminance_mae_p95"]), "lte", 8.0),
     ]
-    if mode in {"quality", "manganinja"}:
+    if mode == "quality":
         checks.extend(
             [
                 _admission_check(
@@ -458,36 +451,6 @@ def load_manifest(path: Path) -> tuple[dict[str, object], list[Path]]:
     return payload, pages
 
 
-def analyze_pages(
-    client: httpx.Client,
-    headers: dict[str, str],
-    work: dict[str, object],
-    pages: list[Path],
-) -> tuple[int, dict[str, object] | None]:
-    files = []
-    handles = []
-    try:
-        for page in pages:
-            handle = page.open("rb")
-            handles.append(handle)
-            files.append(("pages", (page.name, handle, "application/octet-stream")))
-        started = time.perf_counter()
-        response = client.post(
-            "/v1/pages/analyze",
-            headers=headers,
-            data={"work_json": json.dumps(work, ensure_ascii=False)},
-            files=files,
-        )
-        elapsed_ms = round((time.perf_counter() - started) * 1000)
-    finally:
-        for handle in handles:
-            handle.close()
-    if response.status_code == 409:
-        return elapsed_ms, None
-    response.raise_for_status()
-    return elapsed_ms, response.json()
-
-
 def process_page(
     client: httpx.Client,
     headers: dict[str, str],
@@ -566,10 +529,9 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument(
         "--mode",
-        choices=("fast", "quality", "manganinja", "cobra"),
+        choices=("fast", "quality", "cobra", "flux2"),
         required=True,
     )
-    parser.add_argument("--analyze", action="store_true")
     parser.add_argument(
         "--phase",
         choices=("cold", "warm", "cache"),
@@ -623,7 +585,6 @@ def main() -> None:
         "palette_version": palette_version,
         "base_url": args.base_url.rstrip("/"),
         "run_id": run_id,
-        "analysis": None,
         "pages": [],
         "failures": [],
         "resource_samples": [],
@@ -640,14 +601,6 @@ def main() -> None:
             capabilities = client.get("/v1/capabilities", headers=headers)
             capabilities.raise_for_status()
             report["capabilities"] = capabilities.json()
-            if args.analyze:
-                analysis_elapsed_ms, analysis = analyze_pages(client, headers, work, pages)
-                report["analysis"] = {
-                    "elapsed_ms": analysis_elapsed_ms,
-                    "available": analysis is not None,
-                    "profile": analysis.get("analyzer_profile") if analysis else None,
-                    "pages": len(analysis.get("pages", [])) if analysis else 0,
-                }
             for page_index, page in enumerate(pages):
                 if monitor:
                     monitor.set_page_index(page_index)

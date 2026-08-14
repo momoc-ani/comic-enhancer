@@ -2,8 +2,6 @@ FROM xm-register.tencentcloudcr.com/ai/comfyui:20260720-RC2
 
 ARG COBRA_REF=2b5d19c204545fd065b6c3864a93d9142dff88c8
 ARG COBRA_ARCHIVE_SHA256=fe39b17e64475b0a9fec0d545d51ef20fcf8a256f712d3a2d8720d5fb5ad7f2f
-ARG MANGANINJA_NODE_REF=ab10b8a4e4628d3d778edf115a2ae8fbbe5817d4
-ARG MANGANINJA_NODE_SHA256=6580f7f4f10ea923df4436cc5426d962b1d18da4f84a981214f1697c91561291
 ARG GITHUB_MIRROR=https://ghfast.top/https://github.com
 ARG PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple
 
@@ -29,17 +27,7 @@ RUN apt-get update \
     && echo "${COBRA_ARCHIVE_SHA256}  /tmp/cobra.tar.gz" | sha256sum --check - \
     && mkdir -p /opt/cobra \
     && tar -xzf /tmp/cobra.tar.gz --strip-components=1 -C /opt/cobra \
-    && rm /tmp/cobra.tar.gz \
-    && curl -fL --retry 5 --retry-all-errors \
-        "${GITHUB_MIRROR}/smthemex/ComfyUI_MangaNinjia/archive/${MANGANINJA_NODE_REF}.tar.gz" \
-        -o /tmp/manganinja-node.tar.gz \
-    && echo "${MANGANINJA_NODE_SHA256}  /tmp/manganinja-node.tar.gz" \
-        | sha256sum --check - \
-    && mkdir -p /root/sd/ComfyUI/custom_nodes/ComfyUI_MangaNinjia \
-    && tar -xzf /tmp/manganinja-node.tar.gz \
-        --strip-components=1 \
-        -C /root/sd/ComfyUI/custom_nodes/ComfyUI_MangaNinjia \
-    && rm /tmp/manganinja-node.tar.gz
+    && rm /tmp/cobra.tar.gz
 
 COPY cobra_service/upstream-local-models.patch /tmp/upstream-local-models.patch
 RUN cd /opt/cobra \
@@ -76,8 +64,6 @@ RUN cd /opt/cobra \
         tqdm==4.67.1 \
         transformers==4.48.3
 
-COPY comfyui_nodes/manganinja_api_points \
-    /root/sd/ComfyUI/custom_nodes/manganinja_api_points
 COPY comfyui_nodes/cobra_colorize \
     /root/sd/ComfyUI/custom_nodes/cobra_colorize
 

@@ -58,51 +58,6 @@ test("does not claim an adapter when the selected adapter was not applied", () =
   assert.equal(describeModelTier(settings, execution).title, "质量档 · 基础模型");
 });
 
-test("shows MangaNinja reference panels", () => {
-  const manganinjaSettings = {
-    ...settings,
-    profile: "remote-manganinja",
-    mode: "manganinja",
-  };
-  const execution = buildModelExecution(
-    {
-      model_profile: "manganinja-reference",
-      reference_applied: true,
-      processed_panels: 2,
-      elapsed_ms: 8120,
-    },
-    manganinjaSettings,
-  );
-
-  const view = describeModelTier(manganinjaSettings, execution);
-  assert.equal(view.title, "MangaNinja 档 · 角色参考");
-  assert.match(view.detail, /2 格参考上色/);
-});
-
-test("shows MangaNinja fallback and unavailable service state", () => {
-  const manganinjaSettings = {
-    ...settings,
-    profile: "remote-manganinja",
-    mode: "manganinja",
-  };
-  const fallback = buildModelExecution(
-    { model_profile: "sd15-colorize", reference_applied: false },
-    manganinjaSettings,
-  );
-
-  assert.equal(
-    describeModelTier(manganinjaSettings, fallback).title,
-    "MangaNinja 档 · 基础模型",
-  );
-  assert.match(
-    describeModelTier(manganinjaSettings, null, {
-      ready: true,
-      manganinja_available: false,
-    }).detail,
-    /未启用 MangaNinja/,
-  );
-});
-
 test("ignores execution state from another endpoint or mode", () => {
   const execution = buildModelExecution(
     { model_profile: "sd15-colorize" },
