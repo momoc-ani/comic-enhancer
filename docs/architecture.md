@@ -49,7 +49,7 @@ MangaNinja 档先通过 8190 的作品 LoRA、通用 LoRA 或基础质量工作�
   -> SD1.5 动漫 checkpoint
   -> 可选 LoRA（由对应完整工作流定义节点、权重和强度）
   -> Lineart ControlNet 约束线稿结构
-  -> 低降噪图生图 10 或 16 步
+  -> 低降噪图生图 10 或 20 步
   -> Real-ESRGAN Anime 6B 4x
   -> 回缩至约 2x 并轻量锐化
   -> 以 Color 混合模式回注原图明度，并用原图深色像素蒙版覆盖文字、抗锯齿边缘、网点和墨线
