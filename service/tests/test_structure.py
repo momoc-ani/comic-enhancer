@@ -107,3 +107,31 @@ def test_geometry_round_trip_preserves_landscape_ratio():
     restored = ComfyUIBackend._restore_geometry(image_bytes(source), generated)
 
     assert restored.size == source.size
+
+
+def test_restore_geometry_uses_generated_height_for_portrait_crop():
+    source = Image.new("RGB", (100, 200), "white")
+    generated = Image.new("RGB", (140, 200), "white")
+    for x in range(generated.width):
+        for y in range(generated.height):
+            generated.putpixel((x, y), (x, 0, 0))
+
+    restored = ComfyUIBackend._restore_geometry(image_bytes(source), generated)
+
+    assert restored.size == source.size
+    assert restored.getpixel((0, 100))[0] < 25
+    assert restored.getpixel((99, 100))[0] > 115
+
+
+def test_restore_geometry_uses_generated_width_for_landscape_crop():
+    source = Image.new("RGB", (200, 100), "white")
+    generated = Image.new("RGB", (200, 140), "white")
+    for y in range(generated.height):
+        for x in range(generated.width):
+            generated.putpixel((x, y), (0, y, 0))
+
+    restored = ComfyUIBackend._restore_geometry(image_bytes(source), generated)
+
+    assert restored.size == source.size
+    assert restored.getpixel((100, 0))[1] < 25
+    assert restored.getpixel((100, 99))[1] > 115

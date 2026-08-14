@@ -23,7 +23,7 @@ from .workflows import WorkflowLoader
 
 
 logger = logging.getLogger(__name__)
-FLUX2_PROCESSING_REVISION = "flux2-comfyui-raw-output-v7"
+FLUX2_PROCESSING_REVISION = "flux2-comfyui-raw-output-v8"
 
 
 class InferenceBackend(ABC):
@@ -847,12 +847,20 @@ class ComfyUIBackend(InferenceBackend):
             source = ImageOps.exif_transpose(source_file)
             source_size = source.size
         source_width, source_height = source_size
-        if source_width < source_height:
-            content_width = max(1, round(generated.width * source_width / source_height))
+        source_ratio = source_width / source_height
+        generated_ratio = generated.width / generated.height
+        if generated_ratio > source_ratio:
+            content_width = min(
+                generated.width,
+                max(1, round(generated.height * source_ratio)),
+            )
             left = (generated.width - content_width) // 2
             generated = generated.crop((left, 0, left + content_width, generated.height))
-        elif source_height < source_width:
-            content_height = max(1, round(generated.height * source_height / source_width))
+        elif generated_ratio < source_ratio:
+            content_height = min(
+                generated.height,
+                max(1, round(generated.width / source_ratio)),
+            )
             top = (generated.height - content_height) // 2
             generated = generated.crop((0, top, generated.width, top + content_height))
         return generated.resize(source_size, Image.Resampling.LANCZOS)
