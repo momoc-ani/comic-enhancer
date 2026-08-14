@@ -28,6 +28,7 @@ class WorkIdentity(BaseModel):
     cover_url: str | None = None
     external_ids: dict[str, str] = Field(default_factory=dict)
 
+    # 方法说明：生成当前模型或缓存对象的稳定键。
     @property
     def key(self) -> str:
         return f"{self.source}:{self.source_work_id}"

@@ -8,6 +8,7 @@ import {
   prefetchPagesForMode,
 } from "./settings.js";
 
+// 方法说明：验证旧版远端配置迁移时不会丢失 Token。
 test("migrates a legacy remote profile without losing its token", () => {
   const settings = migrateSettings({
     profile: "remote-quality",
@@ -23,6 +24,7 @@ test("migrates a legacy remote profile without losing its token", () => {
   assert.equal(settings.apiToken, "remote-token");
 });
 
+// 方法说明：验证本地和远端服务配置会分别保存。
 test("keeps separate local and remote service configurations", () => {
   const stored = migrateSettings({
     deployment: "remote",
@@ -46,6 +48,7 @@ test("keeps separate local and remote service configurations", () => {
   );
 });
 
+// 方法说明：验证实验档位使用保守的页面预取数量。
 test("accepts experimental modes with conservative prefetch", () => {
   assert.equal(normalizeMode("cobra"), "cobra");
   assert.equal(normalizeMode("flux2"), "flux2");

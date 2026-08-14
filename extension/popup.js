@@ -50,6 +50,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 load();
 
+// 方法说明：加载设置、执行记录并初始化弹窗界面。
 async function load() {
   const raw = await chrome.storage.local.get(null);
   storedSettings = migrateSettings(raw);
@@ -72,6 +73,7 @@ async function load() {
   await checkService(resolveSettings(storedSettings));
 }
 
+// 方法说明：保存当前部署页签中的表单草稿。
 function snapshotActiveForm() {
   drafts[activeDeployment] = {
     apiBaseUrl: normalizeUrl(elements.apiBaseUrl.value),
@@ -80,6 +82,7 @@ function snapshotActiveForm() {
   };
 }
 
+// 方法说明：用当前部署草稿填充弹窗表单。
 function populateActiveForm() {
   const draft = drafts[activeDeployment];
   elements.mode.value = draft.mode;
@@ -97,6 +100,7 @@ function populateActiveForm() {
   renderSelection();
 }
 
+// 方法说明：切换本地或远端部署配置。
 async function switchDeployment(deployment) {
   if (!["remote", "local"].includes(deployment) || deployment === activeDeployment) {
     return;
@@ -107,6 +111,7 @@ async function switchDeployment(deployment) {
   await checkService(resolveSettings(storedSettings));
 }
 
+// 方法说明：根据当前选择刷新档位和模型状态。
 function renderSelection() {
   const settings = resolveSettings(storedSettings);
   const capabilities = cachedCapabilities(settings);
@@ -114,6 +119,7 @@ function renderSelection() {
   renderModelTier(settings, capabilities);
 }
 
+// 方法说明：渲染当前模型档位及最近执行详情。
 function renderModelTier(settings, capabilities = cachedCapabilities(settings)) {
   const view = describeModelTier(settings, lastModelExecution, capabilities);
   elements.modelTier.textContent = view.title;
@@ -121,6 +127,7 @@ function renderModelTier(settings, capabilities = cachedCapabilities(settings)) 
   elements.modelTier.dataset.state = view.state;
 }
 
+// 方法说明：按服务能力更新可选处理档位。
 function applyModeAvailability(capabilities) {
   if (Array.isArray(capabilities?.mode_options)) {
     const dynamicOptions = capabilities.mode_options
@@ -152,12 +159,14 @@ function applyModeAvailability(capabilities) {
   }
 }
 
+// 方法说明：将已修改的连接配置标记为待检查。
 function markConnectionDirty() {
   snapshotActiveForm();
   renderSelection();
   setStatus("配置已修改", "checking");
 }
 
+// 方法说明：校验、保存设置并通知已打开的漫画页。
 async function save() {
   elements.save.disabled = true;
   setStatus("正在连接服务", "checking");
@@ -194,6 +203,7 @@ async function save() {
   }
 }
 
+// 方法说明：合并表单草稿并生成当前生效设置。
 function resolveSettings(current = DEFAULT_SETTINGS) {
   snapshotActiveForm();
   const merged = {
@@ -209,6 +219,7 @@ function resolveSettings(current = DEFAULT_SETTINGS) {
   return activateDeployment(merged, activeDeployment);
 }
 
+// 方法说明：检查增强服务连接和档位可用性。
 async function checkService(settings, { strict = false } = {}) {
   if (!settings.apiToken) {
     setStatus("等待填写 API Token", "failed");
@@ -249,22 +260,27 @@ async function checkService(settings, { strict = false } = {}) {
   }
 }
 
+// 方法说明：读取当前服务对应的能力缓存。
 function cachedCapabilities(settings) {
   return capabilityCache.get(capabilityKey(settings)) || null;
 }
 
+// 方法说明：生成服务能力缓存的稳定键。
 function capabilityKey(settings) {
   return `${normalizeUrl(settings.apiBaseUrl)}\n${settings.apiToken || ""}`;
 }
 
+// 方法说明：判断服务是否支持指定处理档位。
 function modeAvailable(capabilities, mode) {
   return (capabilities.processing_modes || []).includes(normalizeMode(mode));
 }
 
+// 方法说明：返回处理档位的界面名称。
 function modeLabel(mode) {
   return activeModeOptions.find((option) => option.value === normalizeMode(mode))?.label || mode;
 }
 
+// 方法说明：更新弹窗中的连接状态。
 function setStatus(message, state) {
   elements.status.textContent = message;
   elements.status.dataset.state = state;

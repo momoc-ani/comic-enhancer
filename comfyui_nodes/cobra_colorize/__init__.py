@@ -23,17 +23,20 @@ _COBRA_PROCESS: subprocess.Popen | None = None
 _COBRA_EXECUTION_LOCK = threading.Lock()
 
 
+# 方法说明：将 ComfyUI 图像张量转换为 Pillow 图像。
 def _tensor_to_image(value: torch.Tensor) -> Image.Image:
     array = value[0].detach().cpu().numpy()
     array = (array.clip(0, 1) * 255).round().astype(np.uint8)
     return Image.fromarray(array, "RGB")
 
 
+# 方法说明：将 Pillow 图像转换为 ComfyUI 图像张量。
 def _image_to_tensor(value: Image.Image) -> torch.Tensor:
     array = np.asarray(value.convert("RGB"), dtype=np.float32) / 255.0
     return torch.from_numpy(array)[None, ...]
 
 
+# 方法说明：向 Cobra 工作进程发送请求并读取响应。
 def _request_worker(payload: dict, timeout_seconds: float) -> dict:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.settimeout(timeout_seconds)
@@ -53,6 +56,7 @@ def _request_worker(payload: dict, timeout_seconds: float) -> dict:
     return result
 
 
+# 方法说明：检查 Cobra 工作进程是否可以响应请求。
 def _worker_ready() -> bool:
     try:
         _request_worker({"action": "ping"}, 1)
@@ -61,6 +65,7 @@ def _worker_ready() -> bool:
         return False
 
 
+# 方法说明：确保 Cobra 工作进程已经启动并可用。
 def _ensure_worker() -> None:
     global _COBRA_PROCESS
     if _worker_ready():
@@ -92,6 +97,7 @@ def _ensure_worker() -> None:
     raise RuntimeError("Cobra worker startup timed out")
 
 
+# 方法说明：关闭 Cobra 工作进程并清理套接字。
 def _shutdown_worker() -> bool:
     global _COBRA_PROCESS
     with _COBRA_EXECUTION_LOCK:
@@ -109,12 +115,14 @@ def _shutdown_worker() -> bool:
         return True
 
 
+# 方法说明：处理卸载 Cobra 工作进程的管理请求。
 @PromptServer.instance.routes.post("/comic-enhancer/cobra/unload")
 async def unload_cobra_worker(_request):
     return web.json_response({"released": _shutdown_worker()})
 
 
 class CobraColorize:
+    # 方法说明：声明 ComfyUI 节点接受的输入类型。
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -148,6 +156,7 @@ class CobraColorize:
     FUNCTION = "colorize"
     CATEGORY = "Comic Enhancer/Cobra"
 
+    # 方法说明：使用 Cobra 模型为输入图像上色。
     def colorize(
         self,
         image: torch.Tensor,

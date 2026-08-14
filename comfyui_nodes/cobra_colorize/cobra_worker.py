@@ -12,6 +12,7 @@ import types
 from PIL import Image, ImageOps
 
 
+# 方法说明：加载并初始化 Cobra 推理应用。
 def load_cobra_app():
     source = Path("/opt/cobra/app.py")
     if not source.is_file():
@@ -26,6 +27,7 @@ def load_cobra_app():
     return module
 
 
+# 方法说明：使用 Cobra 模型为输入图像上色。
 def colorize(cobra, request: dict) -> None:
     image_path = Path(request["image"])
     output_path = Path(request["output"])
@@ -61,10 +63,12 @@ def colorize(cobra, request: dict) -> None:
     ImageOps.exif_transpose(gallery[0]).convert("RGB").save(output_path, "PNG")
 
 
+# 方法说明：向客户端发送带长度前缀的 JSON 响应。
 def send_response(connection: socket.socket, payload: dict) -> None:
     connection.sendall(json.dumps(payload).encode("utf-8") + b"\n")
 
 
+# 方法说明：监听本地套接字并处理 Cobra 推理请求。
 def serve(socket_path: Path) -> None:
     cobra = load_cobra_app()
     socket_path.unlink(missing_ok=True)
@@ -96,6 +100,7 @@ def serve(socket_path: Path) -> None:
                     send_response(connection, {"ok": False, "error": traceback.format_exc()})
 
 
+# 方法说明：解析命令行参数并执行程序主流程。
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--socket", type=Path, required=True)

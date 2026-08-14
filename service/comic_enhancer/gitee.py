@@ -24,6 +24,7 @@ class GiteeAdapterStore:
     new versioned release asset and updates the small JSON index atomically.
     """
 
+    # 方法说明：初始化当前对象及其运行状态。
     def __init__(
         self,
         *,
@@ -49,10 +50,12 @@ class GiteeAdapterStore:
         self.timeout = httpx.Timeout(timeout_seconds, connect=10)
         self.transport = transport
 
+    # 方法说明：返回 Gitee 仓库的 API 路径。
     @property
     def repo_path(self) -> str:
         return f"/repos/{self.owner}/{self.repo}"
 
+    # 方法说明：创建配置好认证和超时的 HTTP 客户端。
     def _client(self) -> httpx.Client:
         return httpx.Client(
             base_url=self.api_url,
@@ -61,9 +64,11 @@ class GiteeAdapterStore:
             headers={"Accept": "application/json", "User-Agent": "comic-enhancer"},
         )
 
+    # 方法说明：合并 Gitee 请求所需的访问参数。
     def _params(self, **extra: str) -> dict[str, str]:
         return {"access_token": self.token, **extra}
 
+    # 方法说明：从 Gitee 读取适配器索引及文件摘要。
     def fetch_index(self) -> tuple[dict[str, Any], str | None]:
         with self._client() as client:
             response = client.get(
@@ -80,11 +85,13 @@ class GiteeAdapterStore:
         except (KeyError, ValueError, UnicodeDecodeError) as error:
             raise GiteeError("Gitee 远端索引不是有效 JSON") from error
 
+    # 方法说明：同步远端适配器索引到本地。
     def sync_index(self, local_index: Path) -> dict[str, Any]:
         index, _ = self.fetch_index()
         self._atomic_write_json(local_index, index)
         return index
 
+    # 方法说明：下载并安装指定的远端适配器。
     def download_adapter(self, manifest: AdapterManifest, weights_root: Path) -> Path:
         if not manifest.file or not manifest.file.endswith(".safetensors"):
             raise GiteeError("只允许下载 .safetensors LoRA")
@@ -126,6 +133,7 @@ class GiteeAdapterStore:
         temporary.replace(target)
         return target
 
+    # 方法说明：发布指定适配器并更新索引。
     def publish_adapter(
         self,
         *,
@@ -153,6 +161,7 @@ class GiteeAdapterStore:
         self._update_index(published, commit_message)
         return published
 
+    # 方法说明：获取或创建用于托管适配器的发行版。
     def _get_or_create_release(self, body: str) -> dict[str, Any]:
         with self._client() as client:
             response = client.get(
@@ -176,6 +185,7 @@ class GiteeAdapterStore:
             self._raise(response)
             return response.json()
 
+    # 方法说明：上传适配器文件到指定发行版。
     def _upload_release_asset(self, release_id: int, source: Path, file_name: str) -> dict[str, Any]:
         with self._client() as client, source.open("rb") as stream:
             response = client.post(
@@ -191,6 +201,7 @@ class GiteeAdapterStore:
             return payload[-1]
         return payload
 
+    # 方法说明：将适配器清单写回远端索引。
     def _update_index(self, manifest: AdapterManifest, message: str) -> None:
         index, sha = self.fetch_index()
         works = index.setdefault("works", {})
@@ -218,6 +229,7 @@ class GiteeAdapterStore:
             )
             self._raise(response)
 
+    # 方法说明：原子写入格式化的 JSON 文件。
     @staticmethod
     def _atomic_write_json(path: Path, value: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -227,6 +239,7 @@ class GiteeAdapterStore:
         )
         temporary.replace(path)
 
+    # 方法说明：计算文件的 SHA-256 摘要。
     @staticmethod
     def _sha256(path: Path) -> str:
         digest = hashlib.sha256()
@@ -235,12 +248,14 @@ class GiteeAdapterStore:
                 digest.update(chunk)
         return digest.hexdigest()
 
+    # 方法说明：将失败的 Gitee 响应转换为明确异常。
     @staticmethod
     def _raise(response: httpx.Response) -> None:
         if response.is_error:
             detail = response.text[:500]
             raise GiteeError(f"Gitee API {response.status_code}: {detail}")
 
+    # 方法说明：校验下载地址是否属于受信任的 Gitee 域名。
     @staticmethod
     def _validate_download_url(download_url: str) -> None:
         parsed = urlsplit(download_url)

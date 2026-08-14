@@ -19,12 +19,14 @@ from comic_enhancer.models import (
 )
 
 
+# 方法说明：生成测试使用的 PNG 图片字节。
 def png_bytes():
     stream = BytesIO()
     Image.new("RGB", (32, 48), "white").save(stream, format="PNG")
     return stream.getvalue()
 
 
+# 方法说明：验证页面处理会使用通用适配器并复用缓存。
 def test_process_uses_generic_adapter_and_cache(tmp_path):
     (tmp_path / "generic.safetensors").write_bytes(b"generic")
     adapter_index = tmp_path / "index.json"
@@ -84,6 +86,7 @@ def test_process_uses_generic_adapter_and_cache(tmp_path):
     assert image.headers["content-type"] == "image/webp"
 
 
+# 方法说明：验证能力接口要求有效鉴权。
 def test_capabilities_require_auth(tmp_path):
     settings = Settings(
         api_token="test-token",
@@ -95,12 +98,14 @@ def test_capabilities_require_auth(tmp_path):
     assert client.get("/v1/capabilities").status_code == 401
 
 
+# 方法说明：验证 FLUX.2 是合法的处理档位。
 def test_flux2_mode_is_valid():
     options = ProcessOptions(mode="flux2")
 
     assert options.mode == ProcessingMode.FLUX2
 
 
+# 方法说明：验证 Cobra 仅在候选工作流就绪时对外声明。
 def test_capabilities_advertise_cobra_only_when_candidate_is_ready(tmp_path, monkeypatch):
     cobra_workflow = tmp_path / "cobra.json"
     cobra_workflow.write_text("{}", encoding="utf-8")
@@ -128,6 +133,7 @@ def test_capabilities_advertise_cobra_only_when_candidate_is_ready(tmp_path, mon
     assert payload["cobra_available"] is True
 
 
+# 方法说明：验证 FLUX.2 仅在候选工作流就绪时对外声明。
 def test_capabilities_advertise_flux2_only_when_candidate_is_ready(tmp_path, monkeypatch):
     flux2_workflow = tmp_path / "flux2.json"
     flux2_workflow.write_text("{}", encoding="utf-8")
@@ -155,6 +161,7 @@ def test_capabilities_advertise_flux2_only_when_candidate_is_ready(tmp_path, mon
     assert payload["flux2_available"] is True
 
 
+# 方法说明：验证元数据解析需要鉴权并返回缓存结构。
 def test_metadata_resolve_requires_auth_and_returns_cached_shape(tmp_path):
     settings = Settings(
         api_token="test-token",
@@ -176,6 +183,7 @@ def test_metadata_resolve_requires_auth_and_returns_cached_shape(tmp_path):
     assert response.json()["selected"] is None
 
 
+# 方法说明：验证后端版本变化会生成不同缓存键。
 def test_cache_key_changes_with_backend_revision(tmp_path):
     settings = Settings(
         api_token="test-token",
@@ -208,6 +216,7 @@ def test_cache_key_changes_with_backend_revision(tmp_path):
     assert second.json()["cached"] is False
 
 
+# 方法说明：验证 JSON 配置中的路径字段会转换为路径对象。
 def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     config = tmp_path / "settings.json"
     config.write_text(
@@ -237,6 +246,7 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     assert settings.comfyui_workflow_root == Path("workflows")
 
 
+# 方法说明：验证外部 ID 精确匹配的元数据具有角色优先级。
 def test_exact_external_id_metadata_candidate_has_character_priority():
     work = WorkIdentity(
         source="copy_manga",

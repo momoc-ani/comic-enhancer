@@ -13,6 +13,7 @@ import urllib.request
 from urllib.parse import urljoin
 
 
+# 方法说明：并行分段下载文件并校验最终结果。
 def download(
     url: str,
     target: Path,
@@ -38,6 +39,7 @@ def download(
         for start in range(0, size, chunk_size)
     ]
 
+    # 方法说明：下载并写入一个指定的文件分段。
     def fetch(item: tuple[int, int, int]) -> None:
         index, start, end = item
         path = parts / f"{index:06d}.part"
@@ -118,6 +120,7 @@ def download(
     print(f"完成: {target} ({size} bytes)")
 
 
+# 方法说明：解析命令行参数并执行程序主流程。
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("url")

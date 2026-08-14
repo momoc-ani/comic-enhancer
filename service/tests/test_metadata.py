@@ -6,6 +6,7 @@ from comic_enhancer.metadata import AniListProvider, BangumiProvider, KitsuProvi
 from comic_enhancer.models import WorkIdentity
 
 
+# 方法说明：创建测试使用的作品身份数据。
 def work(**values):
     defaults = {
         "source": "copy_manga",
@@ -17,6 +18,7 @@ def work(**values):
     return WorkIdentity(**defaults)
 
 
+# 方法说明：验证 Bangumi 数据会映射封面和角色摘要。
 def test_bangumi_maps_cover_and_character_summary(monkeypatch):
     responses = {
         "https://api.bgm.tv/v0/search/subjects": httpx.Response(
@@ -58,6 +60,7 @@ def test_bangumi_maps_cover_and_character_summary(monkeypatch):
         ),
     }
 
+    # 方法说明：模拟测试中的 HTTP 请求。
     def request(self, method, url, **kwargs):
         response = responses[url]
         response.request = httpx.Request(method, url)
@@ -72,6 +75,7 @@ def test_bangumi_maps_cover_and_character_summary(monkeypatch):
     assert result.characters[0].summary == "主角介绍"
 
 
+# 方法说明：验证 Bangumi 会优先匹配系列别名而非分卷标题。
 def test_bangumi_prefers_series_alias_over_numbered_volume():
     selected = BangumiProvider._select(
         [
@@ -97,7 +101,9 @@ def test_bangumi_prefers_series_alias_over_numbered_volume():
     assert selected["id"] == 3510
 
 
+# 方法说明：验证 AniList 和 Kitsu 标题字段会正确映射。
 def test_anilist_and_kitsu_map_titles(monkeypatch):
+    # 方法说明：模拟测试中的 HTTP POST 请求。
     def post(self, url, **kwargs):
         response = httpx.Response(
             200,
@@ -122,6 +128,7 @@ def test_anilist_and_kitsu_map_titles(monkeypatch):
         response.request = httpx.Request("POST", url)
         return response
 
+    # 方法说明：读取指定数据或模拟测试中的 GET 请求。
     def get(self, url, **kwargs):
         response = httpx.Response(
             200,
@@ -149,9 +156,11 @@ def test_anilist_and_kitsu_map_titles(monkeypatch):
     assert KitsuProvider().search(work()).provider_id == "38"
 
 
+# 方法说明：验证 AniList 精确 ID 查询不会同时发送标题搜索。
 def test_anilist_exact_id_does_not_send_title_search(monkeypatch):
     captured = {}
 
+    # 方法说明：模拟测试中的 HTTP POST 请求。
     def post(self, url, **kwargs):
         captured.update(kwargs["json"]["variables"])
         response = httpx.Response(
@@ -191,10 +200,12 @@ def test_anilist_exact_id_does_not_send_title_search(monkeypatch):
     assert captured == {"id": 150193}
 
 
+# 方法说明：验证元数据聚合器会缓存提供方失败结果。
 def test_aggregator_caches_provider_failures(tmp_path: Path):
     class BrokenProvider:
         name = "broken"
 
+        # 方法说明：查询并转换当前提供方的作品元数据。
         def search(self, _work):
             raise httpx.ConnectError("offline")
 
@@ -207,6 +218,7 @@ def test_aggregator_caches_provider_failures(tmp_path: Path):
     assert second.errors == first.errors
 
 
+# 方法说明：验证不同外部 ID 会生成不同元数据缓存键。
 def test_aggregator_cache_key_changes_with_external_ids(tmp_path: Path):
     aggregator = MetadataAggregator(tmp_path, providers=[])
     manga_entry = work(external_ids={"bangumi": "418302"})
@@ -215,13 +227,16 @@ def test_aggregator_cache_key_changes_with_external_ids(tmp_path: Path):
     assert aggregator._cache_path(manga_entry) != aggregator._cache_path(anime_entry)
 
 
+# 方法说明：验证达到置信度门槛后按提供方顺序选择候选。
 def test_aggregator_prefers_provider_order_after_confidence_threshold(tmp_path: Path):
     class Provider:
+        # 方法说明：初始化当前对象及其运行状态。
         def __init__(self, name, confidence, cover):
             self.name = name
             self.confidence = confidence
             self.cover = cover
 
+        # 方法说明：查询并转换当前提供方的作品元数据。
         def search(self, item):
             from comic_enhancer.models import WorkMetadata
 
@@ -245,7 +260,9 @@ def test_aggregator_prefers_provider_order_after_confidence_threshold(tmp_path: 
     assert result.selected.provider == "bangumi"
 
 
+# 方法说明：验证 MangaUpdates 公共搜索记录会映射为统一元数据。
 def test_mangaupdates_maps_public_search_record(monkeypatch):
+    # 方法说明：模拟测试中的 HTTP POST 请求。
     def post(self, url, **kwargs):
         response = httpx.Response(
             200,
@@ -274,6 +291,7 @@ def test_mangaupdates_maps_public_search_record(monkeypatch):
     assert result.cover_url == "https://cdn.mangaupdates.com/cover.jpg"
 
 
+# 方法说明：验证空标题不会产生参考图匹配置信度。
 def test_empty_title_never_produces_reference_confidence():
     assert _confidence("", work()) == 0
     assert _confidence("One Piece", work(title="")) == 0

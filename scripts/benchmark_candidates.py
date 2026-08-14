@@ -32,6 +32,7 @@ from benchmark_api import (
 from benchmark_comfyui import upload, wait_for_output
 
 
+# 方法说明：读取候选模型基准清单及页面列表。
 def manifest_pages(path: Path) -> tuple[dict, list[Path]]:
     data = json.loads(path.read_text(encoding="utf-8"))
     pages = [(PROJECT_ROOT / item).resolve() for item in data.get("test_pages", [])]
@@ -41,11 +42,13 @@ def manifest_pages(path: Path) -> tuple[dict, list[Path]]:
     return data, pages
 
 
+# 方法说明：从字节数据加载 RGB 图像。
 def load_rgb(data: bytes) -> Image.Image:
     with Image.open(BytesIO(data)) as source:
         return ImageOps.exif_transpose(source).convert("RGB").copy()
 
 
+# 方法说明：执行 Cobra 候选工作流并保存结果。
 def run_cobra(
     client: httpx.Client,
     page: Path,
@@ -107,6 +110,7 @@ def run_cobra(
     return result.content, None, prompt_id
 
 
+# 方法说明：执行 FLUX.2 工作流并返回或记录结果。
 def run_flux2(
     client: httpx.Client,
     page: Path,
@@ -147,6 +151,7 @@ def run_flux2(
     return result.content, None, prompt_id
 
 
+# 方法说明：汇总基准测试结果与统计指标。
 def summarize(results: list[dict[str, object]]) -> dict[str, object]:
     elapsed = [int(item["client_elapsed_ms"]) for item in results]
     backend = [
@@ -209,6 +214,7 @@ def summarize(results: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
+# 方法说明：解析命令行参数并执行程序主流程。
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidate", choices=("cobra", "flux2-klein-4b"), required=True)

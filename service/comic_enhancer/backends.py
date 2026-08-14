@@ -32,15 +32,19 @@ class InferenceBackend(ABC):
     supported_base_models: frozenset[str] = frozenset()
     model_profiles: tuple[str, ...] = ()
 
+    # 方法说明：检查推理后端是否已准备就绪。
     def ready(self) -> bool:
         return True
 
+    # 方法说明：检查 Cobra 模型档位是否可用。
     def cobra_profile_ready(self) -> bool:
         return False
 
+    # 方法说明：检查 FLUX.2 模型档位是否可用。
     def flux2_profile_ready(self) -> bool:
         return False
 
+    # 方法说明：生成影响推理缓存的版本标识。
     def cache_revision(
         self,
         options: ProcessOptions,
@@ -49,6 +53,7 @@ class InferenceBackend(ABC):
     ) -> str:
         return self.name
 
+    # 方法说明：返回当前处理档位的适配器使用策略。
     def adapter_policy(
         self,
         assets: "InferenceAssets",
@@ -62,6 +67,7 @@ class InferenceBackend(ABC):
             ),
         )
 
+    # 方法说明：按当前策略处理输入并返回推理结果。
     @abstractmethod
     def process(
         self,
@@ -101,10 +107,12 @@ class ComfyUIModeStrategy(ABC):
     mode: ProcessingMode
     adapter_workflow: str
 
+    # 方法说明：检查当前处理策略是否可用。
     @abstractmethod
     def available(self, backend: "ComfyUIBackend") -> bool:
         raise NotImplementedError
 
+    # 方法说明：生成影响推理缓存的版本标识。
     @abstractmethod
     def cache_revision(
         self,
@@ -115,6 +123,7 @@ class ComfyUIModeStrategy(ABC):
     ) -> str:
         raise NotImplementedError
 
+    # 方法说明：返回当前处理档位的适配器使用策略。
     def adapter_policy(self, backend: "ComfyUIBackend") -> AdapterPolicy:
         return AdapterPolicy(
             enabled=True,
@@ -122,6 +131,7 @@ class ComfyUIModeStrategy(ABC):
             required_workflow=self.adapter_workflow,
         )
 
+    # 方法说明：按当前策略处理输入并返回推理结果。
     @abstractmethod
     def process(
         self,
@@ -138,13 +148,16 @@ class ComfyUIModeStrategy(ABC):
 class PresetModeStrategy(ComfyUIModeStrategy):
     mode: ProcessingMode
 
+    # 方法说明：返回当前档位要求的适配器工作流名称。
     @property
     def adapter_workflow(self) -> str:
         return str(self.mode)
 
+    # 方法说明：检查当前处理策略是否可用。
     def available(self, backend: "ComfyUIBackend") -> bool:
         return backend.ready()
 
+    # 方法说明：生成影响推理缓存的版本标识。
     def cache_revision(
         self,
         backend: "ComfyUIBackend",
@@ -154,6 +167,7 @@ class PresetModeStrategy(ComfyUIModeStrategy):
     ) -> str:
         return backend._preset_cache_revision(options, resolved)
 
+    # 方法说明：按当前策略处理输入并返回推理结果。
     def process(
         self,
         backend: "ComfyUIBackend",
@@ -169,6 +183,7 @@ class CobraModeStrategy(ComfyUIModeStrategy):
     mode = ProcessingMode.COBRA
     adapter_workflow = "quality"
 
+    # 方法说明：检查当前处理策略是否可用。
     def available(self, backend: "ComfyUIBackend") -> bool:
         return backend._workflow_profile_ready(
             str(self.mode),
@@ -176,6 +191,7 @@ class CobraModeStrategy(ComfyUIModeStrategy):
             workflow_supported=backend.workflow_loader.supports_cobra(),
         )
 
+    # 方法说明：生成影响推理缓存的版本标识。
     def cache_revision(
         self,
         backend: "ComfyUIBackend",
@@ -185,6 +201,7 @@ class CobraModeStrategy(ComfyUIModeStrategy):
     ) -> str:
         return backend._reference_model_cache_revision(options, resolved, assets)
 
+    # 方法说明：按当前策略处理输入并返回推理结果。
     def process(
         self,
         backend: "ComfyUIBackend",
@@ -204,6 +221,7 @@ class Flux2ModeStrategy(ComfyUIModeStrategy):
     mode = ProcessingMode.FLUX2
     adapter_workflow = "quality"
 
+    # 方法说明：检查当前处理策略是否可用。
     def available(self, backend: "ComfyUIBackend") -> bool:
         return backend._workflow_profile_ready(
             str(self.mode),
@@ -211,6 +229,7 @@ class Flux2ModeStrategy(ComfyUIModeStrategy):
             workflow_supported=backend.workflow_loader.supports_flux2(),
         )
 
+    # 方法说明：生成影响推理缓存的版本标识。
     def cache_revision(
         self,
         backend: "ComfyUIBackend",
@@ -221,6 +240,7 @@ class Flux2ModeStrategy(ComfyUIModeStrategy):
         revision = backend._reference_model_cache_revision(options, resolved, assets)
         return f"{revision}:{FLUX2_PROCESSING_REVISION}"
 
+    # 方法说明：按当前策略处理输入并返回推理结果。
     def process(
         self,
         backend: "ComfyUIBackend",
@@ -244,6 +264,7 @@ class Flux2QuantModeStrategy(ComfyUIModeStrategy):
     mode = ProcessingMode.FLUX2_QUANT
     adapter_workflow = "quality"
 
+    # 方法说明：检查当前处理策略是否可用。
     def available(self, backend: "ComfyUIBackend") -> bool:
         return backend._workflow_profile_ready(
             str(self.mode),
@@ -251,6 +272,7 @@ class Flux2QuantModeStrategy(ComfyUIModeStrategy):
             workflow_supported=backend.workflow_loader.supports_flux2_quant(),
         )
 
+    # 方法说明：生成影响推理缓存的版本标识。
     def cache_revision(
         self,
         backend: "ComfyUIBackend",
@@ -261,6 +283,7 @@ class Flux2QuantModeStrategy(ComfyUIModeStrategy):
         revision = backend._reference_model_cache_revision(options, resolved, assets)
         return f"{revision}:{FLUX2_PROCESSING_REVISION}:quant"
 
+    # 方法说明：按当前策略处理输入并返回推理结果。
     def process(
         self,
         backend: "ComfyUIBackend",
@@ -282,6 +305,7 @@ class PassthroughBackend(InferenceBackend):
 
     name = "passthrough"
 
+    # 方法说明：按当前策略处理输入并返回推理结果。
     def process(
         self,
         assets: InferenceAssets,
@@ -313,6 +337,7 @@ class ComfyUIBackend(InferenceBackend):
         "flux2-klein-4b-qwen3-fp8",
     )
 
+    # 方法说明：初始化当前对象及其运行状态。
     def __init__(
         self,
         *,
@@ -351,6 +376,7 @@ class ComfyUIBackend(InferenceBackend):
         )
         self._mode_strategies = {strategy.mode: strategy for strategy in strategies}
 
+    # 方法说明：检查推理后端是否已准备就绪。
     def ready(self) -> bool:
         try:
             response = httpx.get(f"{self.base_url}/system_stats", timeout=2)
@@ -358,18 +384,23 @@ class ComfyUIBackend(InferenceBackend):
         except httpx.HTTPError:
             return False
 
+    # 方法说明：检查 Cobra 模型档位是否可用。
     def cobra_profile_ready(self) -> bool:
         return self.mode_available(ProcessingMode.COBRA)
 
+    # 方法说明：检查 FLUX.2 模型档位是否可用。
     def flux2_profile_ready(self) -> bool:
         return self.mode_available(ProcessingMode.FLUX2)
 
+    # 方法说明：检查 FLUX.2 量化档位是否可用。
     def flux2_quant_profile_ready(self) -> bool:
         return self.mode_available(ProcessingMode.FLUX2_QUANT)
 
+    # 方法说明：检查指定处理档位是否可用。
     def mode_available(self, mode: ProcessingMode | str) -> bool:
         return self._strategy(mode).available(self)
 
+    # 方法说明：解析并返回指定处理档位的策略。
     def _strategy(self, mode: ProcessingMode | str) -> ComfyUIModeStrategy:
         normalized = ProcessingMode(mode)
         try:
@@ -377,6 +408,7 @@ class ComfyUIBackend(InferenceBackend):
         except KeyError as error:
             raise ValueError(f"unsupported processing mode: {normalized}") from error
 
+    # 方法说明：检查工作流及其模型依赖是否齐全。
     def _workflow_profile_ready(
         self,
         cache_key: str,
@@ -401,6 +433,7 @@ class ComfyUIBackend(InferenceBackend):
         self._profile_ready_cache[cache_key] = (now + (5 if ready else 1), ready)
         return ready
 
+    # 方法说明：生成影响推理缓存的版本标识。
     def cache_revision(
         self,
         options: ProcessOptions,
@@ -414,6 +447,7 @@ class ComfyUIBackend(InferenceBackend):
             assets,
         )
 
+    # 方法说明：生成预设工作流的缓存版本标识。
     def _preset_cache_revision(
         self,
         options: ProcessOptions,
@@ -425,6 +459,7 @@ class ComfyUIBackend(InferenceBackend):
             reference_available=False,
         )
 
+    # 方法说明：生成参考模型工作流的缓存版本标识。
     def _reference_model_cache_revision(
         self,
         options: ProcessOptions,
@@ -444,6 +479,7 @@ class ComfyUIBackend(InferenceBackend):
         )
         return ":".join([workflow_revision, *reference_hashes])
 
+    # 方法说明：返回当前处理档位的适配器使用策略。
     def adapter_policy(
         self,
         assets: InferenceAssets,
@@ -451,6 +487,7 @@ class ComfyUIBackend(InferenceBackend):
     ) -> AdapterPolicy:
         return self._strategy(options.mode).adapter_policy(self)
 
+    # 方法说明：按当前策略处理输入并返回推理结果。
     def process(
         self,
         assets: InferenceAssets,
@@ -466,6 +503,7 @@ class ComfyUIBackend(InferenceBackend):
             resolved,
         )
 
+    # 方法说明：在实验档失败时显式回退到质量档。
     def _fallback_to_quality(
         self,
         assets: InferenceAssets,
@@ -476,6 +514,7 @@ class ComfyUIBackend(InferenceBackend):
         quality_options = options.model_copy(update={"mode": ProcessingMode.QUALITY})
         return self.process(assets, output_path, quality_options, resolved)
 
+    # 方法说明：使用预设 ComfyUI 工作流处理图片。
     def _process_preset(
         self,
         assets: InferenceAssets,
@@ -500,6 +539,7 @@ class ComfyUIBackend(InferenceBackend):
             model_profile=loaded_workflow.model_profile,
         )
 
+    # 方法说明：请求 ComfyUI 卸载 Cobra 工作进程。
     def _unload_cobra_worker(self) -> None:
         try:
             response = httpx.post(
@@ -510,6 +550,7 @@ class ComfyUIBackend(InferenceBackend):
         except httpx.HTTPError as error:
             logger.warning("Cobra 显存释放请求失败: %s", error)
 
+    # 方法说明：执行 Cobra 多参考图上色流程。
     def _process_cobra(
         self,
         assets: InferenceAssets,
@@ -543,6 +584,7 @@ class ComfyUIBackend(InferenceBackend):
             model_profile="cobra",
         )
 
+    # 方法说明：执行 FLUX.2 多参考图上色流程。
     def _process_flux2(
         self,
         assets: InferenceAssets,
@@ -588,6 +630,7 @@ class ComfyUIBackend(InferenceBackend):
             model_profile=loaded_workflow.model_profile,
         )
 
+    # 方法说明：筛选并排序 Cobra 使用的参考图片。
     def _cobra_reference_images(self, assets: InferenceAssets) -> list[bytes]:
         candidates: list[bytes] = []
         if assets.reference_bytes is not None:
@@ -605,6 +648,7 @@ class ComfyUIBackend(InferenceBackend):
                 break
         return unique
 
+    # 方法说明：筛选并排序 FLUX.2 使用的参考图片。
     def _flux2_reference_images(self, assets: InferenceAssets) -> list[bytes]:
         candidates: list[bytes] = []
         if assets.reference_bytes is not None:
@@ -622,6 +666,7 @@ class ComfyUIBackend(InferenceBackend):
                 break
         return unique
 
+    # 方法说明：绑定输入后提交一次 Cobra 工作流。
     def _run_cobra_prompt(
         self,
         image_bytes: bytes,
@@ -679,6 +724,7 @@ class ComfyUIBackend(InferenceBackend):
         with Image.open(BytesIO(result.content)) as generated_file:
             return ImageOps.exif_transpose(generated_file).convert("RGB").copy()
 
+    # 方法说明：绑定输入后提交一次 FLUX.2 工作流。
     def _run_flux2_prompt(
         self,
         image_bytes: bytes,
@@ -718,6 +764,7 @@ class ComfyUIBackend(InferenceBackend):
         with Image.open(BytesIO(result.content)) as generated_file:
             return ImageOps.exif_transpose(generated_file).convert("RGB").copy()
 
+    # 方法说明：回注原图结构并保留 Cobra 生成的色彩。
     @staticmethod
     def _protect_cobra_structure(source_bytes: bytes, generated: Image.Image) -> Image.Image:
         """Keep source geometry while retaining Cobra chroma in colored highlights."""
@@ -771,6 +818,7 @@ class ComfyUIBackend(InferenceBackend):
         structure_mask = ImageChops.lighter(ink_mask, paper_mask)
         return Image.composite(source, colorized, structure_mask)
 
+    # 方法说明：提交单页 ComfyUI 工作流并读取结果。
     def _run_page_prompt(
         self,
         base_url: str,
@@ -797,6 +845,7 @@ class ComfyUIBackend(InferenceBackend):
         with Image.open(BytesIO(result.content)) as source:
             return ImageOps.exif_transpose(source).convert("RGB").copy()
 
+    # 方法说明：按统一格式原子保存推理结果图。
     @staticmethod
     def _save_output(image: Image.Image, output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -804,6 +853,7 @@ class ComfyUIBackend(InferenceBackend):
         image.save(temporary, format="WEBP", quality=93, method=4)
         temporary.replace(output_path)
 
+    # 方法说明：将图像字节上传到 ComfyUI。
     def _upload(self, client: httpx.Client, image_bytes: bytes, role: str) -> str:
         upload_name = f"comic-enhancer-{role}-{uuid.uuid4().hex}.png"
         normalized = BytesIO()
@@ -820,6 +870,7 @@ class ComfyUIBackend(InferenceBackend):
         upload.raise_for_status()
         return self._comfy_path(upload.json())
 
+    # 方法说明：将图像等比缩放并填充为正方形。
     @staticmethod
     def _pad_square(image_bytes: bytes, size: int = 512) -> bytes:
         output = BytesIO()
@@ -841,6 +892,7 @@ class ComfyUIBackend(InferenceBackend):
         canvas.save(output, format="PNG", optimize=True)
         return output.getvalue()
 
+    # 方法说明：恢复生成图与原图一致的宽高比例。
     @staticmethod
     def _restore_geometry(source_bytes: bytes, generated: Image.Image) -> Image.Image:
         with Image.open(BytesIO(source_bytes)) as source_file:
@@ -865,6 +917,7 @@ class ComfyUIBackend(InferenceBackend):
             generated = generated.crop((0, top, generated.width, top + content_height))
         return generated.resize(source_size, Image.Resampling.LANCZOS)
 
+    # 方法说明：轮询 ComfyUI 历史记录并下载输出。
     def _wait_for_output(
         self,
         client: httpx.Client,
@@ -893,6 +946,7 @@ class ComfyUIBackend(InferenceBackend):
             time.sleep(self.poll_interval_seconds)
         raise TimeoutError(f"ComfyUI prompt timed out: {prompt_id}")
 
+    # 方法说明：发现并绑定工作流的输入、参考图和输出节点。
     @staticmethod
     def _bind_io(
         workflow: dict,
@@ -949,6 +1003,7 @@ class ComfyUIBackend(InferenceBackend):
 
         return output_nodes
 
+    # 方法说明：将原图明度、文字和墨线回注到结果图。
     @staticmethod
     def _protect_source_structure(source_bytes: bytes, generated: Image.Image) -> Image.Image:
         with Image.open(BytesIO(source_bytes)) as source_file:
@@ -976,6 +1031,7 @@ class ComfyUIBackend(InferenceBackend):
         )
         return Image.composite(source, colorized, dark_mask)
 
+    # 方法说明：拼接 ComfyUI 上传文件的内部路径。
     @staticmethod
     def _comfy_path(uploaded: dict) -> str:
         name = uploaded["name"]
@@ -983,6 +1039,7 @@ class ComfyUIBackend(InferenceBackend):
         return f"{subfolder}/{name}" if subfolder else name
 
 
+# 方法说明：根据配置创建对应的推理后端。
 def create_backend(name: str, **options) -> InferenceBackend:
     if name == PassthroughBackend.name:
         return PassthroughBackend()

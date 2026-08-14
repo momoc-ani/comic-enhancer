@@ -10,6 +10,7 @@ from comic_enhancer.references import (
 )
 
 
+# 方法说明：验证参考图规范化会限制最大尺寸。
 def test_normalize_reference_limits_size():
     source = BytesIO()
     Image.new("RGB", (3000, 1500), "red").save(source, format="JPEG")
@@ -29,11 +30,13 @@ def test_normalize_reference_limits_size():
         "http://localhost/cover.png",
     ],
 )
+# 方法说明：验证参考图地址会拒绝非公网目标。
 def test_reference_url_rejects_non_public_targets(url):
     with pytest.raises(ValueError):
         ReferenceImageStore._validate_public_url(url)
 
 
+# 方法说明：验证彩色参考图的质量排名高于灰度图。
 def test_reference_quality_prefers_color_before_resolution():
     gray = BytesIO()
     Image.new("L", (1000, 1400), 128).save(gray, format="PNG")
@@ -54,6 +57,7 @@ def test_reference_quality_prefers_color_before_resolution():
     )
 
 
+# 方法说明：验证同为彩色时优先选择更大分辨率参考图。
 def test_reference_quality_prefers_larger_color_image():
     small = BytesIO()
     Image.new("RGB", (230, 345), (140, 80, 110)).save(small, format="PNG")
@@ -74,6 +78,7 @@ def test_reference_quality_prefers_larger_color_image():
     )
 
 
+# 方法说明：验证完整人物构图优先于鲜艳但裁切的肖像。
 def test_reference_quality_prefers_full_body_composition_over_vivid_portrait():
     portrait = Image.new("RGB", (230, 345), (220, 40, 80))
     portrait_source = BytesIO()

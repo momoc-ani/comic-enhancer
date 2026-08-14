@@ -58,6 +58,7 @@ class Settings:
     mangaupdates_api_token: str = ""
 
 
+# 方法说明：从环境变量和配置文件加载服务设置。
 def load_settings() -> Settings:
     config_path = Path(
         os.environ.get(

@@ -9,6 +9,7 @@ from comic_enhancer.gitee import GiteeAdapterStore, GiteeError
 from comic_enhancer.models import AdapterManifest
 
 
+# 方法说明：创建记录请求的测试 HTTP 处理器。
 def store(handler):
     return GiteeAdapterStore(
         api_url="https://gitee.com/api/v5",
@@ -22,9 +23,11 @@ def store(handler):
     )
 
 
+# 方法说明：验证索引同步使用预期仓库并原子写入文件。
 def test_sync_index_uses_expected_repository_and_atomic_file(tmp_path):
     index = {"schema_version": 1, "generic": None, "works": {}}
 
+    # 方法说明：模拟并记录测试 HTTP 请求。
     def handler(request):
         assert request.method == "GET"
         assert request.url.path == "/api/v5/repos/robot/comic-lora/contents/adapters/index.json"
@@ -44,6 +47,7 @@ def test_sync_index_uses_expected_repository_and_atomic_file(tmp_path):
     assert json.loads(target.read_text()) == index
 
 
+# 方法说明：验证适配器下载要求可信 Gitee 地址和匹配摘要。
 def test_download_requires_gitee_url_and_matching_sha(tmp_path):
     data = b"safetensors-placeholder"
     manifest = AdapterManifest(
@@ -67,6 +71,7 @@ def test_download_requires_gitee_url_and_matching_sha(tmp_path):
         client.download_adapter(unsafe, tmp_path)
 
 
+# 方法说明：验证发布流程会先上传版本再更新索引。
 def test_publish_uploads_version_then_updates_index(tmp_path, monkeypatch):
     source = tmp_path / "work-42-v1.safetensors"
     source.write_bytes(b"weights")

@@ -20,6 +20,7 @@ fi
 remote_ready="$remote_root/candidate-models.ready"
 ssh -n "$remote" "mkdir -p '$remote_root/diffusion_models' '$remote_root/text_encoders' '$remote_root/cobra' && rm -f '$remote_ready'"
 
+# 方法说明：上传候选模型文件到远端主机。
 upload() {
   local_path=$1
   remote_path=$2

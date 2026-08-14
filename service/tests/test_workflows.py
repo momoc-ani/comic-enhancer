@@ -23,6 +23,7 @@ from comic_enhancer.workflows import PresetWorkflowLoader
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
+# 方法说明：写入测试使用的最小 ComfyUI 工作流。
 def write_workflow(path, *, marker, load_nodes=1, save_nodes=1):
     workflow = {
         str(index): {
@@ -41,6 +42,7 @@ def write_workflow(path, *, marker, load_nodes=1, save_nodes=1):
     path.write_text(json.dumps(workflow), encoding="utf-8")
 
 
+# 方法说明：创建测试使用的适配器解析结果。
 def resolved(adapter=None):
     return ResolvedAdapter(
         source=AdapterSource.WORK if adapter else AdapterSource.NONE,
@@ -49,12 +51,14 @@ def resolved(adapter=None):
     )
 
 
+# 方法说明：生成测试使用的 PNG 图片字节。
 def png_bytes(image: Image.Image) -> bytes:
     stream = BytesIO()
     image.save(stream, format="PNG")
     return stream.getvalue()
 
 
+# 方法说明：验证 Cobra 会提交多张参考图并恢复原始尺寸。
 def test_cobra_backend_posts_multiple_references_and_restores_geometry(
     tmp_path, monkeypatch
 ):
@@ -113,20 +117,25 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
     class FakeResponse:
         content = generated
 
+        # 方法说明：模拟成功响应的状态检查。
         def raise_for_status(self):
             return None
 
     class FakeClient:
+        # 方法说明：初始化当前对象及其运行状态。
         def __init__(self, *, base_url, timeout):
             captured["base_url"] = base_url
             captured["timeout"] = timeout
 
+        # 方法说明：进入测试上下文并返回当前对象。
         def __enter__(self):
             return self
 
+        # 方法说明：退出测试上下文并完成清理。
         def __exit__(self, *_):
             return None
 
+        # 方法说明：模拟测试中的 HTTP POST 请求。
         def post(self, path, **kwargs):
             captured["path"] = path
             if path == "/upload/image":
@@ -141,6 +150,7 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
                 json=lambda: {"prompt_id": "cobra-prompt"},
             )
 
+        # 方法说明：读取指定数据或模拟测试中的 GET 请求。
         def get(self, path, **kwargs):
             if path.startswith("/history/"):
                 return SimpleNamespace(
@@ -190,6 +200,7 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
         assert result.size == source.size
 
 
+# 方法说明：验证 FLUX.2 使用三张参考图并恢复原图尺寸。
 def test_flux2_backend_uses_three_references_and_restores_source_size(
     tmp_path, monkeypatch
 ):
@@ -216,6 +227,7 @@ def test_flux2_backend_uses_three_references_and_restores_source_size(
     monkeypatch.setattr(backend, "flux2_profile_ready", lambda: True)
     monkeypatch.setattr(backend, "_unload_cobra_worker", lambda: None)
 
+    # 方法说明：确保 FLUX.2 流程不会调用预设结构保护。
     def reject_preset_structure(*_args):
         raise AssertionError("FLUX.2 must not use the preset structure policy")
 
@@ -226,6 +238,7 @@ def test_flux2_backend_uses_three_references_and_restores_source_size(
     )
     captured = {}
 
+    # 方法说明：执行 FLUX.2 工作流并返回或记录结果。
     def run_flux2(image_bytes, references, workflow):
         captured["image_bytes"] = image_bytes
         captured["references"] = references
@@ -270,6 +283,7 @@ def test_flux2_backend_uses_three_references_and_restores_source_size(
         assert pixel[2] > 90
 
 
+# 方法说明：验证加载器会选择指定档位和完整适配器工作流。
 def test_loader_selects_mode_and_complete_adapter_workflow(tmp_path):
     fast = tmp_path / "fast.json"
     quality = tmp_path / "quality.json"
@@ -303,6 +317,7 @@ def test_loader_selects_mode_and_complete_adapter_workflow(tmp_path):
     )
 
 
+# 方法说明：验证工作流输入输出绑定会拒绝未替换占位符。
 def test_bind_io_discovers_nodes_and_rejects_placeholders():
     workflow = {
         "5": {"class_type": "LoadImage", "inputs": {"image": "preset.png"}},
@@ -338,6 +353,7 @@ def test_bind_io_discovers_nodes_and_rejects_placeholders():
         ({"1": {"class_type": "LoadImage", "inputs": {}}}, "at least one"),
     ],
 )
+# 方法说明：验证工作流绑定要求存在加载和保存节点。
 def test_bind_io_requires_load_and_save_nodes(workflow, message):
     with pytest.raises(RuntimeError, match=message):
         ComfyUIBackend._bind_io(
@@ -347,6 +363,7 @@ def test_bind_io_requires_load_and_save_nodes(workflow, message):
         )
 
 
+# 方法说明：验证参考图工作流可通过节点标题完成绑定。
 def test_bind_io_uses_titles_for_reference_workflow():
     workflow = {
         "1": {
@@ -378,6 +395,7 @@ def test_bind_io_uses_titles_for_reference_workflow():
     assert workflow["2"]["inputs"]["image"] == "uploaded/cover.png"
 
 
+# 方法说明：验证 FLUX.2 候选工作流声明完整四步参考契约。
 def test_flux2_candidate_workflow_has_concrete_four_step_reference_contract():
     path = PROJECT_ROOT / "workflows" / "flux2-klein-4b-reference-colorize.json"
     workflow = json.loads(path.read_text(encoding="utf-8"))
@@ -400,6 +418,7 @@ def test_flux2_candidate_workflow_has_concrete_four_step_reference_contract():
     assert outputs == ("34",)
 
 
+# 方法说明：验证适配器工作流路径不能逃逸配置根目录。
 def test_adapter_workflow_cannot_escape_root(tmp_path):
     fast = tmp_path / "fast.json"
     quality = tmp_path / "quality.json"
@@ -427,6 +446,7 @@ def test_adapter_workflow_cannot_escape_root(tmp_path):
     "name",
     ["sd15-colorize-fast.json", "sd15-colorize-quality.json"],
 )
+# 方法说明：验证内置工作流自包含并能够恢复暗色像素。
 def test_shipped_workflows_are_self_contained_and_restore_dark_pixels(name):
     workflow = json.loads(
         (PROJECT_ROOT / "workflows" / name).read_text(encoding="utf-8")
@@ -444,6 +464,7 @@ def test_shipped_workflows_are_self_contained_and_restore_dark_pixels(name):
     assert any(node["class_type"] == "ImageCompositeMasked" for node in workflow.values())
 
 
+# 方法说明：验证 Cobra 工作流声明十二个参考输入和固定参数。
 def test_shipped_cobra_workflow_declares_twelve_reference_inputs_and_fixed_values():
     workflow = json.loads(
         (PROJECT_ROOT / "workflows" / "cobra-colorize.json").read_text(

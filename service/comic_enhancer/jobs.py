@@ -18,6 +18,7 @@ class ProcessingService:
     backend: InferenceBackend
     semaphore: asyncio.Semaphore
 
+    # 方法说明：按当前策略处理输入并返回推理结果。
     async def process(
         self,
         image_bytes: bytes,
@@ -121,6 +122,7 @@ class ProcessingService:
             model_profile=outcome.model_profile,
         )
 
+    # 方法说明：组装统一的页面处理结果。
     def _result(
         self,
         cache_key,

@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "service"))
 from comic_enhancer.backends import ComfyUIBackend
 
 
+# 方法说明：上传文件并返回服务端文件名。
 def upload(client: httpx.Client, path: Path, role: str) -> str:
     with path.open("rb") as stream:
         response = client.post(
@@ -29,6 +30,7 @@ def upload(client: httpx.Client, path: Path, role: str) -> str:
     return ComfyUIBackend._comfy_path(response.json())
 
 
+# 方法说明：轮询 ComfyUI 任务直到获得输出。
 def wait_for_output(
     client: httpx.Client,
     prompt_id: str,
@@ -53,6 +55,7 @@ def wait_for_output(
     raise TimeoutError(f"ComfyUI prompt timed out: {prompt_id}")
 
 
+# 方法说明：解析命令行参数并执行程序主流程。
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)

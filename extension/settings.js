@@ -29,21 +29,25 @@ export const DEFAULT_SETTINGS = Object.freeze({
   localMode: "fast",
 });
 
+// 方法说明：规范化服务地址并移除末尾斜杠。
 export function normalizeUrl(value) {
   return String(value || "").trim().replace(/\/$/, "");
 }
 
+// 方法说明：规范化处理档位并回退到安全默认值。
 export function normalizeMode(value) {
   const normalized = String(value || "").trim();
   if (MODE_VALUES.has(normalized)) return normalized;
   return /^[a-z0-9_:-]+$/.test(normalized) ? normalized : "fast";
 }
 
+// 方法说明：返回指定档位建议的预取页数。
 export function prefetchPagesForMode(mode) {
   return MODE_OPTIONS.find((option) => option.value === normalizeMode(mode))
     ?.prefetchPages || 1;
 }
 
+// 方法说明：从旧设置推断本地或远端部署。
 export function inferDeployment(settings) {
   if (["local", "remote"].includes(settings.deployment)) {
     return settings.deployment;
@@ -56,6 +60,7 @@ export function inferDeployment(settings) {
     : "remote";
 }
 
+// 方法说明：激活指定部署并同步其服务配置。
 export function activateDeployment(settings, deployment) {
   const selected = deployment === "local" ? "local" : "remote";
   const prefix = selected === "local" ? "local" : "remote";
@@ -75,6 +80,7 @@ export function activateDeployment(settings, deployment) {
   };
 }
 
+// 方法说明：迁移并补全扩展设置。
 export function migrateSettings(raw = {}) {
   const deployment = inferDeployment(raw);
   const legacyMode = normalizeMode(raw.mode);

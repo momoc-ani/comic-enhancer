@@ -16,6 +16,7 @@ mkdir -p "$root_dir/flux2" "$root_dir/cobra"
 root_dir=$(cd "$root_dir" && pwd)
 rm -f "$root_dir/CandidateModels.ready"
 
+# 方法说明：计算文件的 SHA-256 摘要。
 hash_file() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$1" | cut -d' ' -f1
@@ -24,6 +25,7 @@ hash_file() {
   fi
 }
 
+# 方法说明：校验模型权重的大小和摘要。
 verify_weight() {
   relative_path=$1
   expected_size=$2
@@ -36,6 +38,7 @@ verify_weight() {
   test "$actual_hash" = "$expected_hash"
 }
 
+# 方法说明：下载并校验模型权重文件。
 download_weight() {
   relative_path=$1
   repository_path=$2
@@ -85,6 +88,7 @@ download_weight() {
   echo "$relative_path 下载并校验完成"
 }
 
+# 方法说明：下载体积较小的模型辅助文件。
 download_small() {
   relative_path=$1
   repository_path=$2
@@ -148,6 +152,7 @@ download_weight cobra/PixArt-XL-2-1024-MS/vae/diffusion_pytorch_model.safetensor
   PixArt-alpha/PixArt-XL-2-1024-MS/resolve/$pixart_revision/vae/diffusion_pytorch_model.safetensors \
   334643268 703abdcd7c389316b5128faa9b750a530ea1680b453170b27afebac5e4db30c4 &
 pids="$pids $!"
+# 方法说明：清理下载过程创建的临时文件。
 cleanup() {
   # shellcheck disable=SC2086
   kill $pids 2>/dev/null || true

@@ -43,6 +43,7 @@ from .references import ReferenceImageStore, assess_reference_image, reference_q
 from .workflows import PresetWorkflowLoader
 
 logger = logging.getLogger(__name__)
+# 方法说明：优先返回外部 ID 精确匹配的元数据候选。
 def prioritized_metadata_candidates(
     resolution: MetadataResolution,
     work: WorkIdentity,
@@ -62,6 +63,7 @@ def prioritized_metadata_candidates(
     return [candidate for _, candidate in indexed]
 
 
+# 方法说明：创建并配置 Comic Enhancer FastAPI 应用。
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
     backend_options = {}
@@ -133,6 +135,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             timeout_seconds=settings.gitee_timeout_seconds,
         )
 
+    # 方法说明：管理应用启动和关闭期间的后台资源。
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         settings.runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -157,15 +160,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
 
+    # 方法说明：校验普通 API 请求的 Bearer Token。
     def authorize(authorization: str | None = Header(default=None)) -> None:
         expected = f"Bearer {settings.api_token}"
         if authorization != expected:
             raise HTTPException(status_code=401, detail="invalid API token")
 
+    # 方法说明：校验管理 API 请求的 Bearer Token。
     def authorize_admin(authorization: str | None = Header(default=None)) -> None:
         if not settings.admin_token or authorization != f"Bearer {settings.admin_token}":
             raise HTTPException(status_code=403, detail="admin token required")
 
+    # 方法说明：返回服务健康状态。
     @app.get("/v1/health")
     async def health() -> dict[str, object]:
         return {
@@ -174,6 +180,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "backend": backend.name,
         }
 
+    # 方法说明：返回后端能力、档位和预取配置。
     @app.get("/v1/capabilities", response_model=Capabilities)
     async def capabilities(_: None = Depends(authorize)) -> Capabilities:
         cobra_available = backend.cobra_profile_ready()
@@ -214,6 +221,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             max_parallel_inference=settings.max_parallel_inference,
         )
 
+    # 方法说明：处理单页图片并返回统一结果。
     @app.post("/v1/pages/process", response_model=ProcessResult)
     async def process_page(
         image: UploadFile = File(),
@@ -256,6 +264,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             character_references=character_references,
         )
 
+    # 方法说明：从缓存元数据构建角色参考图库。
     async def _character_bank(
         resolution: MetadataResolution,
         work: WorkIdentity,
@@ -394,6 +403,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return entries[:16]
         return entries
 
+    # 方法说明：解析并返回作品元数据。
     @app.post("/v1/metadata/resolve", response_model=MetadataResolution)
     async def resolve_metadata(
         work_json: str = Form(),
@@ -407,6 +417,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(error)) from error
         return await asyncio.to_thread(metadata.resolve, work)
 
+    # 方法说明：按需同步当前作品的远端适配器。
     async def _ensure_remote_adapter(work: WorkIdentity, options: ProcessOptions) -> None:
         required_workflow = (
             "quality"
@@ -435,6 +446,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if registry.is_available(manifest):
                     return
 
+    # 方法说明：处理管理端适配器索引同步请求。
     @app.post("/v1/adapters/sync")
     async def sync_adapters(_: None = Depends(authorize_admin)) -> dict[str, object]:
         if gitee_store is None:
@@ -445,6 +457,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=502, detail=str(error)) from error
         return {"ok": True, "work_count": len(index.get("works", {}))}
 
+    # 方法说明：下载并安装指定的远端适配器。
     @app.post("/v1/adapters/download")
     async def download_adapter(
         adapter_json: str = Form(),
@@ -461,6 +474,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=502, detail=str(error)) from error
         return {"ok": True, "adapter_id": manifest.adapter_id, "path": str(target)}
 
+    # 方法说明：发布指定适配器并更新索引。
     @app.post("/v1/adapters/publish")
     async def publish_adapter(
         adapter_json: str = Form(),
@@ -491,6 +505,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 temporary.unlink(missing_ok=True)
         return {"ok": True, "adapter": published.model_dump(mode="json")}
 
+    # 方法说明：鉴权后返回缓存中的增强结果图。
     @app.get("/v1/results/{filename}")
     async def result(
         filename: str,

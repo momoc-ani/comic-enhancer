@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+// 方法说明：验证设置弹窗会显示扩展清单中的当前版本。
 test("popup renders the installed manifest version", () => {
   const manifest = JSON.parse(
     readFileSync(new URL("./manifest.json", import.meta.url), "utf8"),

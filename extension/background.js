@@ -31,11 +31,13 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   });
 });
 
+// 方法说明：向所有已打开的受支持漫画页注入内容脚本。
 async function injectIntoOpenMangaTabs() {
   const tabs = await chrome.tabs.query({ url: [...SUPPORTED_PAGE_PATTERNS] });
   await Promise.allSettled(tabs.map((tab) => injectContent(tab.id)));
 }
 
+// 方法说明：避免重复地向指定标签页注入扩展资源。
 async function injectContent(tabId) {
   if (!Number.isInteger(tabId)) return;
   const existing = await chrome.scripting.executeScript({
@@ -47,6 +49,7 @@ async function injectContent(tabId) {
   await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
 }
 
+// 方法说明：判断地址是否属于受支持的漫画页面。
 function isSupportedPage(url) {
   if (!url) return false;
   try {
@@ -83,6 +86,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
+// 方法说明：向已打开的漫画页广播最新设置。
 async function refreshOpenMangaTabs(settings) {
   const tabs = await chrome.tabs.query({ url: [...SUPPORTED_PAGE_PATTERNS] });
   await Promise.allSettled(
@@ -97,6 +101,7 @@ async function refreshOpenMangaTabs(settings) {
   );
 }
 
+// 方法说明：下载原图、调用增强 API 并返回可显示结果。
 async function processPage(payload) {
   const settings = await getActiveSettings();
   if (!settings.enabled) {
@@ -162,6 +167,7 @@ async function processPage(payload) {
   };
 }
 
+// 方法说明：将鉴权响应转换为页面可用的数据地址。
 async function responseToDataUrl(response) {
   const bytes = new Uint8Array(await response.arrayBuffer());
   const chunkSize = 0x8000;
@@ -172,11 +178,13 @@ async function responseToDataUrl(response) {
   return `data:${response.headers.get("content-type") || "image/webp"};base64,${btoa(binary)}`;
 }
 
+// 方法说明：将未知异常规范化为可展示消息。
 function normalizeError(error) {
   if (error instanceof Error) return error.message;
   return String(error);
 }
 
+// 方法说明：读取并迁移当前生效的扩展设置。
 async function getActiveSettings() {
   return migrateSettings(await chrome.storage.local.get(null));
 }

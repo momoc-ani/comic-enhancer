@@ -18,12 +18,14 @@ from .models import CharacterReference, MetadataResolution, WorkIdentity, WorkMe
 logger = logging.getLogger(__name__)
 
 
+# 方法说明：将任意元数据值规范化为文本。
 def _text(value: Any) -> str:
     if isinstance(value, str):
         return re.sub(r"\s+", " ", value).strip()
     return ""
 
 
+# 方法说明：从复合元数据值中提取首个有效文本。
 def _first_text(value: Any) -> str:
     if isinstance(value, list):
         for item in value:
@@ -40,6 +42,7 @@ def _first_text(value: Any) -> str:
     return _text(value)
 
 
+# 方法说明：从提供方图片数据中提取封面地址。
 def _cover(images: Any) -> str | None:
     if isinstance(images, dict):
         for key in ("large", "extraLarge", "original", "medium", "common", "small"):
@@ -49,6 +52,7 @@ def _cover(images: Any) -> str | None:
     return None
 
 
+# 方法说明：计算元数据候选与作品身份的匹配置信度。
 def _confidence(title: str, work: WorkIdentity, *, author: str = "") -> float:
     normalized_title = _text(title).casefold()
     normalized_work_title = _text(work.title).casefold()
@@ -64,6 +68,7 @@ def _confidence(title: str, work: WorkIdentity, *, author: str = "") -> float:
     return min(score, 1.0)
 
 
+# 方法说明：计算候选标题集合的最高匹配置信度。
 def _title_confidence(
     titles: list[str],
     work: WorkIdentity,
@@ -79,9 +84,11 @@ def _title_confidence(
 class MetadataProvider(ABC):
     name: str
 
+    # 方法说明：初始化当前对象及其运行状态。
     def __init__(self, *, timeout_seconds: int = 8):
         self.timeout_seconds = timeout_seconds
 
+    # 方法说明：查询并转换当前提供方的作品元数据。
     @abstractmethod
     def search(self, work: WorkIdentity) -> WorkMetadata | None:
         raise NotImplementedError
@@ -91,6 +98,7 @@ class BangumiProvider(MetadataProvider):
     name = "bangumi"
     api_url = "https://api.bgm.tv/v0"
 
+    # 方法说明：查询并转换当前提供方的作品元数据。
     def search(self, work: WorkIdentity) -> WorkMetadata | None:
         subject_id = work.external_ids.get(self.name)
         headers = {"User-Agent": "ComicEnhancer/0.1 (metadata aggregation)"}
@@ -149,6 +157,7 @@ class BangumiProvider(MetadataProvider):
                 fetched_at=_now(),
             )
 
+    # 方法说明：从候选项中选择当前请求对应的最佳结果。
     @staticmethod
     def _select(items: list[dict[str, Any]], work: WorkIdentity) -> dict[str, Any] | None:
         candidates = [item for item in items if _text(item.get("platform")) in {"漫画", "书籍", ""}]
@@ -164,6 +173,7 @@ class BangumiProvider(MetadataProvider):
             default=None,
         )
 
+    # 方法说明：从提供方信息栏中提取作者名称。
     @staticmethod
     def _author(infobox: Any) -> str:
         if not isinstance(infobox, list):
@@ -190,6 +200,7 @@ class AniListProvider(MetadataProvider):
     }
     """
 
+    # 方法说明：查询并转换当前提供方的作品元数据。
     def search(self, work: WorkIdentity) -> WorkMetadata | None:
         variables: dict[str, Any] = {}
         if value := work.external_ids.get(self.name):
@@ -243,6 +254,7 @@ class AniListProvider(MetadataProvider):
             fetched_at=_now(),
         )
 
+    # 方法说明：从候选项中选择当前请求对应的最佳结果。
     @staticmethod
     def _select(items: list[dict[str, Any]], work: WorkIdentity) -> dict[str, Any] | None:
         if value := work.external_ids.get("anilist"):
@@ -254,6 +266,7 @@ class KitsuProvider(MetadataProvider):
     name = "kitsu"
     api_url = "https://kitsu.io/api/edge"
 
+    # 方法说明：查询并转换当前提供方的作品元数据。
     def search(self, work: WorkIdentity) -> WorkMetadata | None:
         params = {"filter[text]": work.title, "page[limit]": "5"}
         if value := work.external_ids.get(self.name):
@@ -282,6 +295,7 @@ class KitsuProvider(MetadataProvider):
             fetched_at=_now(),
         )
 
+    # 方法说明：从候选项中选择当前请求对应的最佳结果。
     @staticmethod
     def _select(items: list[dict[str, Any]], work: WorkIdentity) -> dict[str, Any] | None:
         return max(items, key=lambda item: _confidence(_text(item.get("attributes", {}).get("canonicalTitle")), work), default=None)
@@ -291,6 +305,7 @@ class ShikimoriProvider(MetadataProvider):
     name = "shikimori"
     api_url = "https://shikimori.one/api"
 
+    # 方法说明：查询并转换当前提供方的作品元数据。
     def search(self, work: WorkIdentity) -> WorkMetadata | None:
         params = {"search": work.title, "limit": 5}
         if value := work.external_ids.get(self.name):
@@ -327,6 +342,7 @@ class JikanMALProvider(MetadataProvider):
     name = "mal"
     api_url = "https://api.jikan.moe/v4"
 
+    # 方法说明：查询并转换当前提供方的作品元数据。
     def search(self, work: WorkIdentity) -> WorkMetadata | None:
         url = f"{self.api_url}/manga/{work.external_ids[self.name]}" if self.name in work.external_ids else f"{self.api_url}/manga"
         params = {} if self.name in work.external_ids else {"q": work.title, "limit": 5}
@@ -359,11 +375,13 @@ class MangaUpdatesProvider(MetadataProvider):
     name = "mangaupdates"
     default_api_url = "https://api.mangaupdates.com/v1/series/search"
 
+    # 方法说明：初始化当前对象及其运行状态。
     def __init__(self, *, api_url: str = default_api_url, api_token: str = "", timeout_seconds: int = 8):
         super().__init__(timeout_seconds=timeout_seconds)
         self.api_url = (api_url or self.default_api_url).rstrip("/")
         self.api_token = api_token
 
+    # 方法说明：查询并转换当前提供方的作品元数据。
     def search(self, work: WorkIdentity) -> WorkMetadata | None:
         if not self.api_url:
             return None
@@ -397,6 +415,7 @@ class MangaUpdatesProvider(MetadataProvider):
 
 
 class MetadataAggregator:
+    # 方法说明：初始化当前对象及其运行状态。
     def __init__(self, root: Path, *, enabled: bool = True, ttl_seconds: int = 86400, providers: list[MetadataProvider] | None = None):
         self.root = root
         self.enabled = enabled
@@ -404,6 +423,7 @@ class MetadataAggregator:
         self.providers = providers if providers is not None else [BangumiProvider(), AniListProvider(), KitsuProvider(), ShikimoriProvider(), JikanMALProvider(), MangaUpdatesProvider()]
         self.root.mkdir(parents=True, exist_ok=True)
 
+    # 方法说明：聚合并缓存当前作品的外部元数据。
     def resolve(self, work: WorkIdentity) -> MetadataResolution:
         cache_path = self._cache_path(work)
         if not self.enabled:
@@ -431,11 +451,13 @@ class MetadataAggregator:
         self._write_cache(cache_path, result.model_dump(mode="json"))
         return result
 
+    # 方法说明：读取作品仍在有效期内的元数据缓存。
     def cached(self, work: WorkIdentity) -> MetadataResolution | None:
         """读取未过期缓存，不触发网络请求。"""
         cached = self._read_cache(self._cache_path(work))
         return MetadataResolution.model_validate(cached) if cached is not None else None
 
+    # 方法说明：调用单个元数据提供方并隔离失败。
     @staticmethod
     def _query_provider(
         provider: MetadataProvider,
@@ -447,14 +469,17 @@ class MetadataAggregator:
             logger.info("元数据提供方不可用 %s: %s", provider.name, error)
             return provider.name, None, str(error)
 
+    # 方法说明：返回元数据提供方的稳定优先级。
     def _priority(self, provider: str) -> int:
         return -next((index for index, item in enumerate(self.providers) if item.name == provider), 999)
 
+    # 方法说明：生成作品元数据缓存路径。
     def _cache_path(self, work: WorkIdentity) -> Path:
         payload = json.dumps(work.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         return self.root / digest[:2] / f"{digest}.json"
 
+    # 方法说明：读取并验证元数据缓存文件。
     def _read_cache(self, path: Path) -> dict[str, Any] | None:
         if not path.is_file() or (datetime.now(timezone.utc).timestamp() - path.stat().st_mtime) > self.ttl_seconds:
             return None
@@ -463,6 +488,7 @@ class MetadataAggregator:
         except (OSError, json.JSONDecodeError):
             return None
 
+    # 方法说明：原子写入作品元数据缓存。
     @staticmethod
     def _write_cache(path: Path, payload: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -471,5 +497,6 @@ class MetadataAggregator:
         temporary.replace(path)
 
 
+# 方法说明：返回当前 UTC 时间的标准字符串。
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()

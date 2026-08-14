@@ -9,10 +9,12 @@ from .models import ProcessOptions, ResolvedAdapter, WorkIdentity
 
 
 class ResultCache:
+    # 方法说明：初始化当前对象及其运行状态。
     def __init__(self, root: Path):
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
 
+    # 方法说明：生成当前模型或缓存对象的稳定键。
     def key(
         self,
         image_bytes: bytes,
@@ -46,12 +48,15 @@ class ResultCache:
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
+    # 方法说明：返回缓存结果图的存储路径。
     def result_path(self, cache_key: str, suffix: str = ".webp") -> Path:
         return self.root / cache_key[:2] / f"{cache_key}{suffix}"
 
+    # 方法说明：返回缓存元数据的存储路径。
     def metadata_path(self, cache_key: str) -> Path:
         return self.root / cache_key[:2] / f"{cache_key}.json"
 
+    # 方法说明：读取指定缓存键的元数据。
     def load_metadata(self, cache_key: str) -> dict[str, object]:
         path = self.metadata_path(cache_key)
         if not path.is_file():
@@ -61,6 +66,7 @@ class ResultCache:
         except (json.JSONDecodeError, OSError):
             return {}
 
+    # 方法说明：原子保存指定缓存键的元数据。
     def save_metadata(self, cache_key: str, metadata: dict[str, object]) -> None:
         path = self.metadata_path(cache_key)
         path.parent.mkdir(parents=True, exist_ok=True)

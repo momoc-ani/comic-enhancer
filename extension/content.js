@@ -13,12 +13,14 @@
   const minimumRetainedPagesAhead = 3;
 
   class CopyMangaAdapter {
+    // 方法说明：判断当前页面是否属于支持的漫画站点。
     static matches() {
       return /(^|\.)(copymanga\.(com|site|tv)|mangacopy\.com)$/i.test(
         location.hostname,
       );
     }
 
+    // 方法说明：从页面中提取稳定的作品身份信息。
     getWork() {
       const pathParts = location.pathname.split("/").filter(Boolean);
       const comicIndex = pathParts.indexOf("comic");
@@ -40,6 +42,7 @@
       };
     }
 
+    // 方法说明：从页面中提取当前章节信息。
     getChapter() {
       const parts = location.pathname.split("/").filter(Boolean);
       const chapterIndex = parts.indexOf("chapter");
@@ -54,6 +57,7 @@
       };
     }
 
+    // 方法说明：查找并去重页面中的有效漫画图片。
     findImages() {
       const selectors = [
         ".comicContent-list img",
@@ -77,6 +81,7 @@
       return [...bestByUrl.values()];
     }
 
+    // 方法说明：解析图片真实地址并过滤占位数据。
     imageUrl(image) {
       const raw =
         image.dataset.src ||
@@ -92,6 +97,7 @@
       }
     }
 
+    // 方法说明：读取指定页面元标签的内容。
     meta(attribute, value) {
       return document
         .querySelector(`meta[${attribute}="${value}"]`)
@@ -99,6 +105,7 @@
         ?.trim();
     }
 
+    // 方法说明：从页面标注中提取作者名称。
     findAuthor() {
       const labelled = [...document.querySelectorAll("a, span, div")].find((node) =>
         /^(作者|作者：|作者:)/.test(node.textContent?.trim() || ""),
@@ -106,6 +113,7 @@
       return labelled?.textContent?.replace(/^作者[：:]?/, "").trim() || "";
     }
 
+    // 方法说明：从页面中提取作品标签。
     findTags() {
       return [...document.querySelectorAll("[class*='tag'] a, [class*='theme'] a")]
         .map((node) => node.textContent?.trim())
@@ -114,6 +122,7 @@
     }
   }
 
+  // 方法说明：计算候选漫画图片的选择分数。
   function imageScore(image) {
     const box = image.getBoundingClientRect();
     return (
@@ -124,6 +133,7 @@
   }
 
   class Scheduler {
+    // 方法说明：初始化当前对象及其运行状态。
     constructor(adapter, work, chapter) {
       this.adapter = adapter;
       this.work = work;
@@ -138,6 +148,7 @@
       );
     }
 
+    // 方法说明：发现新漫画页并注册可视区域观察。
     discover() {
       const images = this.adapter.findImages();
       images.forEach((image, index) => {
@@ -151,6 +162,7 @@
       this.prefetchAroundViewport(images);
     }
 
+    // 方法说明：调度当前视口附近的漫画页预取。
     prefetchAroundViewport(images) {
       const firstBelowViewport = images.findIndex(
         (image) => image.getBoundingClientRect().bottom >= 0,
@@ -163,6 +175,7 @@
       this.releaseDistantResults(images, start, count);
     }
 
+    // 方法说明：释放远离视口的增强图以控制内存。
     releaseDistantResults(images, start, prefetchCount) {
       const keepStart = Math.max(0, start - retainedPagesBehind);
       const keepEnd = start + Math.max(prefetchCount, minimumRetainedPagesAhead);
@@ -180,6 +193,7 @@
       });
     }
 
+    // 方法说明：重置失败页面并重新加入调度。
     retryFailed() {
       for (const image of this.adapter.findImages()) {
         const entry = entriesByImage.get(image);
@@ -192,6 +206,7 @@
       this.discover();
     }
 
+    // 方法说明：在推理设置变化后重置页面任务。
     resetForSettingsChange() {
       settingsVersion += 1;
       pending.length = 0;
@@ -206,6 +221,7 @@
       this.discover();
     }
 
+    // 方法说明：按优先级将漫画页加入处理队列。
     enqueue(image, priority) {
       const entry = entriesByImage.get(image);
       if (!entry || entry.state !== "idle") return;
@@ -223,6 +239,7 @@
       this.drain();
     }
 
+    // 方法说明：串行消费队列并更新页面处理状态。
     async drain() {
       if (active || pending.length === 0) return;
       active = true;
@@ -264,6 +281,7 @@
     }
   }
 
+  // 方法说明：确保真实漫画原图已经加载完成。
   async function ensureSourceImageLoaded(image, imageUrl) {
     const currentUrl = image.currentSrc || image.src;
     if (
@@ -294,6 +312,7 @@
     });
   }
 
+  // 方法说明：移除懒加载属性并固定真实原图地址。
   function pinSourceImage(image, imageUrl) {
     for (const attribute of [
       "data-src",
@@ -308,6 +327,7 @@
     image.src = imageUrl;
   }
 
+  // 方法说明：加载增强结果并覆盖显示在原图上方。
   async function showResult(image, result) {
     const wrapper = ensureWrapper(image);
     let overlay = wrapper.querySelector(":scope > .comic-enhancer-result");
@@ -341,6 +361,7 @@
     markState(image, "completed");
   }
 
+  // 方法说明：创建或复用漫画页结果容器。
   function ensureWrapper(image) {
     if (image.parentElement?.classList.contains("comic-enhancer-page")) {
       const wrapper = image.parentElement;
@@ -355,6 +376,7 @@
     return wrapper;
   }
 
+  // 方法说明：同步结果容器与原图的宽高比例。
   function syncWrapperGeometry(image, wrapper) {
     if (!wrapper.style) return;
     const width = Number(image.naturalWidth) || 0;
@@ -364,12 +386,14 @@
     }
   }
 
+  // 方法说明：更新漫画页的处理状态和提示。
   function markState(image, state, message = "") {
     const wrapper = ensureWrapper(image);
     wrapper.dataset.state = state;
     wrapper.title = message;
   }
 
+  // 方法说明：识别页面并启动漫画页调度器。
   async function bootstrap() {
     if (!CopyMangaAdapter.matches()) return;
     settings = await chrome.runtime.sendMessage({ type: "COMIC_ENHANCER_SETTINGS" });

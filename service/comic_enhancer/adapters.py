@@ -13,6 +13,7 @@ from .models import (
 
 
 class AdapterRegistry:
+    # 方法说明：初始化当前对象及其运行状态。
     def __init__(
         self,
         index_path: Path,
@@ -23,11 +24,13 @@ class AdapterRegistry:
         self.generic_adapter_id = generic_adapter_id
         self.weights_root = weights_root or index_path.parent
 
+    # 方法说明：读取并解析适配器索引。
     def _read(self) -> dict:
         if not self.index_path.exists():
             return {"schema_version": 1, "generic": None, "works": {}}
         return json.loads(self.index_path.read_text(encoding="utf-8"))
 
+    # 方法说明：解析当前作品最终可用的适配器。
     def resolve(
         self,
         work: WorkIdentity,
@@ -61,6 +64,7 @@ class AdapterRegistry:
             reason="no compatible adapter available",
         )
 
+    # 方法说明：按优先级返回当前作品的适配器候选。
     def candidates(
         self,
         work: WorkIdentity,
@@ -90,9 +94,11 @@ class AdapterRegistry:
                 candidates.append((AdapterSource.GENERIC, adapter))
         return candidates
 
+    # 方法说明：检查适配器文件是否完整且可用。
     def is_available(self, adapter: AdapterManifest) -> bool:
         return self._is_available(adapter)
 
+    # 方法说明：检查适配器是否兼容当前基模和工作流。
     @staticmethod
     def _is_compatible(
         adapter: AdapterManifest,
@@ -107,6 +113,7 @@ class AdapterRegistry:
         )
         return base_model_matches and workflow_matches
 
+    # 方法说明：检查适配器权重是否存在且校验通过。
     def _is_available(self, adapter: AdapterManifest) -> bool:
         if adapter.file is None:
             return False
@@ -122,6 +129,7 @@ class AdapterRegistry:
             return self._sha256(adapter_path) == adapter.sha256.lower()
         return True
 
+    # 方法说明：计算文件的 SHA-256 摘要。
     @staticmethod
     def _sha256(path: Path) -> str:
         digest = hashlib.sha256()

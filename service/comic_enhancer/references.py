@@ -38,6 +38,7 @@ REFERENCE_PROVIDER_PRIORITY = {
 }
 
 
+# 方法说明：评估参考图的色彩、尺寸和构图质量。
 def assess_reference_image(image_bytes: bytes) -> ReferenceImageQuality:
     with Image.open(BytesIO(image_bytes)) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
@@ -60,6 +61,7 @@ def assess_reference_image(image_bytes: bytes) -> ReferenceImageQuality:
     )
 
 
+# 方法说明：判断参考图是否近似完整人物立绘。
 def _looks_like_full_body_reference(image: Image.Image) -> bool:
     """Detect a full-height character cutout on a mostly uniform background."""
     sample = image.copy()
@@ -102,6 +104,7 @@ def _looks_like_full_body_reference(image: Image.Image) -> bool:
     return vertical_extent >= 0.80
 
 
+# 方法说明：生成参考图质量排序键。
 def reference_quality_rank(
     quality: ReferenceImageQuality,
     *,
@@ -123,11 +126,13 @@ def reference_quality_rank(
 
 
 class ReferenceImageStore:
+    # 方法说明：初始化当前对象及其运行状态。
     def __init__(self, root: Path, *, timeout_seconds: int = 20):
         self.root = root
         self.timeout_seconds = timeout_seconds
         self.root.mkdir(parents=True, exist_ok=True)
 
+    # 方法说明：从本地缓存或远端获取规范化参考图。
     def get(self, url: str | None) -> bytes | None:
         if not url:
             return None
@@ -149,6 +154,7 @@ class ReferenceImageStore:
         temporary.replace(path)
         return normalized
 
+    # 方法说明：从经过校验的公网地址下载参考图。
     def _download(self, url: str) -> bytes:
         current = url
         with httpx.Client(timeout=self.timeout_seconds) as client:
@@ -177,6 +183,7 @@ class ReferenceImageStore:
                     return bytes(chunks)
         raise ValueError("reference image has too many redirects")
 
+    # 方法说明：拒绝可能访问内网或本机的参考图地址。
     @staticmethod
     def _validate_public_url(url: str) -> None:
         parsed = urlparse(url)
@@ -192,6 +199,7 @@ class ReferenceImageStore:
         if not addresses or any(not address.is_global for address in addresses):
             raise ValueError("reference URL resolves to a non-public address")
 
+    # 方法说明：规范化参考图尺寸、色彩模式和编码。
     @staticmethod
     def _normalize(image_bytes: bytes) -> bytes:
         output = BytesIO()

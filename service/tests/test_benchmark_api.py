@@ -12,12 +12,14 @@ from scripts.benchmark_api import (
 )
 
 
+# 方法说明：将测试图像编码为内存字节。
 def image_bytes(image: Image.Image) -> bytes:
     stream = BytesIO()
     image.save(stream, format="PNG")
     return stream.getvalue()
 
 
+# 方法说明：验证图像指标会测量尺寸和暗色像素保留率。
 def test_image_metrics_measure_dimensions_and_dark_pixel_retention():
     source = Image.new("RGB", (10, 20), "white")
     source.putpixel((4, 5), (0, 0, 0))
@@ -36,6 +38,7 @@ def test_image_metrics_measure_dimensions_and_dark_pixel_retention():
     assert metrics["saturated_pixel_ratio"] == 0
 
 
+# 方法说明：验证图像指标会报告色相数量和主导色偏差。
 def test_image_metrics_reports_multiple_hues_and_dominant_color_bias():
     source = Image.new("RGB", (120, 120), "white")
     diverse = Image.new("RGB", source.size, "red")
@@ -56,12 +59,14 @@ def test_image_metrics_reports_multiple_hues_and_dominant_color_bias():
     assert biased_metrics["dominant_hue_ratio"] == 1
 
 
+# 方法说明：验证百分位数采用最近秩计算规则。
 def test_percentile_uses_nearest_rank():
     assert percentile([100, 200, 300], 50) == 200
     assert percentile([100, 200, 300], 95) == 300
     assert percentile([], 95) == 0
 
 
+# 方法说明：验证基准摘要会记录真实模型和回退状态。
 def test_summary_reports_actual_model_and_fallback_state():
     results = [
         {
@@ -100,6 +105,7 @@ def test_summary_reports_actual_model_and_fallback_state():
     assert summary["processed_panels"] == 2
 
 
+# 方法说明：验证资源采样能够解析并报告增长量。
 def test_resource_samples_parse_and_report_growth():
     first = parse_resource_sample_line("10000, 24564, 17|204800")
     second = parse_resource_sample_line("10300, 24564, 21|230400")
@@ -113,6 +119,7 @@ def test_resource_samples_parse_and_report_growth():
     assert summary["gpu_utilization_max_percent"] == 21
 
 
+# 方法说明：验证三页数据集只能产生冒烟结果。
 def test_three_page_manifest_can_only_produce_smoke_result():
     admission = evaluate_admission(
         manifest={"admission_eligible": False},
@@ -127,6 +134,7 @@ def test_three_page_manifest_can_only_produce_smoke_result():
     assert admission["checks"] == []
 
 
+# 方法说明：验证单一色调结果会触发机器质量门禁失败。
 def test_eligible_dataset_fails_machine_gate_when_color_is_one_note():
     admission = evaluate_admission(
         manifest={"admission_eligible": True},

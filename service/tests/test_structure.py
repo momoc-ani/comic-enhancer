@@ -5,12 +5,14 @@ from PIL import Image
 from comic_enhancer.backends import ComfyUIBackend
 
 
+# 方法说明：将测试图像编码为内存字节。
 def image_bytes(image):
     stream = BytesIO()
     image.save(stream, format="PNG")
     return stream.getvalue()
 
 
+# 方法说明：验证结构保护会恢复黑色文字和原图明度。
 def test_structure_protection_restores_black_text_and_source_luminance():
     source = Image.new("RGB", (8, 8), "white")
     for y in range(2, 6):
@@ -28,6 +30,7 @@ def test_structure_protection_restores_black_text_and_source_luminance():
     assert min(white_pixel) >= 245
 
 
+# 方法说明：验证 Cobra 结构保护保留暗色文字且不压平色彩。
 def test_cobra_structure_preserves_dark_text_without_flattening_color():
     source = Image.new("RGB", (8, 8), (210, 210, 210))
     for y in range(2, 6):
@@ -46,6 +49,7 @@ def test_cobra_structure_preserves_dark_text_without_flattening_color():
     assert max(colored) - min(colored) > 50
 
 
+# 方法说明：验证 Cobra 不会把彩色浅色区域误判为白纸。
 def test_cobra_structure_does_not_treat_colored_white_regions_as_paper():
     source = Image.new("RGB", (8, 8), "white")
     generated = Image.new("RGB", (8, 8), (80, 150, 240))
@@ -60,6 +64,7 @@ def test_cobra_structure_does_not_treat_colored_white_regions_as_paper():
     assert colored[2] > colored[0] + 60
 
 
+# 方法说明：验证 Cobra 会恢复中性白色纸张区域。
 def test_cobra_structure_restores_neutral_white_paper():
     source = Image.new("RGB", (8, 8), "white")
     generated = Image.new("RGB", (8, 8), (242, 240, 238))
@@ -72,6 +77,7 @@ def test_cobra_structure_restores_neutral_white_paper():
     assert min(result.getpixel((4, 4))) >= 250
 
 
+# 方法说明：验证 Cobra 会移除生成图中的中性文字残影。
 def test_cobra_structure_removes_generated_neutral_text_ghosts():
     source = Image.new("RGB", (8, 8), "white")
     generated = Image.new("RGB", (8, 8), "white")
@@ -85,6 +91,7 @@ def test_cobra_structure_removes_generated_neutral_text_ghosts():
     assert min(result.getpixel((4, 4))) >= 250
 
 
+# 方法说明：验证竖图几何恢复后保持原始比例。
 def test_geometry_round_trip_preserves_portrait_ratio():
     source = Image.new("RGB", (100, 200), "red")
 
@@ -100,6 +107,7 @@ def test_geometry_round_trip_preserves_portrait_ratio():
     assert restored.getpixel((50, 100))[2] >= 250
 
 
+# 方法说明：验证横图几何恢复后保持原始比例。
 def test_geometry_round_trip_preserves_landscape_ratio():
     source = Image.new("RGB", (200, 100), "red")
     generated = Image.new("RGB", (1024, 1024), "blue")

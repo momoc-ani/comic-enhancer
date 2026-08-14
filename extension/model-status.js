@@ -14,6 +14,7 @@ const MODE_TITLES = Object.freeze({
   flux2_quant: "质量档（FLUX.2 量化实验）",
 });
 
+// 方法说明：记录最近一次真实模型执行信息。
 export function buildModelExecution(result, settings, completedAt = Date.now()) {
   return {
     requestedMode: normalizeMode(settings.mode),
@@ -31,6 +32,7 @@ export function buildModelExecution(result, settings, completedAt = Date.now()) 
   };
 }
 
+// 方法说明：生成当前档位和实际执行模型的展示信息。
 export function describeModelTier(settings, execution, capabilities = null) {
   const mode = normalizeMode(settings.mode);
   const configuredTitle = MODE_TITLES[mode];
@@ -81,6 +83,7 @@ export function describeModelTier(settings, execution, capabilities = null) {
   };
 }
 
+// 方法说明：判断执行记录是否属于当前服务和档位。
 export function matchesCurrentSettings(settings, execution) {
   if (!execution) return false;
   const mode = normalizeMode(settings.mode);
@@ -90,14 +93,17 @@ export function matchesCurrentSettings(settings, execution) {
   );
 }
 
+// 方法说明：将毫秒耗时格式化为秒数。
 function formatElapsed(elapsedMs) {
   return (elapsedMs / 1000).toFixed(elapsedMs >= 10000 ? 1 : 2);
 }
 
+// 方法说明：规范化服务地址并移除末尾斜杠。
 function normalizeUrl(value) {
   return String(value || "").trim().replace(/\/$/, "");
 }
 
+// 方法说明：规范化处理档位并回退到安全默认值。
 function normalizeMode(value) {
   return ["fast", "quality", "cobra", "flux2", "flux2_quant"].includes(value)
     ? value

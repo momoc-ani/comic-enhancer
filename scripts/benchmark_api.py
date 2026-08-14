@@ -39,6 +39,7 @@ printf '%s|%s\n' "$gpu_line" "$api_rss_kib"
 """.strip()
 
 
+# 方法说明：将路径格式化为便于展示的相对路径。
 def display_path(path: Path) -> str:
     try:
         return str(path.relative_to(PROJECT_ROOT))
@@ -46,6 +47,7 @@ def display_path(path: Path) -> str:
         return str(path)
 
 
+# 方法说明：计算原图与结果图的质量和结构指标。
 def image_metrics(source_bytes: bytes, result_bytes: bytes) -> dict[str, object]:
     with Image.open(BytesIO(source_bytes)) as source_file:
         source = ImageOps.exif_transpose(source_file).convert("L")
@@ -125,6 +127,7 @@ def image_metrics(source_bytes: bytes, result_bytes: bytes) -> dict[str, object]
     }
 
 
+# 方法说明：按最近秩规则计算指定百分位数。
 def percentile(values: list[int], percentile_value: int) -> int:
     if not values:
         return 0
@@ -133,6 +136,7 @@ def percentile(values: list[int], percentile_value: int) -> int:
     return ordered[rank]
 
 
+# 方法说明：汇总基准测试结果与统计指标。
 def summarize(
     results: list[dict[str, object]],
     failures: list[dict[str, object]] | None = None,
@@ -210,6 +214,7 @@ def summarize(
     }
 
 
+# 方法说明：解析一行远端资源采样数据。
 def parse_resource_sample_line(line: str) -> dict[str, float]:
     gpu_part, rss_part = line.strip().split("|", 1)
     gpu_values = [float(value.strip()) for value in gpu_part.split(",")]
@@ -223,6 +228,7 @@ def parse_resource_sample_line(line: str) -> dict[str, float]:
     }
 
 
+# 方法说明：采集远端主机的 CPU、内存和显存指标。
 def sample_remote_resources(host: str, label: str, page_index: int | None) -> dict[str, object]:
     sample: dict[str, object] = {
         "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -244,6 +250,7 @@ def sample_remote_resources(host: str, label: str, page_index: int | None) -> di
 
 
 class RemoteResourceMonitor:
+    # 方法说明：初始化当前对象及其运行状态。
     def __init__(self, host: str, interval_seconds: float):
         self.host = host
         self.interval_seconds = interval_seconds
@@ -252,12 +259,15 @@ class RemoteResourceMonitor:
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
+    # 方法说明：启动后台资源采样线程。
     def start(self) -> None:
         self._thread.start()
 
+    # 方法说明：更新资源采样关联的当前页码。
     def set_page_index(self, page_index: int | None) -> None:
         self.page_index = page_index
 
+    # 方法说明：停止资源采样并返回已收集的数据。
     def stop(self) -> list[dict[str, object]]:
         self._stop.set()
         self._thread.join(timeout=20)
@@ -273,6 +283,7 @@ class RemoteResourceMonitor:
         self.samples.append(sample_remote_resources(self.host, "after", None))
         return self.samples
 
+    # 方法说明：循环采集资源指标直到收到停止信号。
     def _run(self) -> None:
         while not self._stop.is_set():
             self.samples.append(
@@ -282,6 +293,7 @@ class RemoteResourceMonitor:
                 break
 
 
+# 方法说明：汇总远端资源采样的峰值和增量。
 def summarize_resources(samples: list[dict[str, object]]) -> dict[str, object]:
     valid = [sample for sample in samples if "error" not in sample]
     if not valid:
@@ -295,6 +307,7 @@ def summarize_resources(samples: list[dict[str, object]]) -> dict[str, object]:
             ],
         }
 
+    # 方法说明：提取指定资源指标的有效采样值。
     def values(name: str) -> list[float]:
         return [float(sample[name]) for sample in valid]
 
@@ -314,6 +327,7 @@ def summarize_resources(samples: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
+# 方法说明：根据质量与性能门槛判定基准结果。
 def evaluate_admission(
     *,
     manifest: dict[str, object],
@@ -422,6 +436,7 @@ def evaluate_admission(
     }
 
 
+# 方法说明：生成单项准入检查结果。
 def _admission_check(
     name: str,
     actual: float | int,
@@ -442,6 +457,7 @@ def _admission_check(
     }
 
 
+# 方法说明：读取基准清单并解析漫画页路径。
 def load_manifest(path: Path) -> tuple[dict[str, object], list[Path]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     pages = [(PROJECT_ROOT / item).resolve() for item in payload["test_pages"]]
@@ -451,6 +467,7 @@ def load_manifest(path: Path) -> tuple[dict[str, object], list[Path]]:
     return payload, pages
 
 
+# 方法说明：处理单页图片并返回统一结果。
 def process_page(
     client: httpx.Client,
     headers: dict[str, str],
@@ -505,6 +522,7 @@ def process_page(
     }
 
 
+# 方法说明：为处理失败的页面生成统一结果记录。
 def failure_payload(page: Path, page_index: int, error: Exception) -> dict[str, object]:
     response = getattr(error, "response", None)
     status_code = getattr(response, "status_code", None)
@@ -523,6 +541,7 @@ def failure_payload(page: Path, page_index: int, error: Exception) -> dict[str, 
     }
 
 
+# 方法说明：解析命令行参数并执行程序主流程。
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
