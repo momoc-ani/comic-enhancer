@@ -7,7 +7,7 @@
   -> 站点适配器提取作品 ID 和漫画图片
   -> 可视区域调度器优先当前页并预取后续页
   -> 插件后台下载原图
-  -> 唯一漫画增强 API 选择快速/质量/MangaNinja/Cobra 工作流及作品 LoRA / 通用 LoRA / 无 LoRA
+  -> 唯一漫画增强 API 选择快速/质量/MangaNinja/Cobra/FLUX.2 工作流及作品 LoRA / 通用 LoRA / 无 LoRA
   -> API 向唯一 ComfyUI 容器提交对应工作流的单并发 GPU 任务
   -> ComfyUI 结果返回 API 进行文字/墨线保护、缓存和鉴权
   -> 缓存不可变的 WebP 结果和推理元数据
@@ -15,7 +15,7 @@
   -> 任一步失败都保留原图
 ```
 
-浏览器插件只访问漫画增强 API。快速、质量、MangaNinja 和 Cobra 都是同一个 ComfyUI 容器中的预设工作流；后端只配置一个 `comfyui_url`，不能按档位配置第二个推理地址。MAGIv2 只在 API 内部为 MangaNinja 提供人物分析，不映射宿主机端口。
+浏览器插件只访问漫画增强 API。快速、质量、MangaNinja、Cobra 和 FLUX.2 都是同一个 ComfyUI 容器中的预设工作流；后端只配置一个 `comfyui_url`，不能按档位配置第二个推理地址。MAGIv2 只在 API 内部为 MangaNinja 提供人物分析，不映射宿主机端口。
 
 ## 作品身份
 

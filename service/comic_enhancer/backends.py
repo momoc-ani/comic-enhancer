@@ -40,6 +40,9 @@ class InferenceBackend(ABC):
     def cobra_profile_ready(self) -> bool:
         return False
 
+    def flux2_profile_ready(self) -> bool:
+        return False
+
     def cache_revision(
         self,
         options: ProcessOptions,
@@ -140,7 +143,12 @@ class ComfyUIBackend(InferenceBackend):
     name = "comfyui"
     applies_adapters = True
     supported_base_models = frozenset({"sd15-anime"})
-    model_profiles = ("sd15-colorize", "manganinja-reference", "cobra")
+    model_profiles = (
+        "sd15-colorize",
+        "manganinja-reference",
+        "cobra",
+        "flux2-klein-4b",
+    )
 
     def __init__(
         self,
@@ -154,6 +162,9 @@ class ComfyUIBackend(InferenceBackend):
         cobra_enabled: bool = False,
         cobra_workflow: Path | None = None,
         cobra_reference_limit: int = 12,
+        flux2_enabled: bool = False,
+        flux2_workflow: Path | None = None,
+        flux2_reference_limit: int = 3,
     ):
         self.base_url = base_url.rstrip("/")
         self.reference_enabled = reference_enabled
@@ -168,6 +179,11 @@ class ComfyUIBackend(InferenceBackend):
         self.cobra_reference_limit = max(1, min(12, cobra_reference_limit))
         self._cobra_ready_cached_until = 0.0
         self._cobra_ready_cached_value = False
+        self.flux2_enabled = flux2_enabled
+        self.flux2_workflow = flux2_workflow
+        self.flux2_reference_limit = max(1, min(3, flux2_reference_limit))
+        self._flux2_ready_cached_until = 0.0
+        self._flux2_ready_cached_value = False
 
     def ready(self) -> bool:
         try:
@@ -196,13 +212,28 @@ class ComfyUIBackend(InferenceBackend):
         self._cobra_ready_cached_until = now + (5 if ready else 1)
         return ready
 
+    def flux2_profile_ready(self) -> bool:
+        if not self.flux2_enabled or not self.workflow_loader.supports_flux2():
+            return False
+        now = time.monotonic()
+        if now < self._flux2_ready_cached_until:
+            return self._flux2_ready_cached_value
+        try:
+            response = httpx.get(f"{self.base_url}/system_stats", timeout=2)
+            ready = response.status_code == 200
+        except httpx.HTTPError:
+            ready = False
+        self._flux2_ready_cached_value = ready
+        self._flux2_ready_cached_until = now + (5 if ready else 1)
+        return ready
+
     def cache_revision(
         self,
         options: ProcessOptions,
         resolved: ResolvedAdapter,
         assets: InferenceAssets | None = None,
     ) -> str:
-        if str(options.mode) == "cobra":
+        if str(options.mode) in {"cobra", "flux2"}:
             reference_hashes = []
             if assets is not None:
                 reference_hashes = sorted(
@@ -255,7 +286,7 @@ class ComfyUIBackend(InferenceBackend):
             compatible_base_models=self.supported_base_models,
             required_workflow=(
                 "quality"
-                if str(options.mode) in {"manganinja", "cobra"}
+                if str(options.mode) in {"manganinja", "cobra", "flux2"}
                 else str(options.mode)
             ),
         )
@@ -272,6 +303,14 @@ class ComfyUIBackend(InferenceBackend):
                 return self._process_cobra(assets, output_path, resolved)
             except Exception:
                 logger.exception("Cobra 实验档失败，回退到质量工作流")
+                quality_options = options.model_copy(update={"mode": "quality"})
+                return self.process(assets, output_path, quality_options, resolved)
+        if str(options.mode) == "flux2":
+            try:
+                self._unload_cobra_worker()
+                return self._process_flux2(assets, output_path, resolved)
+            except Exception:
+                logger.exception("FLUX.2 最高质量档失败，回退到质量工作流")
                 quality_options = options.model_copy(update={"mode": "quality"})
                 return self.process(assets, output_path, quality_options, resolved)
         reference_available = self._reference_available(options, assets)
@@ -328,6 +367,16 @@ class ComfyUIBackend(InferenceBackend):
             model_profile=loaded_workflow.model_profile,
         )
 
+    def _unload_cobra_worker(self) -> None:
+        try:
+            response = httpx.post(
+                f"{self.base_url}/comic-enhancer/cobra/unload",
+                timeout=15,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            logger.warning("Cobra 显存释放请求失败: %s", error)
+
     def _process_cobra(
         self,
         assets: InferenceAssets,
@@ -361,6 +410,39 @@ class ComfyUIBackend(InferenceBackend):
             model_profile="cobra",
         )
 
+    def _process_flux2(
+        self,
+        assets: InferenceAssets,
+        output_path: Path,
+        resolved: ResolvedAdapter,
+    ) -> InferenceOutcome:
+        if not self.flux2_profile_ready():
+            raise RuntimeError("FLUX.2 服务未就绪")
+        references = self._flux2_reference_images(assets)
+        if not references:
+            raise RuntimeError("FLUX.2 需要至少一张角色参考图")
+        if self.flux2_workflow is None:
+            raise RuntimeError("FLUX.2 工作流未配置")
+        loaded_workflow = self.workflow_loader.load(
+            ProcessOptions(mode="flux2"),
+            resolved,
+        )
+        generated = self._run_flux2_prompt(
+            assets.image_bytes,
+            references,
+            loaded_workflow.prompt,
+        )
+        generated = self._restore_geometry(assets.image_bytes, generated)
+        self._save_output(
+            self._protect_source_structure(assets.image_bytes, generated),
+            output_path,
+        )
+        return InferenceOutcome(
+            adapter_applied=False,
+            reference_applied=True,
+            model_profile="flux2-klein-4b",
+        )
+
     def _cobra_reference_images(self, assets: InferenceAssets) -> list[bytes]:
         candidates: list[bytes] = []
         if assets.reference_bytes is not None:
@@ -375,6 +457,23 @@ class ComfyUIBackend(InferenceBackend):
             seen.add(digest)
             unique.append(value)
             if len(unique) >= self.cobra_reference_limit:
+                break
+        return unique
+
+    def _flux2_reference_images(self, assets: InferenceAssets) -> list[bytes]:
+        candidates: list[bytes] = []
+        if assets.reference_bytes is not None:
+            candidates.append(assets.reference_bytes)
+        candidates.extend((assets.character_references or {}).values())
+        unique: list[bytes] = []
+        seen: set[str] = set()
+        for value in candidates:
+            digest = hashlib.sha256(value).hexdigest()
+            if digest in seen:
+                continue
+            seen.add(digest)
+            unique.append(value)
+            if len(unique) >= self.flux2_reference_limit:
                 break
         return unique
 
@@ -419,6 +518,45 @@ class ComfyUIBackend(InferenceBackend):
                 workflow,
                 input_images=input_images,
                 output_prefix=f"comic-enhancer/cobra-{uuid.uuid4().hex}",
+            )
+            queued = client.post(
+                "/prompt",
+                json={"prompt": workflow, "client_id": uuid.uuid4().hex},
+            )
+            queued.raise_for_status()
+            image_info = self._wait_for_output(
+                client,
+                queued.json()["prompt_id"],
+                output_nodes,
+            )
+            result = client.get("/view", params=image_info)
+            result.raise_for_status()
+        with Image.open(BytesIO(result.content)) as generated_file:
+            return ImageOps.exif_transpose(generated_file).convert("RGB").copy()
+
+    def _run_flux2_prompt(
+        self,
+        image_bytes: bytes,
+        references: list[bytes],
+        workflow_template: dict,
+    ) -> Image.Image:
+        workflow = json.loads(json.dumps(workflow_template))
+        with httpx.Client(base_url=self.base_url, timeout=self.timeout_seconds) as client:
+            input_images = {
+                "INPUT_IMAGE": self._upload(client, image_bytes, "page"),
+                **{
+                    f"REFERENCE_IMAGE_{index}": self._upload(
+                        client,
+                        references[min(index - 1, len(references) - 1)],
+                        f"reference-{index}",
+                    )
+                    for index in range(1, 4)
+                },
+            }
+            output_nodes = self._bind_io(
+                workflow,
+                input_images=input_images,
+                output_prefix=f"comic-enhancer/flux2-{uuid.uuid4().hex}",
             )
             queued = client.post(
                 "/prompt",

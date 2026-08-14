@@ -10,7 +10,9 @@ import threading
 import time
 
 import numpy as np
+from aiohttp import web
 from PIL import Image
+from server import PromptServer
 import torch
 
 
@@ -88,6 +90,28 @@ def _ensure_worker() -> None:
         time.sleep(0.5)
     _COBRA_PROCESS.terminate()
     raise RuntimeError("Cobra worker startup timed out")
+
+
+def _shutdown_worker() -> bool:
+    global _COBRA_PROCESS
+    with _COBRA_EXECUTION_LOCK:
+        if not _worker_ready():
+            _COBRA_SOCKET.unlink(missing_ok=True)
+            return False
+        _request_worker({"action": "shutdown"}, 10)
+        if _COBRA_PROCESS is not None:
+            try:
+                _COBRA_PROCESS.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                _COBRA_PROCESS.terminate()
+            _COBRA_PROCESS = None
+        _COBRA_SOCKET.unlink(missing_ok=True)
+        return True
+
+
+@PromptServer.instance.routes.post("/comic-enhancer/cobra/unload")
+async def unload_cobra_worker(_request):
+    return web.json_response({"released": _shutdown_worker()})
 
 
 class CobraColorize:

@@ -11,7 +11,7 @@ const MODE_TITLES = Object.freeze({
   quality: "质量档",
   manganinja: "MangaNinja 档",
   cobra: "Cobra 档",
-  flux2: "FLUX.2 档",
+  flux2: "最高质量档",
 });
 
 export function buildModelExecution(result, settings, completedAt = Date.now()) {
@@ -40,7 +40,8 @@ export function describeModelTier(settings, execution, capabilities = null) {
       capabilities &&
         ((Array.isArray(advertisedModes) && !advertisedModes.includes(mode)) ||
           (mode === "manganinja" && capabilities.manganinja_available === false) ||
-          (mode === "cobra" && capabilities.cobra_available === false)),
+          (mode === "cobra" && capabilities.cobra_available === false) ||
+          (mode === "flux2" && capabilities.flux2_available === false)),
     );
     return {
       title: configuredTitle,

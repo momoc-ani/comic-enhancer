@@ -6,7 +6,7 @@ export const MODE_OPTIONS = Object.freeze([
   { value: "quality", label: "质量模式", prefetchPages: 2 },
   { value: "manganinja", label: "MangaNinja 实验档", prefetchPages: 1 },
   { value: "cobra", label: "Cobra 实验档", prefetchPages: 1 },
-  { value: "flux2", label: "FLUX.2 实验档", prefetchPages: 1 },
+  { value: "flux2", label: "最高质量模式（FLUX.2）", prefetchPages: 1 },
 ]);
 
 const MODE_VALUES = new Set(MODE_OPTIONS.map((option) => option.value));

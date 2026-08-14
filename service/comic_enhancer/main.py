@@ -87,6 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             workflow_root=settings.comfyui_workflow_root,
             reference_quality_workflow=settings.comfyui_workflow_reference_quality,
             cobra_workflow=settings.comfyui_workflow_cobra,
+            flux2_workflow=settings.comfyui_workflow_flux2,
         )
         backend_options = {
             "base_url": settings.comfyui_url,
@@ -95,6 +96,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "cobra_enabled": settings.comfyui_cobra_enabled,
             "cobra_workflow": settings.comfyui_workflow_cobra,
             "cobra_reference_limit": settings.cobra_reference_limit,
+            "flux2_enabled": settings.comfyui_flux2_enabled,
+            "flux2_workflow": settings.comfyui_workflow_flux2,
+            "flux2_reference_limit": settings.flux2_reference_limit,
             "timeout_seconds": settings.comfyui_timeout_seconds,
             "poll_interval_seconds": settings.comfyui_poll_interval_seconds,
             "workflow_loader": workflow_loader,
@@ -198,9 +202,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/v1/capabilities", response_model=Capabilities)
     async def capabilities(_: None = Depends(authorize)) -> Capabilities:
         cobra_available = backend.cobra_profile_ready()
+        flux2_available = backend.flux2_profile_ready()
         processing_modes = [
             mode for mode in ProcessingMode
             if mode != ProcessingMode.COBRA or cobra_available
+            if mode != ProcessingMode.FLUX2 or flux2_available
         ]
         return Capabilities(
             service_version=__version__,
@@ -216,6 +222,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 and backend.reference_profile_ready()
             ),
             cobra_available=cobra_available,
+            flux2_available=flux2_available,
             prefetch_pages=settings.prefetch_pages,
             max_parallel_inference=settings.max_parallel_inference,
         )
@@ -287,10 +294,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         )
                         if reference is not None:
                             character_references[reference_key] = reference
-        elif str(options.mode) == "cobra":
+        elif str(options.mode) in {"cobra", "flux2"}:
             resolution = await asyncio.to_thread(metadata.resolve, work)
+            reference_limit = (
+                settings.cobra_reference_limit
+                if str(options.mode) == "cobra"
+                else settings.flux2_reference_limit
+            )
             for entry, reference in (await _character_bank(resolution, work))[
-                : settings.cobra_reference_limit
+                :reference_limit
             ]:
                 character_references.setdefault(entry.character_id, reference)
         return await processor.process(

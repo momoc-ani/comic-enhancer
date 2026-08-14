@@ -237,6 +237,67 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
         assert result.size == source.size
 
 
+def test_flux2_backend_uses_three_references_and_restores_source_size(
+    tmp_path, monkeypatch
+):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    flux2 = tmp_path / "flux2.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    write_workflow(flux2, marker="flux2", load_nodes=4)
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=PresetWorkflowLoader(
+            fast_workflow=fast,
+            quality_workflow=quality,
+            workflow_root=tmp_path,
+            flux2_workflow=flux2,
+        ),
+        flux2_enabled=True,
+        flux2_workflow=flux2,
+        flux2_reference_limit=3,
+    )
+    monkeypatch.setattr(backend, "flux2_profile_ready", lambda: True)
+    monkeypatch.setattr(backend, "_unload_cobra_worker", lambda: None)
+    captured = {}
+
+    def run_flux2(image_bytes, references, workflow):
+        captured["image_bytes"] = image_bytes
+        captured["references"] = references
+        captured["workflow"] = workflow
+        return Image.new("RGB", (16, 24), (220, 80, 130))
+
+    monkeypatch.setattr(backend, "_run_flux2_prompt", run_flux2)
+    source = Image.new("RGB", (8, 12), "white")
+    assets = InferenceAssets(
+        image_bytes=png_bytes(source),
+        character_references={
+            f"character-{index}": png_bytes(
+                Image.new("RGB", (4, 6), (index * 40, 20, 100))
+            )
+            for index in range(1, 5)
+        },
+    )
+    output_path = tmp_path / "flux2.webp"
+
+    outcome = backend.process(
+        assets,
+        output_path,
+        ProcessOptions(mode="flux2"),
+        resolved(),
+    )
+
+    assert outcome.model_profile == "flux2-klein-4b"
+    assert outcome.reference_applied is True
+    assert len(captured["references"]) == 3
+    assert captured["workflow"]["marker"]["inputs"]["value"] == "flux2"
+    with Image.open(output_path) as result:
+        assert result.size == source.size
+
+
 def test_loader_selects_mode_and_complete_adapter_workflow(tmp_path):
     fast = tmp_path / "fast.json"
     quality = tmp_path / "quality.json"

@@ -84,6 +84,9 @@ def serve(socket_path: Path) -> None:
                     action = request.get("action")
                     if action == "ping":
                         send_response(connection, {"ok": True})
+                    elif action == "shutdown":
+                        send_response(connection, {"ok": True})
+                        return
                     elif action == "colorize":
                         colorize(cobra, request)
                         send_response(connection, {"ok": True})

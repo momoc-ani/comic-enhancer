@@ -129,6 +129,12 @@ def test_manganinja_mode_is_valid():
     assert options.mode == ProcessingMode.MANGANINJA
 
 
+def test_flux2_mode_is_valid():
+    options = ProcessOptions(mode="flux2")
+
+    assert options.mode == ProcessingMode.FLUX2
+
+
 def test_effective_analyzer_profile_tracks_reference_selection_revision():
     assert effective_analyzer_profile(None) is None
     assert effective_analyzer_profile("magiv2@test") == (
@@ -188,6 +194,33 @@ def test_capabilities_advertise_cobra_only_when_candidate_is_ready(tmp_path, mon
     payload = response.json()
     assert "cobra" in payload["processing_modes"]
     assert payload["cobra_available"] is True
+
+
+def test_capabilities_advertise_flux2_only_when_candidate_is_ready(tmp_path, monkeypatch):
+    flux2_workflow = tmp_path / "flux2.json"
+    flux2_workflow.write_text("{}", encoding="utf-8")
+    settings = Settings(
+        api_token="test-token",
+        runtime_dir=tmp_path / "runtime",
+        adapter_index=tmp_path / "missing.json",
+        backend="comfyui",
+        comfyui_flux2_enabled=True,
+        comfyui_workflow_flux2=flux2_workflow,
+    )
+    app = create_app(settings)
+    monkeypatch.setattr(app.state.processor.backend, "ready", lambda: True)
+    monkeypatch.setattr(app.state.processor.backend, "flux2_profile_ready", lambda: True)
+    client = TestClient(app)
+
+    response = client.get(
+        "/v1/capabilities",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "flux2" in payload["processing_modes"]
+    assert payload["flux2_available"] is True
 
 
 def test_metadata_resolve_requires_auth_and_returns_cached_shape(tmp_path):
@@ -256,6 +289,7 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
         '"comfyui_workflow_fast":"fast.json",'
         '"comfyui_workflow_quality":"quality.json",'
         '"comfyui_workflow_reference_quality":"reference.json",'
+        '"comfyui_workflow_flux2":"flux2.json",'
         '"comfyui_reference_ready_file":"models/ready",'
         '"work_identity_index":"identities.json",'
         '"comfyui_workflow_root":"workflows"}',
@@ -270,8 +304,10 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     assert settings.comfyui_reference_enabled is True
     assert settings.comfyui_workflow_fast == Path("fast.json")
     assert settings.comfyui_workflow_reference_quality == Path("reference.json")
+    assert settings.comfyui_workflow_flux2 == Path("flux2.json")
     assert settings.comfyui_cobra_enabled is False
     assert settings.cobra_reference_limit == 12
+    assert settings.flux2_reference_limit == 3
     assert settings.comfyui_reference_ready_file == Path("models/ready")
     assert settings.work_identity_index == Path("identities.json")
     assert settings.comfyui_workflow_root == Path("workflows")

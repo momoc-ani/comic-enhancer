@@ -140,4 +140,16 @@ test("shows experimental mode availability from backend capabilities", () => {
   });
   assert.equal(actual.title, "Cobra 档 · 基础模型");
   assert.match(actual.detail, /Cobra 多参考上色/);
+
+  const flux2Settings = {
+    ...settings,
+    profile: "remote-flux2",
+    mode: "flux2",
+  };
+  const flux2Unavailable = describeModelTier(flux2Settings, null, {
+    ready: true,
+    flux2_available: false,
+  });
+  assert.equal(flux2Unavailable.title, "最高质量档");
+  assert.match(flux2Unavailable.detail, /未启用 最高质量档/);
 });
