@@ -1,38 +1,24 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
-import sys
+import socket
+import subprocess
 import tempfile
 import threading
-from types import SimpleNamespace
+import time
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 import torch
 
 
-_COBRA_APP = None
+_COBRA_SOCKET = Path("/tmp/comic-enhancer-cobra.sock")
+_COBRA_PYTHON = Path("/opt/cobra-venv/bin/python")
+_COBRA_WORKER = Path(__file__).with_name("cobra_worker.py")
+_COBRA_PROCESS: subprocess.Popen | None = None
 _COBRA_EXECUTION_LOCK = threading.Lock()
-
-
-def _load_cobra_app():
-    global _COBRA_APP
-    if _COBRA_APP is None:
-        import types
-
-        source = Path("/opt/cobra/app.py")
-        if str(source.parent) not in sys.path:
-            sys.path.insert(0, str(source.parent))
-        if not source.is_file():
-            raise RuntimeError(f"Cobra source not found: {source}")
-        source_text = source.read_text(encoding="utf-8")
-        source_text = source_text.split("\nwith gr.Blocks() as demo:", 1)[0]
-        module = types.ModuleType("cobra_upstream_app")
-        module.__file__ = str(source)
-        exec(compile(source_text, str(source), "exec"), module.__dict__)
-        _COBRA_APP = module
-    return _COBRA_APP
 
 
 def _tensor_to_image(value: torch.Tensor) -> Image.Image:
@@ -44,6 +30,64 @@ def _tensor_to_image(value: torch.Tensor) -> Image.Image:
 def _image_to_tensor(value: Image.Image) -> torch.Tensor:
     array = np.asarray(value.convert("RGB"), dtype=np.float32) / 255.0
     return torch.from_numpy(array)[None, ...]
+
+
+def _request_worker(payload: dict, timeout_seconds: float) -> dict:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.settimeout(timeout_seconds)
+        connection.connect(str(_COBRA_SOCKET))
+        connection.sendall(json.dumps(payload).encode("utf-8") + b"\n")
+        response = bytearray()
+        while not response.endswith(b"\n"):
+            chunk = connection.recv(65536)
+            if not chunk:
+                break
+            response.extend(chunk)
+    if not response:
+        raise RuntimeError("Cobra worker closed the connection without a response")
+    result = json.loads(response.decode("utf-8"))
+    if not result.get("ok"):
+        raise RuntimeError(result.get("error") or "Cobra worker failed")
+    return result
+
+
+def _worker_ready() -> bool:
+    try:
+        _request_worker({"action": "ping"}, 1)
+        return True
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError):
+        return False
+
+
+def _ensure_worker() -> None:
+    global _COBRA_PROCESS
+    if _worker_ready():
+        return
+    if not _COBRA_PYTHON.is_file():
+        raise RuntimeError(f"Cobra Python environment not found: {_COBRA_PYTHON}")
+    if not _COBRA_WORKER.is_file():
+        raise RuntimeError(f"Cobra worker not found: {_COBRA_WORKER}")
+    if _COBRA_PROCESS is not None and _COBRA_PROCESS.poll() is None:
+        raise RuntimeError("Cobra worker is running but not accepting requests")
+    _COBRA_SOCKET.unlink(missing_ok=True)
+    environment = os.environ.copy()
+    environment["PYTHONNOUSERSITE"] = "1"
+    _COBRA_PROCESS = subprocess.Popen(
+        [_COBRA_PYTHON, _COBRA_WORKER, "--socket", str(_COBRA_SOCKET)],
+        cwd="/opt/cobra",
+        env=environment,
+    )
+    deadline = time.monotonic() + 300
+    while time.monotonic() < deadline:
+        if _COBRA_PROCESS.poll() is not None:
+            raise RuntimeError(
+                f"Cobra worker exited during startup with code {_COBRA_PROCESS.returncode}"
+            )
+        if _worker_ready():
+            return
+        time.sleep(0.5)
+    _COBRA_PROCESS.terminate()
+    raise RuntimeError("Cobra worker startup timed out")
 
 
 class CobraColorize:
@@ -81,52 +125,40 @@ class CobraColorize:
         top_k: int,
         style: str,
     ):
-        # Cobra's upstream pipeline resolves prompt_tensor and other assets from
-        # the process working directory. Keep this global cwd change serialized so
-        # parallel ComfyUI executions cannot observe a partially switched path.
         with _COBRA_EXECUTION_LOCK:
-            previous_cwd = os.getcwd()
-            os.chdir("/opt/cobra")
-            try:
-                cobra = _load_cobra_app()
-                page = _tensor_to_image(image)
-                references = [
-                    _tensor_to_image(reference_1),
-                    _tensor_to_image(reference_2),
-                    _tensor_to_image(reference_3),
-                ]
-                with tempfile.TemporaryDirectory(prefix="comfyui-cobra-") as temp_dir:
-                    files = []
-                    for index, reference in enumerate(references, 1):
-                        path = Path(temp_dir) / f"reference-{index:02d}.png"
-                        reference.save(path, format="PNG")
-                        files.append(SimpleNamespace(name=str(path)))
-                    (
-                        extracted,
-                        hint_color,
-                        hint_mask,
-                        query_origin,
-                        extracted_origin,
-                        resolution,
-                    ) = cobra.extract_sketch_line_image(page, style)
-                    gallery = cobra.colorize_image(
-                        extracted,
-                        files,
-                        resolution,
-                        seed,
-                        steps,
-                        top_k,
-                        hint_mask,
-                        hint_color,
-                        query_origin,
-                        extracted_origin,
-                    )
-            finally:
-                os.chdir(previous_cwd)
-        if not gallery:
-            raise RuntimeError("Cobra returned no image")
-        return (_image_to_tensor(ImageOps.exif_transpose(gallery[0])),)
+            _ensure_worker()
+            with tempfile.TemporaryDirectory(prefix="comfyui-cobra-") as temp_dir:
+                temp_root = Path(temp_dir)
+                image_path = temp_root / "input.png"
+                output_path = temp_root / "output.png"
+                _tensor_to_image(image).save(image_path, format="PNG")
+                reference_paths = []
+                for index, reference in enumerate(
+                    (reference_1, reference_2, reference_3),
+                    1,
+                ):
+                    path = temp_root / f"reference-{index:02d}.png"
+                    _tensor_to_image(reference).save(path, format="PNG")
+                    reference_paths.append(str(path))
+                _request_worker(
+                    {
+                        "action": "colorize",
+                        "image": str(image_path),
+                        "references": reference_paths,
+                        "output": str(output_path),
+                        "seed": seed,
+                        "steps": steps,
+                        "top_k": top_k,
+                        "style": style,
+                    },
+                    900,
+                )
+                if not output_path.is_file():
+                    raise RuntimeError("Cobra worker did not create an output image")
+                with Image.open(output_path) as generated:
+                    result = generated.convert("RGB").copy()
+        return (_image_to_tensor(result),)
 
 
 NODE_CLASS_MAPPINGS = {"CobraColorize": CobraColorize}
-NODE_DISPLAY_NAME_MAPPINGS = {"CobraColorize": "Cobra 多参考上色"}
+NODE_DISPLAY_NAME_MAPPINGS = {"CobraColorize": "Cobra multi-reference colorization"}

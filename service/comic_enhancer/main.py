@@ -49,6 +49,7 @@ from .references import (
 from .workflows import PresetWorkflowLoader
 
 logger = logging.getLogger(__name__)
+INTERNAL_ANALYZER_URL = "http://magiv2-analyzer:8770"
 
 
 def effective_analyzer_profile(profile: str | None) -> str | None:
@@ -89,10 +90,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         backend_options = {
             "base_url": settings.comfyui_url,
-            "reference_base_url": settings.comfyui_reference_url or None,
             "reference_enabled": settings.comfyui_reference_enabled,
             "reference_ready_file": settings.comfyui_reference_ready_file,
-            "cobra_base_url": settings.comfyui_cobra_url,
             "cobra_enabled": settings.comfyui_cobra_enabled,
             "cobra_workflow": settings.comfyui_workflow_cobra,
             "cobra_reference_limit": settings.cobra_reference_limit,
@@ -111,7 +110,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     analyses = PageAnalysisStore(settings.runtime_dir / "analysis")
     analyzer = (
         ChapterAnalyzerClient(
-            settings.analyzer_url,
+            INTERNAL_ANALYZER_URL,
             timeout_seconds=settings.analyzer_timeout_seconds,
         )
         if settings.analyzer_enabled

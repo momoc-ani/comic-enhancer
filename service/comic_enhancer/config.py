@@ -25,15 +25,12 @@ class Settings:
     prefetch_pages: int = 3
     max_parallel_inference: int = 1
     comfyui_url: str = "http://comfyui:8188"
-    comfyui_reference_url: str = ""
     comfyui_reference_enabled: bool = False
     comfyui_reference_ready_file: Path | None = None
     analyzer_enabled: bool = False
-    analyzer_url: str = "http://magiv2-analyzer:8770"
     analyzer_timeout_seconds: int = 300
     comfyui_timeout_seconds: int = 180
     comfyui_poll_interval_seconds: float = 0.25
-    comfyui_cobra_url: str = ""
     comfyui_cobra_enabled: bool = False
     comfyui_workflow_cobra: Path | None = None
     cobra_reference_limit: int = 3
@@ -71,6 +68,20 @@ def load_settings() -> Settings:
     values: dict[str, object] = {}
     if config_path.exists():
         values.update(json.loads(config_path.read_text(encoding="utf-8")))
+
+    # These endpoints belonged to the retired multi-service inference layout.
+    # All model workflows now share comfyui_url; MAGIv2 is an internal sidecar.
+    for field_name in (
+        "analyzer_url",
+        "cobra_url",
+        "comfyui_cobra_url",
+        "comfyui_reference_url",
+        "cobra_timeout_seconds",
+        "cobra_steps",
+        "cobra_top_k",
+        "cobra_style",
+    ):
+        values.pop(field_name, None)
 
     for field_name in (
         "adapter_index",
@@ -115,7 +126,6 @@ def load_settings() -> Settings:
         "COMIC_ENHANCER_MANGAUPDATES_API_TOKEN": ("mangaupdates_api_token", str),
         "COMIC_ENHANCER_RUNTIME_DIR": ("runtime_dir", Path),
         "COMIC_ENHANCER_COMFYUI_URL": ("comfyui_url", str),
-        "COMIC_ENHANCER_COMFYUI_REFERENCE_URL": ("comfyui_reference_url", str),
         "COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED": (
             "comfyui_reference_enabled",
             lambda value: value.lower() in {"1", "true", "yes", "on"},
@@ -128,10 +138,8 @@ def load_settings() -> Settings:
             "analyzer_enabled",
             lambda value: value.lower() in {"1", "true", "yes", "on"},
         ),
-        "COMIC_ENHANCER_ANALYZER_URL": ("analyzer_url", str),
         "COMIC_ENHANCER_ANALYZER_TIMEOUT": ("analyzer_timeout_seconds", int),
         "COMIC_ENHANCER_COMFYUI_TIMEOUT": ("comfyui_timeout_seconds", int),
-        "COMIC_ENHANCER_COMFYUI_COBRA_URL": ("comfyui_cobra_url", str),
         "COMIC_ENHANCER_COMFYUI_COBRA_ENABLED": (
             "comfyui_cobra_enabled",
             lambda value: value.lower() in {"1", "true", "yes", "on"},

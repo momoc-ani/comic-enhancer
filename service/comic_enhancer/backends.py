@@ -146,19 +146,16 @@ class ComfyUIBackend(InferenceBackend):
         self,
         *,
         base_url: str,
-        reference_base_url: str | None,
         timeout_seconds: int,
         poll_interval_seconds: float,
         workflow_loader: WorkflowLoader,
         reference_enabled: bool = False,
         reference_ready_file: Path | None = None,
-        cobra_base_url: str | None = None,
         cobra_enabled: bool = False,
         cobra_workflow: Path | None = None,
         cobra_reference_limit: int = 3,
     ):
         self.base_url = base_url.rstrip("/")
-        self.reference_base_url = (reference_base_url or base_url).rstrip("/")
         self.reference_enabled = reference_enabled
         self.reference_ready_file = reference_ready_file
         self.timeout_seconds = timeout_seconds
@@ -166,8 +163,7 @@ class ComfyUIBackend(InferenceBackend):
         self.workflow_loader = workflow_loader
         self._reference_ready_cached_until = 0.0
         self._reference_ready_cached_value = False
-        self.cobra_base_url = (cobra_base_url or "").rstrip("/")
-        self.cobra_enabled = cobra_enabled and bool(self.cobra_base_url)
+        self.cobra_enabled = cobra_enabled
         self.cobra_workflow = cobra_workflow
         self.cobra_reference_limit = max(1, min(12, cobra_reference_limit))
         self._cobra_ready_cached_until = 0.0
@@ -192,7 +188,7 @@ class ComfyUIBackend(InferenceBackend):
         if now < self._cobra_ready_cached_until:
             return self._cobra_ready_cached_value
         try:
-            response = httpx.get(f"{self.cobra_base_url}/system_stats", timeout=2)
+            response = httpx.get(f"{self.base_url}/system_stats", timeout=2)
             ready = response.status_code == 200
         except httpx.HTTPError:
             ready = False
@@ -389,7 +385,7 @@ class ComfyUIBackend(InferenceBackend):
         workflow_template: dict,
     ) -> Image.Image:
         workflow = json.loads(json.dumps(workflow_template))
-        with httpx.Client(base_url=self.cobra_base_url, timeout=self.timeout_seconds) as client:
+        with httpx.Client(base_url=self.base_url, timeout=self.timeout_seconds) as client:
             input_images = {
                 "INPUT_IMAGE": self._upload(client, image_bytes, "page"),
             }
@@ -498,7 +494,7 @@ class ComfyUIBackend(InferenceBackend):
         processed_panel_indexes: set[int] = set()
 
         with httpx.Client(
-            base_url=self.reference_base_url,
+            base_url=self.base_url,
             timeout=self.timeout_seconds,
         ) as client:
             for panel in assets.analysis.panels:
@@ -757,7 +753,7 @@ class ComfyUIBackend(InferenceBackend):
             return self._reference_ready_cached_value
         try:
             response = httpx.get(
-                f"{self.reference_base_url}/system_stats",
+                f"{self.base_url}/system_stats",
                 timeout=1,
             )
             ready = response.status_code == 200

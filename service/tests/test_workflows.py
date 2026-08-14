@@ -133,7 +133,6 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
     )
     backend = ComfyUIBackend(
         base_url="http://comfy",
-        reference_base_url=None,
         timeout_seconds=10,
         poll_interval_seconds=0.01,
         workflow_loader=PresetWorkflowLoader(
@@ -142,7 +141,6 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
             workflow_root=tmp_path,
             cobra_workflow=cobra,
         ),
-        cobra_base_url="http://cobra",
         cobra_enabled=True,
         cobra_workflow=cobra,
         cobra_reference_limit=3,
@@ -222,7 +220,7 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
 
     assert outcome.model_profile == "cobra"
     assert outcome.reference_applied is True
-    assert captured["base_url"] == "http://cobra"
+    assert captured["base_url"] == "http://comfy"
     assert captured["path"] == "/prompt"
     assert captured["prompt"]["5"]["inputs"]["reference_1"] == ["2", 0]
     with Image.open(output_path) as result:
@@ -486,7 +484,6 @@ def test_reference_profile_requires_ready_marker(tmp_path, monkeypatch):
     )
     backend = ComfyUIBackend(
         base_url="http://fast",
-        reference_base_url="http://reference",
         timeout_seconds=10,
         poll_interval_seconds=0.01,
         workflow_loader=loader,
@@ -519,7 +516,6 @@ def test_quality_backend_does_not_probe_reference_profile(tmp_path, monkeypatch)
     )
     backend = ComfyUIBackend(
         base_url="http://main",
-        reference_base_url="http://reference",
         timeout_seconds=10,
         poll_interval_seconds=0.01,
         workflow_loader=loader,
@@ -555,7 +551,6 @@ def test_reference_cache_revision_includes_processing_algorithm(tmp_path, monkey
     )
     backend = ComfyUIBackend(
         base_url="http://main",
-        reference_base_url="http://reference",
         timeout_seconds=10,
         poll_interval_seconds=0.01,
         workflow_loader=loader,
@@ -600,7 +595,6 @@ def test_rejected_character_never_selects_reference_workflow(tmp_path, monkeypat
     )
     backend = ComfyUIBackend(
         base_url="http://fast",
-        reference_base_url="http://reference",
         timeout_seconds=10,
         poll_interval_seconds=0.01,
         workflow_loader=loader,
@@ -638,7 +632,6 @@ def test_reference_failure_falls_back_to_selected_quality_workflow(tmp_path, mon
     )
     backend = ComfyUIBackend(
         base_url="http://main",
-        reference_base_url="http://reference",
         timeout_seconds=10,
         poll_interval_seconds=0.01,
         workflow_loader=loader,
@@ -725,7 +718,6 @@ def test_reference_workflow_overlays_characters_on_quality_base(tmp_path, monkey
     )
     backend = ComfyUIBackend(
         base_url="http://main",
-        reference_base_url="http://reference",
         timeout_seconds=10,
         poll_interval_seconds=0.01,
         workflow_loader=loader,

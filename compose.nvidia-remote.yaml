@@ -1,22 +1,21 @@
 services:
-  comfyui-cobra:
-    profiles: ["candidate-cobra"]
+  comfyui:
     build:
       context: .
-      dockerfile: Dockerfile.cobra-comfyui
-    container_name: comic-enhancer-comfyui-cobra
+      dockerfile: Dockerfile.comfyui
+    container_name: comic-enhancer-comfyui
     restart: unless-stopped
     gpus: all
     ipc: host
     environment:
-      COBRA_MODEL_PATH: /models/cobra/JunhaoZhuang-Cobra
-      COBRA_PIXART_MODEL_PATH: /models/cobra/PixArt-XL-2-1024-MS
+      COBRA_MODEL_PATH: /root/sd/ComfyUI/models/cobra/JunhaoZhuang-Cobra
+      COBRA_PIXART_MODEL_PATH: /root/sd/ComfyUI/models/cobra/PixArt-XL-2-1024-MS
       HF_ENDPOINT: https://hf-mirror.com
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     ports:
       - "192.168.38.226:8192:8188"
     volumes:
-      - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/models:ro
+      - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/root/sd/ComfyUI/models:ro
 
   magiv2-analyzer:
     build:
@@ -35,25 +34,10 @@ services:
       MAGIV2_SAM_MODEL_TYPE: vit_b
       MAGIV2_SAM_MIN_SCORE: "0.85"
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-    ports:
-      - "127.0.0.1:8770:8770"
+    expose:
+      - "8770"
     volumes:
       - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/models
-
-  comfyui-manganinja:
-    build:
-      context: .
-      dockerfile: Dockerfile.manganinja
-    container_name: comic-enhancer-comfyui-manganinja
-    restart: unless-stopped
-    gpus: all
-    ipc: host
-    environment:
-      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
-    ports:
-      - "127.0.0.1:8191:8188"
-    volumes:
-      - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/root/sd/ComfyUI/models
 
   comic-enhancer-api:
     build:
@@ -67,14 +51,11 @@ services:
       COMIC_ENHANCER_BACKEND: comfyui
       COMIC_ENHANCER_TOKEN: ${COMIC_ENHANCER_TOKEN:?请在.env中设置COMIC_ENHANCER_TOKEN}
       COMIC_ENHANCER_ADMIN_TOKEN: ${COMIC_ENHANCER_ADMIN_TOKEN:?请在.env中设置管理Token}
-      COMIC_ENHANCER_COMFYUI_URL: ${COMIC_ENHANCER_COMFYUI_URL:-http://host.docker.internal:8190}
-      COMIC_ENHANCER_COMFYUI_REFERENCE_URL: ${COMIC_ENHANCER_COMFYUI_REFERENCE_URL:-http://comfyui-manganinja:8188}
+      COMIC_ENHANCER_COMFYUI_URL: http://comfyui:8188
       COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED: ${COMIC_ENHANCER_COMFYUI_REFERENCE_ENABLED:-true}
       COMIC_ENHANCER_COMFYUI_REFERENCE_READY_FILE: /models/MangaNinjia/MangaNinjia.ready
       COMIC_ENHANCER_ANALYZER_ENABLED: ${COMIC_ENHANCER_ANALYZER_ENABLED:-true}
-      COMIC_ENHANCER_ANALYZER_URL: http://magiv2-analyzer:8770
       COMIC_ENHANCER_ANALYZER_TIMEOUT: 300
-      COMIC_ENHANCER_COMFYUI_COBRA_URL: ${COMIC_ENHANCER_COMFYUI_COBRA_URL:-http://comfyui-cobra:8188}
       COMIC_ENHANCER_COMFYUI_COBRA_ENABLED: ${COMIC_ENHANCER_COMFYUI_COBRA_ENABLED:-false}
       COMIC_ENHANCER_WORKFLOW_COBRA: ${COMIC_ENHANCER_WORKFLOW_COBRA:-/app/workflows/cobra-colorize.json}
       COMIC_ENHANCER_COBRA_REFERENCE_LIMIT: ${COMIC_ENHANCER_COBRA_REFERENCE_LIMIT:-3}

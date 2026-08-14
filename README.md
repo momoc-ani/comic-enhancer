@@ -36,18 +36,17 @@ Mac / Chrome 插件
         v
 192.168.38.226:8765  漫画增强 API（唯一对外入口）
         |
-        +-- ComfyUI 8190：快速/质量工作流
-        +-- ComfyUI 8191：MangaNinja 实验工作流
-        +-- ComfyUI 8192：Cobra 实验工作流（局域网调试界面）
-        +-- MAGIv2：人物分析内部服务
+        | 按处理档位选择预设工作流
+        v
+统一 ComfyUI 容器 8192（快速/质量/MangaNinja/Cobra）
         |
         v
-/data1/models/ComfyUI/models 统一模型挂载目录（RTX 4090）
+漫画增强 API：文字/墨线保护、缓存和鉴权返回
 ```
 
-插件只连接 `8765`；上面的 ComfyUI 和分析器都是 API 的内部执行组件，地址、工作流和模型由服务端配置，插件不需要也不能直接访问。
+插件只连接 `8765`。API 只维护一个 ComfyUI 地址，处理档位仅决定提交哪个完整工作流；MAGIv2 是不可从宿主机访问的内部预分析组件，不构成第二个增强入口。
 
-Cobra 的 ComfyUI 调试界面临时提供在 `http://192.168.38.226:8192/`，仅用于工作流检查；正式插件请求仍然必须走 `8765` API。
+统一 ComfyUI 调试界面提供在 `http://192.168.38.226:8192/`，仅用于检查快速、质量、MangaNinja 和 Cobra 工作流；正式插件请求仍然必须走 `8765` API。
 
 本次不使用 Mac 的 RX 6750 XT 推理。macOS 原生程序可以尝试 PyTorch MPS/Metal，但 Docker Desktop 运行的是 Linux 虚拟机，无法直通 macOS AMD 显卡，也不能提供 ROCm 所需的 `/dev/kfd`。
 
@@ -91,7 +90,7 @@ node --check extension/popup.js
 
 ## 远端 NVIDIA 部署
 
-详见 [docs/deployment.md](docs/deployment.md)。现有 4090 主机复用宿主机 `8190` 的 ComfyUI，不再启动第二个重型 GPU 容器：
+详见 [docs/deployment.md](docs/deployment.md)。项目使用一个统一 ComfyUI 容器执行全部增强工作流，不替换主机已有的其他 ComfyUI：
 
 ```bash
 cp .env.example .env

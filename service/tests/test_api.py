@@ -171,7 +171,6 @@ def test_capabilities_advertise_cobra_only_when_candidate_is_ready(tmp_path, mon
         runtime_dir=tmp_path / "runtime",
         adapter_index=tmp_path / "missing.json",
         backend="comfyui",
-        comfyui_cobra_url="http://cobra",
         comfyui_cobra_enabled=True,
         comfyui_workflow_cobra=cobra_workflow,
     )
@@ -249,6 +248,10 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     config.write_text(
         '{"runtime_dir":"runtime","adapter_index":"index.json",'
         '"adapter_weights_root":"weights",'
+        '"analyzer_url":"http://127.0.0.1:8770",'
+        '"cobra_url":"http://127.0.0.1:8780",'
+        '"comfyui_reference_url":"http://127.0.0.1:8191",'
+        '"comfyui_cobra_url":"http://127.0.0.1:8192",'
         '"comfyui_reference_enabled":true,'
         '"comfyui_workflow_fast":"fast.json",'
         '"comfyui_workflow_quality":"quality.json",'
