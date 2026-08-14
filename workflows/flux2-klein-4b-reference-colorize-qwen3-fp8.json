@@ -193,10 +193,73 @@
     "inputs": {"samples": ["32", 0], "vae": ["7", 0]},
     "class_type": "VAEDecode"
   },
+  "35": {
+    "inputs": {
+      "image_a": ["10", 0],
+      "image_b": ["33", 0],
+      "mode": "color",
+      "blend_percentage": 1.0
+    },
+    "class_type": "Image Blending Mode",
+    "_meta": {"title": "Restore Original Luminance"}
+  },
+  "36": {
+    "inputs": {"image": ["10", 0], "channel": "red"},
+    "class_type": "ImageToMask",
+    "_meta": {"title": "Original Dark Pixel Mask"}
+  },
+  "37": {
+    "inputs": {"mask": ["36", 0]},
+    "class_type": "InvertMask"
+  },
+  "38": {
+    "inputs": {"mask": ["37", 0], "value": 0.35},
+    "class_type": "ThresholdMask",
+    "_meta": {"title": "Protect Text and Ink"}
+  },
+  "39": {
+    "inputs": {
+      "mask": ["38", 0],
+      "expand": 1,
+      "tapered_corners": false
+    },
+    "class_type": "GrowMask"
+  },
+  "40": {
+    "inputs": {
+      "destination": ["35", 0],
+      "source": ["10", 0],
+      "x": 0,
+      "y": 0,
+      "resize_source": false,
+      "mask": ["39", 0]
+    },
+    "class_type": "ImageCompositeMasked",
+    "_meta": {"title": "Restore Original Text and Ink"}
+  },
+  "41": {
+    "inputs": {"model_name": "RealESRGAN_x4plus_anime_6B.pth"},
+    "class_type": "UpscaleModelLoader",
+    "_meta": {"title": "Anime 6B Final Upscaler"}
+  },
+  "42": {
+    "inputs": {"upscale_model": ["41", 0], "image": ["40", 0]},
+    "class_type": "ImageUpscaleWithModel",
+    "_meta": {"title": "Upscale Final Colorized Page 4x"}
+  },
+  "43": {
+    "inputs": {
+      "image": ["42", 0],
+      "upscale_method": "lanczos",
+      "scale_by": 0.5
+    },
+    "class_type": "ImageScaleBy",
+    "_meta": {"title": "Final 2x Output"}
+  },
   "34": {
     "inputs": {
       "filename_prefix": "comic-enhancer/flux2-klein-4b-qwen3-fp8",
-      "images": ["33", 0]
+      "images": ["43", 0]
     },
     "class_type": "SaveImage",
     "_meta": {"title": "OUTPUT_IMAGE"}

@@ -23,7 +23,8 @@ from .workflows import WorkflowLoader
 
 
 logger = logging.getLogger(__name__)
-FLUX2_PROCESSING_REVISION = "flux2-comfyui-raw-output-v8"
+FLUX2_PROCESSING_REVISION = "flux2-comfyui-text-protect-anime6b-v9"
+FLUX2_OUTPUT_SCALE = 2
 
 
 class InferenceBackend(ABC):
@@ -619,10 +620,12 @@ class ComfyUIBackend(InferenceBackend):
             references,
             loaded_workflow.prompt,
         )
-        generated = self._restore_geometry(assets.image_bytes, generated)
-        # FLUX.2's ComfyUI output is the contract for this tier. Do not merge
-        # source luminance/chroma here: that would make the browser result look
-        # different from the ComfyUI preview and can introduce edge artifacts.
+        generated = self._restore_geometry(
+            assets.image_bytes,
+            generated,
+            output_scale=FLUX2_OUTPUT_SCALE,
+        )
+        # 工作流负责文字保护和 Anime 6B 最终超分，API 只统一原图比例与精确 2 倍尺寸。
         self._save_output(generated, output_path)
         return InferenceOutcome(
             adapter_applied=False,
@@ -892,9 +895,15 @@ class ComfyUIBackend(InferenceBackend):
         canvas.save(output, format="PNG", optimize=True)
         return output.getvalue()
 
-    # 方法说明：恢复生成图与原图一致的宽高比例。
+    # 方法说明：恢复生成图与原图一致的宽高比例，并按指定倍率输出。
     @staticmethod
-    def _restore_geometry(source_bytes: bytes, generated: Image.Image) -> Image.Image:
+    def _restore_geometry(
+        source_bytes: bytes,
+        generated: Image.Image,
+        output_scale: int = 1,
+    ) -> Image.Image:
+        if output_scale < 1:
+            raise ValueError("output_scale must be at least 1")
         with Image.open(BytesIO(source_bytes)) as source_file:
             source = ImageOps.exif_transpose(source_file)
             source_size = source.size
@@ -915,7 +924,11 @@ class ComfyUIBackend(InferenceBackend):
             )
             top = (generated.height - content_height) // 2
             generated = generated.crop((0, top, generated.width, top + content_height))
-        return generated.resize(source_size, Image.Resampling.LANCZOS)
+        output_size = (
+            source_width * output_scale,
+            source_height * output_scale,
+        )
+        return generated.resize(output_size, Image.Resampling.LANCZOS)
 
     # 方法说明：轮询 ComfyUI 历史记录并下载输出。
     def _wait_for_output(

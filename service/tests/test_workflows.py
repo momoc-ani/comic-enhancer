@@ -200,8 +200,8 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
         assert result.size == source.size
 
 
-# 方法说明：验证 FLUX.2 使用三张参考图并恢复原图尺寸。
-def test_flux2_backend_uses_three_references_and_restores_source_size(
+# 方法说明：验证 FLUX.2 使用三张参考图并精确恢复为原图两倍尺寸。
+def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
     tmp_path, monkeypatch
 ):
     fast = tmp_path / "fast.json"
@@ -275,10 +275,9 @@ def test_flux2_backend_uses_three_references_and_restores_source_size(
         assets,
     )
     with Image.open(output_path) as result:
-        assert result.size == source.size
-        # The FLUX.2 tier exposes the ComfyUI image itself. A source-structure
-        # merge would turn this generated color back into source white.
-        pixel = result.getpixel((4, 6))
+        assert result.size == (source.width * 2, source.height * 2)
+        # 后端只规范尺寸，不应再次混合原图而破坏 ComfyUI 工作流的最终颜色。
+        pixel = result.getpixel((8, 12))
         assert pixel[0] > 180
         assert pixel[2] > 90
 
@@ -416,6 +415,32 @@ def test_flux2_candidate_workflow_has_concrete_four_step_reference_contract():
     assert workflow["28"]["inputs"]["steps"] == 4
     assert workflow["29"]["inputs"]["cfg"] == 1.0
     assert outputs == ("34",)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "flux2-klein-4b-reference-colorize.json",
+        "flux2-klein-4b-reference-colorize-qwen3-fp8.json",
+    ],
+)
+# 方法说明：验证两个 FLUX.2 工作流先保护文字，再对最终结果执行 Anime 6B 超分。
+def test_shipped_flux2_workflows_protect_text_then_upscale_final_result(name):
+    workflow = json.loads(
+        (PROJECT_ROOT / "workflows" / name).read_text(encoding="utf-8")
+    )
+
+    assert workflow["35"]["class_type"] == "Image Blending Mode"
+    assert workflow["35"]["inputs"]["mode"] == "color"
+    assert workflow["38"]["class_type"] == "ThresholdMask"
+    assert workflow["40"]["class_type"] == "ImageCompositeMasked"
+    assert workflow["41"]["inputs"]["model_name"] == (
+        "RealESRGAN_x4plus_anime_6B.pth"
+    )
+    assert workflow["42"]["class_type"] == "ImageUpscaleWithModel"
+    assert workflow["42"]["inputs"]["image"] == ["40", 0]
+    assert workflow["43"]["inputs"]["scale_by"] == 0.5
+    assert workflow["34"]["inputs"]["images"] == ["43", 0]
 
 
 # 方法说明：验证适配器工作流路径不能逃逸配置根目录。

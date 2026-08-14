@@ -117,6 +117,7 @@ def test_geometry_round_trip_preserves_landscape_ratio():
     assert restored.size == source.size
 
 
+# 方法说明：验证竖图按生成图高度居中裁剪后恢复原始比例。
 def test_restore_geometry_uses_generated_height_for_portrait_crop():
     source = Image.new("RGB", (100, 200), "white")
     generated = Image.new("RGB", (140, 200), "white")
@@ -131,6 +132,7 @@ def test_restore_geometry_uses_generated_height_for_portrait_crop():
     assert restored.getpixel((99, 100))[0] > 115
 
 
+# 方法说明：验证横图按生成图宽度居中裁剪后恢复原始比例。
 def test_restore_geometry_uses_generated_width_for_landscape_crop():
     source = Image.new("RGB", (200, 100), "white")
     generated = Image.new("RGB", (200, 140), "white")
@@ -143,3 +145,18 @@ def test_restore_geometry_uses_generated_width_for_landscape_crop():
     assert restored.size == source.size
     assert restored.getpixel((100, 0))[1] < 25
     assert restored.getpixel((100, 99))[1] > 115
+
+
+# 方法说明：验证几何恢复可精确输出原图两倍尺寸且不改变比例。
+def test_restore_geometry_can_return_exact_two_x_size_without_ratio_drift():
+    source = Image.new("RGB", (1124, 1600), "white")
+    generated = Image.new("RGB", (784, 1120), "blue")
+
+    restored = ComfyUIBackend._restore_geometry(
+        image_bytes(source),
+        generated,
+        output_scale=2,
+    )
+
+    assert restored.size == (2248, 3200)
+    assert restored.width / restored.height == source.width / source.height
