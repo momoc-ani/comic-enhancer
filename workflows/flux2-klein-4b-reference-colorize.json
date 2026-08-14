@@ -146,21 +146,21 @@
     "inputs": {"image": ["10", 0]},
     "class_type": "GetImageSize"
   },
-  "27": {
-    "inputs": {
-      "width": ["26", 0],
-      "height": ["26", 1],
-      "batch_size": 1
-    },
-    "class_type": "EmptyFlux2LatentImage"
-  },
   "28": {
     "inputs": {
-      "steps": 4,
+      "steps": 8,
       "width": ["26", 0],
       "height": ["26", 1]
     },
     "class_type": "Flux2Scheduler"
+  },
+  "46": {
+    "inputs": {
+      "sigmas": ["28", 0],
+      "denoise": 0.85
+    },
+    "class_type": "SplitSigmasDenoise",
+    "_meta": {"title": "Source-Preserving 85 Percent Denoise"}
   },
   "29": {
     "inputs": {
@@ -184,8 +184,8 @@
       "noise": ["31", 0],
       "guider": ["29", 0],
       "sampler": ["30", 0],
-      "sigmas": ["28", 0],
-      "latent_image": ["27", 0]
+      "sigmas": ["46", 1],
+      "latent_image": ["11", 0]
     },
     "class_type": "SamplerCustomAdvanced"
   },
@@ -227,29 +227,19 @@
     "class_type": "ImageCompositeMasked",
     "_meta": {"title": "Restore Narrow Original Text and Ink"}
   },
-  "41": {
-    "inputs": {"model_name": "RealESRGAN_x4plus_anime_6B.pth"},
-    "class_type": "UpscaleModelLoader",
-    "_meta": {"title": "Anime 6B Final Upscaler"}
-  },
-  "42": {
-    "inputs": {"upscale_model": ["41", 0], "image": ["40", 0]},
-    "class_type": "ImageUpscaleWithModel",
-    "_meta": {"title": "Upscale Final Colorized Page 4x"}
-  },
-  "43": {
+  "44": {
     "inputs": {
-      "image": ["42", 0],
+      "image": ["40", 0],
       "upscale_method": "lanczos",
-      "scale_by": 0.5
+      "scale_by": 2.0
     },
     "class_type": "ImageScaleBy",
-    "_meta": {"title": "Final 2x Output"}
+    "_meta": {"title": "Structure-Safe 2x Base"}
   },
   "34": {
     "inputs": {
       "filename_prefix": "comic-enhancer/flux2-klein-4b",
-      "images": ["43", 0]
+      "images": ["44", 0]
     },
     "class_type": "SaveImage",
     "_meta": {"title": "OUTPUT_IMAGE"}

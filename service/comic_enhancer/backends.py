@@ -23,7 +23,7 @@ from .workflows import WorkflowLoader
 
 
 logger = logging.getLogger(__name__)
-FLUX2_PROCESSING_REVISION = "flux2-comfyui-raw-narrow-ink-anime6b-v10"
+FLUX2_PROCESSING_REVISION = "flux2-source-latent-8step-denoise85-lanczos-v11"
 FLUX2_OUTPUT_SCALE = 2
 
 
@@ -625,7 +625,7 @@ class ComfyUIBackend(InferenceBackend):
             generated,
             output_scale=FLUX2_OUTPUT_SCALE,
         )
-        # 工作流负责窄文字墨线保护和 Anime 6B 最终超分，API 只统一比例与精确 2 倍尺寸。
+        # 工作流负责源图 latent 结构约束、窄文字墨线保护和无生成式 2 倍缩放；API 只兜底统一尺寸。
         self._save_output(generated, output_path)
         return InferenceOutcome(
             adapter_applied=False,

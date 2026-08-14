@@ -394,8 +394,8 @@ def test_bind_io_uses_titles_for_reference_workflow():
     assert workflow["2"]["inputs"]["image"] == "uploaded/cover.png"
 
 
-# 方法说明：验证 FLUX.2 候选工作流声明完整四步参考契约。
-def test_flux2_candidate_workflow_has_concrete_four_step_reference_contract():
+# 方法说明：验证 FLUX.2 候选工作流声明完整的源图 latent 八步参考契约。
+def test_flux2_candidate_workflow_has_source_preserving_reference_contract():
     path = PROJECT_ROOT / "workflows" / "flux2-klein-4b-reference-colorize.json"
     workflow = json.loads(path.read_text(encoding="utf-8"))
 
@@ -412,7 +412,15 @@ def test_flux2_candidate_workflow_has_concrete_four_step_reference_contract():
 
     assert workflow["5"]["inputs"]["unet_name"] == "flux-2-klein-4b-fp8.safetensors"
     assert workflow["6"]["inputs"]["clip_name"] == "qwen_3_4b.safetensors"
-    assert workflow["28"]["inputs"]["steps"] == 4
+    assert workflow["28"]["inputs"]["steps"] == 8
+    assert workflow["46"]["class_type"] == "SplitSigmasDenoise"
+    assert workflow["46"]["inputs"] == {"sigmas": ["28", 0], "denoise": 0.85}
+    assert workflow["32"]["inputs"]["sigmas"] == ["46", 1]
+    assert workflow["32"]["inputs"]["latent_image"] == ["11", 0]
+    assert not any(
+        node["class_type"] == "EmptyFlux2LatentImage"
+        for node in workflow.values()
+    )
     assert workflow["29"]["inputs"]["cfg"] == 1.0
     assert outputs == ("34",)
 
@@ -424,8 +432,8 @@ def test_flux2_candidate_workflow_has_concrete_four_step_reference_contract():
         "flux2-klein-4b-reference-colorize-qwen3-fp8.json",
     ],
 )
-# 方法说明：验证两个 FLUX.2 工作流先保护文字，再对最终结果执行 Anime 6B 超分。
-def test_shipped_flux2_workflows_protect_text_then_upscale_final_result(name):
+# 方法说明：验证两个 FLUX.2 工作流保护文字和结构，并仅执行无生成式 2 倍缩放。
+def test_shipped_flux2_workflows_protect_text_and_structure(name):
     workflow = json.loads(
         (PROJECT_ROOT / "workflows" / name).read_text(encoding="utf-8")
     )
@@ -441,13 +449,17 @@ def test_shipped_flux2_workflows_protect_text_then_upscale_final_result(name):
     assert workflow["39"]["inputs"]["expand"] == 0
     assert workflow["40"]["class_type"] == "ImageCompositeMasked"
     assert workflow["40"]["inputs"]["destination"] == ["33", 0]
-    assert workflow["41"]["inputs"]["model_name"] == (
-        "RealESRGAN_x4plus_anime_6B.pth"
+    assert workflow["44"]["class_type"] == "ImageScaleBy"
+    assert workflow["44"]["inputs"] == {
+        "image": ["40", 0],
+        "upscale_method": "lanczos",
+        "scale_by": 2.0,
+    }
+    assert not any(
+        node["class_type"] in {"UpscaleModelLoader", "ImageUpscaleWithModel"}
+        for node in workflow.values()
     )
-    assert workflow["42"]["class_type"] == "ImageUpscaleWithModel"
-    assert workflow["42"]["inputs"]["image"] == ["40", 0]
-    assert workflow["43"]["inputs"]["scale_by"] == 0.5
-    assert workflow["34"]["inputs"]["images"] == ["43", 0]
+    assert workflow["34"]["inputs"]["images"] == ["44", 0]
 
 
 # 方法说明：验证适配器工作流路径不能逃逸配置根目录。
