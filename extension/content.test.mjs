@@ -84,7 +84,7 @@ test("result overlay sizing overrides generic page image sizing", () => {
   assert.match(css, /visibility:\s*hidden/);
   assert.match(css, /width:\s*100%\s*!important/);
   assert.match(css, /height:\s*100%\s*!important/);
-  assert.match(css, /object-fit:\s*contain/);
+  assert.match(css, /object-fit:\s*contain\s*!important/);
   assert.doesNotMatch(css, /object-fit:\s*fill/);
 });
 
