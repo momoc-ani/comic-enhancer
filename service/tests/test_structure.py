@@ -59,6 +59,24 @@ def test_reference_chroma_is_limited_but_anime_color_remains_visible():
     assert pixel[2] > pixel[0] + 35
 
 
+def test_cobra_structure_preserves_dark_text_without_flattening_color():
+    source = Image.new("RGB", (8, 8), (210, 210, 210))
+    for y in range(2, 6):
+        source.putpixel((3, y), (0, 0, 0))
+    generated = Image.new("RGB", (16, 16), (230, 70, 120))
+
+    result = ComfyUIBackend._protect_cobra_structure(
+        image_bytes(source),
+        generated,
+    )
+
+    text_pixel = result.getpixel((6, 6))
+    colored = result.getpixel((0, 0))
+    assert max(text_pixel) <= 16
+    assert colored[0] > colored[2] - 80
+    assert max(colored) - min(colored) > 50
+
+
 def test_manganinja_geometry_round_trip_preserves_portrait_ratio():
     source = Image.new("RGB", (100, 200), "red")
 

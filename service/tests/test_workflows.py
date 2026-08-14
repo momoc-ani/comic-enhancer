@@ -1,8 +1,10 @@
 import json
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
 from comic_enhancer.backends import (
     REFERENCE_PROCESSING_REVISION,
@@ -92,6 +94,88 @@ def reference_assets():
         ),
         character_references={"bangumi:1": b"reference"},
     )
+
+
+def png_bytes(image: Image.Image) -> bytes:
+    stream = BytesIO()
+    image.save(stream, format="PNG")
+    return stream.getvalue()
+
+
+def test_cobra_backend_posts_multiple_references_and_restores_geometry(
+    tmp_path, monkeypatch
+):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        reference_base_url=None,
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=PresetWorkflowLoader(
+            fast_workflow=fast,
+            quality_workflow=quality,
+            workflow_root=tmp_path,
+        ),
+        cobra_url="http://cobra",
+        cobra_enabled=True,
+        cobra_reference_limit=3,
+    )
+    monkeypatch.setattr(backend, "cobra_profile_ready", lambda: True)
+    generated = png_bytes(Image.new("RGB", (16, 24), (230, 70, 120)))
+    captured = {}
+
+    class FakeResponse:
+        content = generated
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, *, base_url, timeout):
+            captured["base_url"] = base_url
+            captured["timeout"] = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def post(self, path, **kwargs):
+            captured["path"] = path
+            captured["files"] = kwargs["files"]
+            captured["data"] = kwargs["data"]
+            return FakeResponse()
+
+    monkeypatch.setattr("comic_enhancer.backends.httpx.Client", FakeClient)
+    source = Image.new("RGB", (8, 12), "white")
+    assets = InferenceAssets(
+        image_bytes=png_bytes(source),
+        character_references={
+            "character-a": png_bytes(Image.new("RGB", (4, 6), "red")),
+            "character-b": png_bytes(Image.new("RGB", (4, 6), "blue")),
+        },
+    )
+    output_path = tmp_path / "cobra.webp"
+
+    outcome = backend.process(
+        assets,
+        output_path,
+        ProcessOptions(mode="cobra"),
+        resolved(),
+    )
+
+    assert outcome.model_profile == "cobra"
+    assert outcome.reference_applied is True
+    assert captured["base_url"] == "http://cobra"
+    assert captured["path"] == "/v1/colorize"
+    assert len([item for item in captured["files"] if item[0] == "references"]) == 2
+    assert captured["data"]["steps"] == "10"
+    with Image.open(output_path) as result:
+        assert result.size == source.size
 
 
 def test_loader_selects_mode_and_complete_adapter_workflow(tmp_path):

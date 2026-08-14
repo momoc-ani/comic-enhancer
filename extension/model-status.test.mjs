@@ -136,6 +136,7 @@ test("shows experimental mode availability from backend capabilities", () => {
   const actual = describeModelTier(cobraSettings, execution, {
     ready: true,
     processing_modes: ["fast", "quality", "cobra"],
+    cobra_available: true,
   });
   assert.equal(actual.title, "Cobra 档 · 基础模型");
   assert.match(actual.detail, /Cobra 多参考上色/);

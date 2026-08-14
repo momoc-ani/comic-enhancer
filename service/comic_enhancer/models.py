@@ -9,6 +9,7 @@ class ProcessingMode(StrEnum):
     FAST = "fast"
     QUALITY = "quality"
     MANGANINJA = "manganinja"
+    COBRA = "cobra"
 
 
 class AdapterSource(StrEnum):
@@ -122,6 +123,7 @@ class Capabilities(BaseModel):
     model_profiles: list[str] = Field(default_factory=list)
     processing_modes: list[ProcessingMode] = Field(default_factory=list)
     manganinja_available: bool = False
+    cobra_available: bool = False
     prefetch_pages: int
     max_parallel_inference: int
 

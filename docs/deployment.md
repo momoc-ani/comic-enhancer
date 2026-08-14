@@ -54,7 +54,7 @@ CANDIDATE_DOWNLOAD_CONNECTIONS=4 \
 - Cobra PixArt 基座：`cobra/PixArt-XL-2-1024-MS`
 - Cobra 复用 T5：`cobra/PixArt-XL-2-1024-MS/text_encoder/model.safetensors -> ../../../clip/t5xxl_fp16.safetensors`
 
-Cobra 通过 Compose 的 `candidate-cobra` profile 独立监听 `127.0.0.1:8780`，不会随默认服务启动。候选验收期间应先释放 MangaNinja 和 MAGIv2 的常驻显存，再分别执行 Cobra 与 FLUX.2 Klein 的冷启动、热模型和同页参考图基准；没有真实输出和显存峰值证据前，不把候选加入浏览器插件的正式档位。
+Cobra 通过 Compose 的 `candidate-cobra` profile 独立监听 `127.0.0.1:8780`，不会随默认服务启动。候选验收期间应先释放 MangaNinja 和 MAGIv2 的常驻显存，再分别执行 Cobra 与 FLUX.2 Klein 的冷启动、热模型和同页参考图基准；没有真实输出和显存峰值证据前，不把候选加入浏览器插件的正式档位。要在插件中试用 Cobra，API 容器设置 `COMIC_ENHANCER_COBRA_URL=http://host.docker.internal:8780`、`COMIC_ENHANCER_COBRA_ENABLED=true` 后重建 API；插件只会在 `/v1/health` 返回就绪时显示该档位。
 
 未配置 Gitee 仓库和 Token 时保持 `COMIC_ENHANCER_GITEE_ENABLED=false`，基础上色和本地 LoRA 仍可使用。填写完整 Gitee 配置后再改为 `true` 并重建 API 容器。
 

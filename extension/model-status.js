@@ -39,7 +39,8 @@ export function describeModelTier(settings, execution, capabilities = null) {
     const unavailable = Boolean(
       capabilities &&
         ((Array.isArray(advertisedModes) && !advertisedModes.includes(mode)) ||
-          (mode === "manganinja" && !capabilities.manganinja_available)),
+          (mode === "manganinja" && capabilities.manganinja_available === false) ||
+          (mode === "cobra" && capabilities.cobra_available === false)),
     );
     return {
       title: configuredTitle,

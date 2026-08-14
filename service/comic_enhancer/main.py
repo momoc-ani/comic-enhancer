@@ -91,6 +91,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "reference_base_url": settings.comfyui_reference_url or None,
             "reference_enabled": settings.comfyui_reference_enabled,
             "reference_ready_file": settings.comfyui_reference_ready_file,
+            "cobra_url": settings.cobra_url,
+            "cobra_enabled": settings.cobra_enabled,
+            "cobra_timeout_seconds": settings.cobra_timeout_seconds,
+            "cobra_steps": settings.cobra_steps,
+            "cobra_top_k": settings.cobra_top_k,
+            "cobra_style": settings.cobra_style,
+            "cobra_reference_limit": settings.cobra_reference_limit,
             "timeout_seconds": settings.comfyui_timeout_seconds,
             "poll_interval_seconds": settings.comfyui_poll_interval_seconds,
             "workflow_loader": workflow_loader,
@@ -193,19 +200,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/v1/capabilities", response_model=Capabilities)
     async def capabilities(_: None = Depends(authorize)) -> Capabilities:
+        cobra_available = backend.cobra_profile_ready()
+        processing_modes = [
+            mode for mode in ProcessingMode
+            if mode != ProcessingMode.COBRA or cobra_available
+        ]
         return Capabilities(
             service_version=__version__,
             backend=backend.name,
             ready=backend.ready(),
             adapter_policy=["work", "generic", "none"],
             model_profiles=list(backend.model_profiles),
-            processing_modes=list(ProcessingMode),
+            processing_modes=processing_modes,
             manganinja_available=bool(
                 settings.comfyui_reference_enabled
                 and analyzer is not None
                 and analyzer.ready()
                 and backend.reference_profile_ready()
             ),
+            cobra_available=cobra_available,
             prefetch_pages=settings.prefetch_pages,
             max_parallel_inference=settings.max_parallel_inference,
         )
@@ -277,6 +290,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         )
                         if reference is not None:
                             character_references[reference_key] = reference
+        elif str(options.mode) == "cobra":
+            resolution = await asyncio.to_thread(metadata.resolve, work)
+            for entry, reference in (await _character_bank(resolution, work))[
+                : settings.cobra_reference_limit
+            ]:
+                character_references.setdefault(entry.character_id, reference)
         return await processor.process(
             image_bytes,
             None,
@@ -477,7 +496,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     async def _ensure_remote_adapter(work: WorkIdentity, options: ProcessOptions) -> None:
         required_workflow = (
-            "quality" if str(options.mode) == "manganinja" else str(options.mode)
+            "quality"
+            if str(options.mode) in {"manganinja", "cobra"}
+            else str(options.mode)
         )
         for _, manifest in registry.candidates(
             work,

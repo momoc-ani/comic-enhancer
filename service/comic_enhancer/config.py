@@ -33,6 +33,13 @@ class Settings:
     analyzer_timeout_seconds: int = 300
     comfyui_timeout_seconds: int = 180
     comfyui_poll_interval_seconds: float = 0.25
+    cobra_url: str = ""
+    cobra_enabled: bool = False
+    cobra_timeout_seconds: int = 120
+    cobra_steps: int = 10
+    cobra_top_k: int = 3
+    cobra_style: str = "line + shadow"
+    cobra_reference_limit: int = 3
     comfyui_workflow_fast: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json"
     comfyui_workflow_quality: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json"
     comfyui_workflow_reference_quality: Path | None = None
@@ -126,6 +133,19 @@ def load_settings() -> Settings:
         "COMIC_ENHANCER_ANALYZER_URL": ("analyzer_url", str),
         "COMIC_ENHANCER_ANALYZER_TIMEOUT": ("analyzer_timeout_seconds", int),
         "COMIC_ENHANCER_COMFYUI_TIMEOUT": ("comfyui_timeout_seconds", int),
+        "COMIC_ENHANCER_COBRA_URL": ("cobra_url", str),
+        "COMIC_ENHANCER_COBRA_ENABLED": (
+            "cobra_enabled",
+            lambda value: value.lower() in {"1", "true", "yes", "on"},
+        ),
+        "COMIC_ENHANCER_COBRA_TIMEOUT": ("cobra_timeout_seconds", int),
+        "COMIC_ENHANCER_COBRA_STEPS": ("cobra_steps", int),
+        "COMIC_ENHANCER_COBRA_TOP_K": ("cobra_top_k", int),
+        "COMIC_ENHANCER_COBRA_STYLE": ("cobra_style", str),
+        "COMIC_ENHANCER_COBRA_REFERENCE_LIMIT": (
+            "cobra_reference_limit",
+            int,
+        ),
         "COMIC_ENHANCER_WORKFLOW_FAST": ("comfyui_workflow_fast", Path),
         "COMIC_ENHANCER_WORKFLOW_QUALITY": ("comfyui_workflow_quality", Path),
         "COMIC_ENHANCER_WORKFLOW_REFERENCE_QUALITY": (

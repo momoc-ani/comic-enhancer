@@ -37,6 +37,9 @@ class InferenceBackend(ABC):
     def reference_profile_ready(self) -> bool:
         return False
 
+    def cobra_profile_ready(self) -> bool:
+        return False
+
     def cache_revision(
         self,
         options: ProcessOptions,
@@ -137,7 +140,7 @@ class ComfyUIBackend(InferenceBackend):
     name = "comfyui"
     applies_adapters = True
     supported_base_models = frozenset({"sd15-anime"})
-    model_profiles = ("sd15-colorize", "manganinja-reference")
+    model_profiles = ("sd15-colorize", "manganinja-reference", "cobra")
 
     def __init__(
         self,
@@ -149,6 +152,13 @@ class ComfyUIBackend(InferenceBackend):
         workflow_loader: WorkflowLoader,
         reference_enabled: bool = False,
         reference_ready_file: Path | None = None,
+        cobra_url: str | None = None,
+        cobra_enabled: bool = False,
+        cobra_timeout_seconds: int = 120,
+        cobra_steps: int = 10,
+        cobra_top_k: int = 3,
+        cobra_style: str = "line + shadow",
+        cobra_reference_limit: int = 3,
     ):
         self.base_url = base_url.rstrip("/")
         self.reference_base_url = (reference_base_url or base_url).rstrip("/")
@@ -159,6 +169,15 @@ class ComfyUIBackend(InferenceBackend):
         self.workflow_loader = workflow_loader
         self._reference_ready_cached_until = 0.0
         self._reference_ready_cached_value = False
+        self.cobra_url = (cobra_url or "").rstrip("/")
+        self.cobra_enabled = cobra_enabled and bool(self.cobra_url)
+        self.cobra_timeout_seconds = cobra_timeout_seconds
+        self.cobra_steps = cobra_steps
+        self.cobra_top_k = cobra_top_k
+        self.cobra_style = cobra_style
+        self.cobra_reference_limit = max(1, min(12, cobra_reference_limit))
+        self._cobra_ready_cached_until = 0.0
+        self._cobra_ready_cached_value = False
 
     def ready(self) -> bool:
         try:
@@ -172,12 +191,35 @@ class ComfyUIBackend(InferenceBackend):
             self.workflow_loader.supports_reference() and self._reference_ready()
         )
 
+    def cobra_profile_ready(self) -> bool:
+        if not self.cobra_enabled:
+            return False
+        now = time.monotonic()
+        if now < self._cobra_ready_cached_until:
+            return self._cobra_ready_cached_value
+        try:
+            response = httpx.get(f"{self.cobra_url}/v1/health", timeout=2)
+            ready = response.status_code == 200 and bool(response.json().get("ready"))
+        except (httpx.HTTPError, ValueError, TypeError):
+            ready = False
+        self._cobra_ready_cached_value = ready
+        self._cobra_ready_cached_until = now + (5 if ready else 1)
+        return ready
+
     def cache_revision(
         self,
         options: ProcessOptions,
         resolved: ResolvedAdapter,
         assets: InferenceAssets | None = None,
     ) -> str:
+        if str(options.mode) == "cobra":
+            reference_hashes = []
+            if assets is not None:
+                reference_hashes = sorted(
+                    hashlib.sha256(value).hexdigest()
+                    for value in (assets.character_references or {}).values()
+                )
+            return ":".join(["cobra-http-v1", *reference_hashes])
         reference_available = self._reference_available(options, assets)
         workflow_revision = self.workflow_loader.revision(
             options,
@@ -217,7 +259,9 @@ class ComfyUIBackend(InferenceBackend):
             enabled=True,
             compatible_base_models=self.supported_base_models,
             required_workflow=(
-                "quality" if str(options.mode) == "manganinja" else str(options.mode)
+                "quality"
+                if str(options.mode) in {"manganinja", "cobra"}
+                else str(options.mode)
             ),
         )
 
@@ -228,6 +272,13 @@ class ComfyUIBackend(InferenceBackend):
         options: ProcessOptions,
         resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
+        if str(options.mode) == "cobra":
+            try:
+                return self._process_cobra(assets, output_path)
+            except Exception:
+                logger.exception("Cobra 实验档失败，回退到质量工作流")
+                quality_options = options.model_copy(update={"mode": "quality"})
+                return self.process(assets, output_path, quality_options, resolved)
         reference_available = self._reference_available(options, assets)
         loaded_workflow = self.workflow_loader.load(
             options,
@@ -281,6 +332,106 @@ class ComfyUIBackend(InferenceBackend):
             adapter_applied=loaded_workflow.adapter_applied,
             model_profile=loaded_workflow.model_profile,
         )
+
+    def _process_cobra(
+        self,
+        assets: InferenceAssets,
+        output_path: Path,
+    ) -> InferenceOutcome:
+        if not self.cobra_profile_ready():
+            raise RuntimeError("Cobra 服务未就绪")
+        references = self._cobra_reference_images(assets)
+        if not references:
+            raise RuntimeError("Cobra 需要至少一张角色参考图")
+        files: list[tuple[str, tuple[str, bytes, str]]] = [
+            ("image", ("comic-page.png", self._normalize_image(assets.image_bytes), "image/png")),
+        ]
+        for index, reference in enumerate(references, 1):
+            files.append(
+                (
+                    "references",
+                    (
+                        f"character-reference-{index}.png",
+                        self._normalize_image(reference),
+                        "image/png",
+                    ),
+                )
+            )
+        with httpx.Client(base_url=self.cobra_url, timeout=self.cobra_timeout_seconds) as client:
+            response = client.post(
+                "/v1/colorize",
+                files=files,
+                data={
+                    "style": self.cobra_style,
+                    "steps": str(self.cobra_steps),
+                    "top_k": str(self.cobra_top_k),
+                },
+            )
+            response.raise_for_status()
+        with Image.open(BytesIO(response.content)) as generated_file:
+            generated = ImageOps.exif_transpose(generated_file).convert("RGB").copy()
+        generated = self._restore_geometry(assets.image_bytes, generated)
+        self._save_output(
+            self._protect_cobra_structure(assets.image_bytes, generated),
+            output_path,
+        )
+        return InferenceOutcome(
+            adapter_applied=False,
+            reference_applied=True,
+            model_profile="cobra",
+        )
+
+    def _cobra_reference_images(self, assets: InferenceAssets) -> list[bytes]:
+        candidates: list[bytes] = []
+        if assets.reference_bytes is not None:
+            candidates.append(assets.reference_bytes)
+        candidates.extend((assets.character_references or {}).values())
+        unique: list[bytes] = []
+        seen: set[str] = set()
+        for value in candidates:
+            digest = hashlib.sha256(value).hexdigest()
+            if digest in seen:
+                continue
+            seen.add(digest)
+            unique.append(value)
+            if len(unique) >= self.cobra_reference_limit:
+                break
+        return unique
+
+    @staticmethod
+    def _normalize_image(image_bytes: bytes) -> bytes:
+        stream = BytesIO()
+        with Image.open(BytesIO(image_bytes)) as source:
+            ImageOps.exif_transpose(source).convert("RGB").save(
+                stream,
+                format="PNG",
+            )
+        return stream.getvalue()
+
+    @staticmethod
+    def _protect_cobra_structure(source_bytes: bytes, generated: Image.Image) -> Image.Image:
+        """Keep only near-black lettering/ink and white bubble paper from tinting."""
+        with Image.open(BytesIO(source_bytes)) as source_file:
+            source = ImageOps.exif_transpose(source_file).convert("RGB")
+        source = source.resize(generated.size, Image.Resampling.LANCZOS)
+        source_y, _, _ = source.convert("YCbCr").split()
+        _, generated_cb, generated_cr = generated.convert("YCbCr").split()
+        colorized = Image.merge(
+            "YCbCr",
+            (source_y, generated_cb, generated_cr),
+        ).convert("RGB")
+        ink_mask = source_y.point(
+            lambda value: (
+                255
+                if value <= 52
+                else max(0, min(180, round((84 - value) * 180 / 32)))
+            )
+        )
+        paper_mask = source_y.point(
+            lambda value: 255 if value >= 248 else max(0, round((value - 232) * 255 / 16))
+        )
+        structure_mask = ImageChops.lighter(ink_mask, paper_mask)
+        return Image.composite(source, colorized, structure_mask)
 
     def _run_page_prompt(
         self,
