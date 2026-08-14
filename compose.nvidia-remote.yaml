@@ -1,4 +1,23 @@
 services:
+  cobra-candidate:
+    profiles: ["candidate-cobra"]
+    build:
+      context: .
+      dockerfile: Dockerfile.cobra
+    container_name: comic-enhancer-cobra-candidate
+    restart: unless-stopped
+    gpus: all
+    ipc: host
+    environment:
+      COBRA_MODEL_PATH: /models/cobra/JunhaoZhuang-Cobra
+      COBRA_PIXART_MODEL_PATH: /models/cobra/PixArt-XL-2-1024-MS
+      HF_ENDPOINT: https://hf-mirror.com
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+    ports:
+      - "127.0.0.1:8780:8780"
+    volumes:
+      - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/models:ro
+
   magiv2-analyzer:
     build:
       context: .

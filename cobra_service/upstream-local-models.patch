@@ -1,0 +1,20 @@
+--- a/app.py
++++ b/app.py
+@@ -61,1 +61,5 @@
+-model_global_path = snapshot_download(repo_id="JunhaoZhuang/Cobra", cache_dir='./Cobra/', repo_type="model")
++model_global_path = os.environ.get("COBRA_MODEL_PATH") or snapshot_download(
++    repo_id="JunhaoZhuang/Cobra",
++    cache_dir="./Cobra/",
++    repo_type="model",
++)
+@@ -197,1 +201,4 @@
+-    pretrained_model_name_or_path = "PixArt-alpha/PixArt-XL-2-1024-MS"
++    pretrained_model_name_or_path = os.environ.get(
++        "COBRA_PIXART_MODEL_PATH",
++        "PixArt-alpha/PixArt-XL-2-1024-MS",
++    )
+@@ -671,1 +678,2 @@
+-demo.launch()
+\ No newline at end of file
++if os.environ.get("COBRA_GRADIO") == "1":
++    demo.launch(server_name="0.0.0.0", server_port=7860)

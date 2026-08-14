@@ -202,6 +202,28 @@ def test_bind_io_uses_titles_for_reference_workflow():
     assert workflow["2"]["inputs"]["image"] == "uploaded/cover.png"
 
 
+def test_flux2_candidate_workflow_has_concrete_four_step_reference_contract():
+    path = PROJECT_ROOT / "workflows" / "flux2-klein-4b-reference-colorize.json"
+    workflow = json.loads(path.read_text(encoding="utf-8"))
+
+    outputs = ComfyUIBackend._bind_io(
+        workflow,
+        input_images={
+            "INPUT_IMAGE": "uploaded/page.png",
+            "REFERENCE_IMAGE_1": "uploaded/elymas.png",
+            "REFERENCE_IMAGE_2": "uploaded/luce.png",
+            "REFERENCE_IMAGE_3": "uploaded/maris.png",
+        },
+        output_prefix="comic-enhancer/flux2-test",
+    )
+
+    assert workflow["5"]["inputs"]["unet_name"] == "flux-2-klein-4b-fp8.safetensors"
+    assert workflow["6"]["inputs"]["clip_name"] == "qwen_3_4b.safetensors"
+    assert workflow["28"]["inputs"]["steps"] == 4
+    assert workflow["29"]["inputs"]["cfg"] == 1.0
+    assert outputs == ("34",)
+
+
 def test_adapter_workflow_cannot_escape_root(tmp_path):
     fast = tmp_path / "fast.json"
     quality = tmp_path / "quality.json"
