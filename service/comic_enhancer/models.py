@@ -10,6 +10,7 @@ class ProcessingMode(StrEnum):
     QUALITY = "quality"
     COBRA = "cobra"
     FLUX2 = "flux2"
+    FLUX2_QUANT = "flux2_quant"
 
 
 class AdapterSource(StrEnum):
@@ -84,6 +85,12 @@ class ProcessResult(BaseModel):
     cached: bool
 
 
+class ProcessingModeOption(BaseModel):
+    value: ProcessingMode
+    label: str
+    prefetch_pages: int = Field(default=1, ge=0, le=20)
+
+
 class CharacterReference(BaseModel):
     provider: str
     provider_id: str
@@ -122,8 +129,10 @@ class Capabilities(BaseModel):
     adapter_policy: list[str]
     model_profiles: list[str] = Field(default_factory=list)
     processing_modes: list[ProcessingMode] = Field(default_factory=list)
+    mode_options: list[ProcessingModeOption] = Field(default_factory=list)
     cobra_available: bool = False
     flux2_available: bool = False
+    flux2_quant_available: bool = False
     prefetch_pages: int
     max_parallel_inference: int
 

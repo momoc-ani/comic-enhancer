@@ -33,6 +33,8 @@ class Settings:
     comfyui_flux2_enabled: bool = False
     comfyui_workflow_flux2: Path | None = None
     flux2_reference_limit: int = 3
+    comfyui_flux2_quant_enabled: bool = False
+    comfyui_workflow_flux2_quant: Path | None = None
     comfyui_workflow_fast: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json"
     comfyui_workflow_quality: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json"
     comfyui_workflow_root: Path = PROJECT_ROOT / "workflows"
@@ -87,6 +89,7 @@ def load_settings() -> Settings:
         "comfyui_workflow_quality",
         "comfyui_workflow_cobra",
         "comfyui_workflow_flux2",
+        "comfyui_workflow_flux2_quant",
         "comfyui_workflow_root",
         "work_identity_index",
     ):
@@ -137,6 +140,14 @@ def load_settings() -> Settings:
         ),
         "COMIC_ENHANCER_WORKFLOW_FLUX2": ("comfyui_workflow_flux2", Path),
         "COMIC_ENHANCER_FLUX2_REFERENCE_LIMIT": ("flux2_reference_limit", int),
+        "COMIC_ENHANCER_COMFYUI_FLUX2_QUANT_ENABLED": (
+            "comfyui_flux2_quant_enabled",
+            lambda value: value.lower() in {"1", "true", "yes", "on"},
+        ),
+        "COMIC_ENHANCER_WORKFLOW_FLUX2_QUANT": (
+            "comfyui_workflow_flux2_quant",
+            Path,
+        ),
         "COMIC_ENHANCER_WORKFLOW_FAST": ("comfyui_workflow_fast", Path),
         "COMIC_ENHANCER_WORKFLOW_QUALITY": ("comfyui_workflow_quality", Path),
         "COMIC_ENHANCER_WORKFLOW_ROOT": ("comfyui_workflow_root", Path),

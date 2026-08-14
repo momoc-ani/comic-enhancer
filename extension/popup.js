@@ -32,6 +32,7 @@ let drafts = {
 };
 let lastModelExecution = null;
 const capabilityCache = new Map();
+let activeModeOptions = [...MODE_OPTIONS];
 
 elements.extensionVersion.textContent = `v${chrome.runtime.getManifest().version}`;
 elements.deploymentTabs.forEach((tab) => {
@@ -121,6 +122,30 @@ function renderModelTier(settings, capabilities = cachedCapabilities(settings)) 
 }
 
 function applyModeAvailability(capabilities) {
+  if (Array.isArray(capabilities?.mode_options)) {
+    const dynamicOptions = capabilities.mode_options
+      .filter((option) => option && option.value && option.label)
+      .map((option) => ({
+        value: String(option.value),
+        label: String(option.label),
+        prefetchPages: Number(option.prefetch_pages) || 1,
+      }));
+    if (dynamicOptions.length > 0) {
+      activeModeOptions = dynamicOptions;
+      const selected = elements.mode.value;
+      elements.mode.replaceChildren(
+        ...activeModeOptions.map((option) => {
+          const element = document.createElement("option");
+          element.value = option.value;
+          element.textContent = option.label;
+          return element;
+        }),
+      );
+      elements.mode.value = activeModeOptions.some((option) => option.value === selected)
+        ? selected
+        : activeModeOptions[0].value;
+    }
+  }
   const available = new Set(capabilities?.processing_modes || []);
   for (const option of elements.mode.options) {
     option.disabled = Boolean(capabilities) && !available.has(option.value);
@@ -237,7 +262,7 @@ function modeAvailable(capabilities, mode) {
 }
 
 function modeLabel(mode) {
-  return MODE_OPTIONS.find((option) => option.value === normalizeMode(mode))?.label || mode;
+  return activeModeOptions.find((option) => option.value === normalizeMode(mode))?.label || mode;
 }
 
 function setStatus(message, state) {

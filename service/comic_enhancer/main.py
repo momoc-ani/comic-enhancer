@@ -34,6 +34,7 @@ from .models import (
     CharacterBankEntry,
     MetadataResolution,
     ProcessingMode,
+    ProcessingModeOption,
     ProcessOptions,
     ProcessResult,
     WorkIdentity,
@@ -71,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             workflow_root=settings.comfyui_workflow_root,
             cobra_workflow=settings.comfyui_workflow_cobra,
             flux2_workflow=settings.comfyui_workflow_flux2,
+            flux2_quant_workflow=settings.comfyui_workflow_flux2_quant,
         )
         backend_options = {
             "base_url": settings.comfyui_url,
@@ -80,6 +82,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "flux2_enabled": settings.comfyui_flux2_enabled,
             "flux2_workflow": settings.comfyui_workflow_flux2,
             "flux2_reference_limit": settings.flux2_reference_limit,
+            "flux2_quant_enabled": settings.comfyui_flux2_quant_enabled,
+            "flux2_quant_workflow": settings.comfyui_workflow_flux2_quant,
             "timeout_seconds": settings.comfyui_timeout_seconds,
             "poll_interval_seconds": settings.comfyui_poll_interval_seconds,
             "workflow_loader": workflow_loader,
@@ -174,11 +178,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def capabilities(_: None = Depends(authorize)) -> Capabilities:
         cobra_available = backend.cobra_profile_ready()
         flux2_available = backend.flux2_profile_ready()
+        flux2_quant_available = backend.flux2_quant_profile_ready()
         processing_modes = [
             mode for mode in ProcessingMode
             if mode != ProcessingMode.COBRA or cobra_available
             if mode != ProcessingMode.FLUX2 or flux2_available
+            if mode != ProcessingMode.FLUX2_QUANT or flux2_quant_available
         ]
+        mode_labels = {
+            ProcessingMode.FAST: ("快速模式", 3),
+            ProcessingMode.QUALITY: ("质量模式", 2),
+            ProcessingMode.COBRA: ("Cobra 实验档", 1),
+            ProcessingMode.FLUX2: ("最高质量模式（FLUX.2）", 1),
+            ProcessingMode.FLUX2_QUANT: ("质量模式（FLUX.2 量化实验）", 1),
+        }
         return Capabilities(
             service_version=__version__,
             backend=backend.name,
@@ -186,8 +199,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             adapter_policy=["work", "generic", "none"],
             model_profiles=list(backend.model_profiles),
             processing_modes=processing_modes,
+            mode_options=[
+                ProcessingModeOption(
+                    value=mode,
+                    label=mode_labels[mode][0],
+                    prefetch_pages=mode_labels[mode][1],
+                )
+                for mode in processing_modes
+            ],
             cobra_available=cobra_available,
             flux2_available=flux2_available,
+            flux2_quant_available=flux2_quant_available,
             prefetch_pages=settings.prefetch_pages,
             max_parallel_inference=settings.max_parallel_inference,
         )
@@ -215,7 +237,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if gitee_store is not None:
             await _ensure_remote_adapter(work, options)
         character_references: dict[str, bytes] = {}
-        if str(options.mode) in {"cobra", "flux2"}:
+        if str(options.mode) in {"cobra", "flux2", "flux2_quant"}:
             resolution = await asyncio.to_thread(metadata.resolve, work)
             reference_limit = (
                 settings.cobra_reference_limit
@@ -388,7 +410,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def _ensure_remote_adapter(work: WorkIdentity, options: ProcessOptions) -> None:
         required_workflow = (
             "quality"
-            if str(options.mode) in {"cobra", "flux2"}
+            if str(options.mode) in {"cobra", "flux2", "flux2_quant"}
             else str(options.mode)
         )
         for _, manifest in registry.candidates(

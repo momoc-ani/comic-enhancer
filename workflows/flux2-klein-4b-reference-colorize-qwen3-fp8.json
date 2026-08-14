@@ -1,0 +1,204 @@
+{
+  "1": {
+    "inputs": {"image": "input.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "INPUT_IMAGE"}
+  },
+  "2": {
+    "inputs": {"image": "reference-1.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_1"}
+  },
+  "3": {
+    "inputs": {"image": "reference-2.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_2"}
+  },
+  "4": {
+    "inputs": {"image": "reference-3.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_3"}
+  },
+  "5": {
+    "inputs": {
+      "unet_name": "flux-2-klein-4b-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {"title": "FLUX.2 Klein 4B FP8 + Qwen3 4B FP8 mixed"}
+  },
+  "6": {
+    "inputs": {
+      "clip_name": "qwen_3_4b_fp8_mixed.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {"title": "Qwen3 4B Text Encoder"}
+  },
+  "7": {
+    "inputs": {"vae_name": "flux2-vae.safetensors"},
+    "class_type": "VAELoader",
+    "_meta": {"title": "FLUX.2 VAE"}
+  },
+  "8": {
+    "inputs": {
+      "text": "Colorize only the existing regions of the first black-and-white manga page. The input page is authoritative: use the original pixels, line art and panel borders as a strict structural mask. Use the character reference images only as color and identity guides for characters that are already visible. Preserve every existing face, eye, mouth, pose, silhouette, prop, screentone, speech bubble, sound effect, crop and panel layout exactly. Apply varied natural anime colors to the existing skin, hair, clothing, objects and backgrounds. This is colorization and restoration, not redrawing or image generation.",
+      "clip": ["6", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Colorization Instruction"}
+  },
+  "9": {
+    "inputs": {
+      "text": "new content, invented content, hallucinated details, extra character, extra person, extra body, extra face, new face, reconstructed face, invented eyes, invented mouth, changed expression, altered pose, anatomy correction, redraw, repaint, new object, removed object, changed crop, changed panel layout, warped line art, broken line art, altered speech bubble, rewritten text, translated text, missing text, illegible text, watermark, logo",
+      "clip": ["6", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Negative Conditioning"}
+  },
+  "10": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.85,
+      "resolution_steps": 16,
+      "image": ["1", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {"title": "Scale Manga Page"}
+  },
+  "11": {
+    "inputs": {"pixels": ["10", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "12": {
+    "inputs": {"conditioning": ["8", 0], "latent": ["11", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "13": {
+    "inputs": {"conditioning": ["9", 0], "latent": ["11", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "14": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.25,
+      "resolution_steps": 16,
+      "image": ["2", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "15": {
+    "inputs": {"pixels": ["14", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "16": {
+    "inputs": {"conditioning": ["12", 0], "latent": ["15", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "17": {
+    "inputs": {"conditioning": ["13", 0], "latent": ["15", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "18": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.25,
+      "resolution_steps": 16,
+      "image": ["3", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "19": {
+    "inputs": {"pixels": ["18", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "20": {
+    "inputs": {"conditioning": ["16", 0], "latent": ["19", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "21": {
+    "inputs": {"conditioning": ["17", 0], "latent": ["19", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "22": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.25,
+      "resolution_steps": 16,
+      "image": ["4", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "23": {
+    "inputs": {"pixels": ["22", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "24": {
+    "inputs": {"conditioning": ["20", 0], "latent": ["23", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "25": {
+    "inputs": {"conditioning": ["21", 0], "latent": ["23", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "26": {
+    "inputs": {"image": ["10", 0]},
+    "class_type": "GetImageSize"
+  },
+  "27": {
+    "inputs": {
+      "width": ["26", 0],
+      "height": ["26", 1],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage"
+  },
+  "28": {
+    "inputs": {
+      "steps": 4,
+      "width": ["26", 0],
+      "height": ["26", 1]
+    },
+    "class_type": "Flux2Scheduler"
+  },
+  "29": {
+    "inputs": {
+      "model": ["5", 0],
+      "positive": ["24", 0],
+      "negative": ["25", 0],
+      "cfg": 1.0
+    },
+    "class_type": "CFGGuider"
+  },
+  "30": {
+    "inputs": {"sampler_name": "euler"},
+    "class_type": "KSamplerSelect"
+  },
+  "31": {
+    "inputs": {"noise_seed": 20260814},
+    "class_type": "RandomNoise"
+  },
+  "32": {
+    "inputs": {
+      "noise": ["31", 0],
+      "guider": ["29", 0],
+      "sampler": ["30", 0],
+      "sigmas": ["28", 0],
+      "latent_image": ["27", 0]
+    },
+    "class_type": "SamplerCustomAdvanced"
+  },
+  "33": {
+    "inputs": {"samples": ["32", 0], "vae": ["7", 0]},
+    "class_type": "VAEDecode"
+  },
+  "34": {
+    "inputs": {
+      "filename_prefix": "comic-enhancer/flux2-klein-4b-qwen3-fp8",
+      "images": ["33", 0]
+    },
+    "class_type": "SaveImage",
+    "_meta": {"title": "OUTPUT_IMAGE"}
+  }
+}

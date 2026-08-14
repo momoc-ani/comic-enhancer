@@ -49,6 +49,7 @@ test("keeps separate local and remote service configurations", () => {
 test("accepts experimental modes with conservative prefetch", () => {
   assert.equal(normalizeMode("cobra"), "cobra");
   assert.equal(normalizeMode("flux2"), "flux2");
+  assert.equal(normalizeMode("flux2_quant"), "flux2_quant");
   assert.equal(prefetchPagesForMode("cobra"), 1);
   assert.equal(prefetchPagesForMode("flux2"), 1);
 });

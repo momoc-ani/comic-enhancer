@@ -6,6 +6,7 @@ export const MODE_OPTIONS = Object.freeze([
   { value: "quality", label: "质量模式", prefetchPages: 2 },
   { value: "cobra", label: "Cobra 实验档", prefetchPages: 1 },
   { value: "flux2", label: "最高质量模式（FLUX.2）", prefetchPages: 1 },
+  { value: "flux2_quant", label: "质量模式（FLUX.2 量化实验）", prefetchPages: 1 },
 ]);
 
 const MODE_VALUES = new Set(MODE_OPTIONS.map((option) => option.value));
@@ -33,7 +34,9 @@ export function normalizeUrl(value) {
 }
 
 export function normalizeMode(value) {
-  return MODE_VALUES.has(value) ? value : "fast";
+  const normalized = String(value || "").trim();
+  if (MODE_VALUES.has(normalized)) return normalized;
+  return /^[a-z0-9_:-]+$/.test(normalized) ? normalized : "fast";
 }
 
 export function prefetchPagesForMode(mode) {

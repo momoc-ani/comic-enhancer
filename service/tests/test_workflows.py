@@ -263,6 +263,11 @@ def test_flux2_backend_uses_three_references_and_restores_source_size(
     )
     with Image.open(output_path) as result:
         assert result.size == source.size
+        # The FLUX.2 tier exposes the ComfyUI image itself. A source-structure
+        # merge would turn this generated color back into source white.
+        pixel = result.getpixel((4, 6))
+        assert pixel[0] > 180
+        assert pixel[2] > 90
 
 
 def test_loader_selects_mode_and_complete_adapter_workflow(tmp_path):

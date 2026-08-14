@@ -2,6 +2,7 @@ const PROFILE_LABELS = Object.freeze({
   "sd15-colorize": "SD1.5 Anime + Lineart",
   cobra: "Cobra 多参考上色",
   "flux2-klein-4b": "FLUX.2 Klein 4B",
+  "flux2-klein-4b-qwen3-fp8": "FLUX.2 Klein 4B · Qwen3 FP8 mixed",
   passthrough: "开发透传后端",
 });
 
@@ -10,6 +11,7 @@ const MODE_TITLES = Object.freeze({
   quality: "质量档",
   cobra: "Cobra 档",
   flux2: "最高质量档",
+  flux2_quant: "质量档（FLUX.2 量化实验）",
 });
 
 export function buildModelExecution(result, settings, completedAt = Date.now()) {
@@ -38,7 +40,8 @@ export function describeModelTier(settings, execution, capabilities = null) {
       capabilities &&
         ((Array.isArray(advertisedModes) && !advertisedModes.includes(mode)) ||
           (mode === "cobra" && capabilities.cobra_available === false) ||
-          (mode === "flux2" && capabilities.flux2_available === false)),
+          (mode === "flux2" && capabilities.flux2_available === false) ||
+          (mode === "flux2_quant" && capabilities.flux2_quant_available === false)),
     );
     return {
       title: configuredTitle,
@@ -96,7 +99,7 @@ function normalizeUrl(value) {
 }
 
 function normalizeMode(value) {
-  return ["fast", "quality", "cobra", "flux2"].includes(value)
+  return ["fast", "quality", "cobra", "flux2", "flux2_quant"].includes(value)
     ? value
     : "fast";
 }

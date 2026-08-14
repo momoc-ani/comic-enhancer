@@ -27,6 +27,9 @@ class WorkflowLoader(ABC):
     def supports_flux2(self) -> bool:
         return False
 
+    def supports_flux2_quant(self) -> bool:
+        return False
+
     @abstractmethod
     def load(
         self,
@@ -59,6 +62,7 @@ class PresetWorkflowLoader(WorkflowLoader):
         workflow_root: Path,
         cobra_workflow: Path | None = None,
         flux2_workflow: Path | None = None,
+        flux2_quant_workflow: Path | None = None,
     ):
         self.fast_workflow = fast_workflow.resolve()
         self.quality_workflow = quality_workflow.resolve()
@@ -69,12 +73,22 @@ class PresetWorkflowLoader(WorkflowLoader):
         self.flux2_workflow = (
             flux2_workflow.resolve() if flux2_workflow is not None else None
         )
+        self.flux2_quant_workflow = (
+            flux2_quant_workflow.resolve()
+            if flux2_quant_workflow is not None
+            else None
+        )
 
     def supports_cobra(self) -> bool:
         return bool(self.cobra_workflow and self.cobra_workflow.is_file())
 
     def supports_flux2(self) -> bool:
         return bool(self.flux2_workflow and self.flux2_workflow.is_file())
+
+    def supports_flux2_quant(self) -> bool:
+        return bool(
+            self.flux2_quant_workflow and self.flux2_quant_workflow.is_file()
+        )
 
     def load(
         self,
@@ -144,8 +158,15 @@ class PresetWorkflowLoader(WorkflowLoader):
                 False,
                 "flux2-klein-4b",
             )
+        if mode == "flux2_quant" and self.flux2_quant_workflow is not None:
+            return (
+                self.flux2_quant_workflow,
+                False,
+                False,
+                "flux2-klein-4b-qwen3-fp8",
+            )
         fallback_mode = (
-            "quality" if mode in {"cobra", "flux2"} else mode
+            "quality" if mode in {"cobra", "flux2", "flux2_quant"} else mode
         )
         path = self.quality_workflow if fallback_mode == "quality" else self.fast_workflow
         if resolved.adapter is not None:

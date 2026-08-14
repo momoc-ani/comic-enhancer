@@ -23,7 +23,7 @@ from .workflows import WorkflowLoader
 
 
 logger = logging.getLogger(__name__)
-FLUX2_PROCESSING_REVISION = "flux2-source-luminance-color-v3"
+FLUX2_PROCESSING_REVISION = "flux2-comfyui-raw-output-v7"
 
 
 class InferenceBackend(ABC):
@@ -231,9 +231,49 @@ class Flux2ModeStrategy(ComfyUIModeStrategy):
     ) -> InferenceOutcome:
         try:
             backend._unload_cobra_worker()
-            return backend._process_flux2(assets, output_path, resolved)
+            return backend._process_flux2(assets, output_path, resolved, options)
         except Exception:
             logger.exception("FLUX.2 最高质量档失败，回退到质量工作流")
+            return backend._fallback_to_quality(assets, output_path, options, resolved)
+
+
+@dataclass(frozen=True)
+class Flux2QuantModeStrategy(ComfyUIModeStrategy):
+    """Independent FLUX.2 Qwen3 quantized experiment strategy."""
+
+    mode = ProcessingMode.FLUX2_QUANT
+    adapter_workflow = "quality"
+
+    def available(self, backend: "ComfyUIBackend") -> bool:
+        return backend._workflow_profile_ready(
+            str(self.mode),
+            enabled=backend.flux2_quant_enabled,
+            workflow_supported=backend.workflow_loader.supports_flux2_quant(),
+        )
+
+    def cache_revision(
+        self,
+        backend: "ComfyUIBackend",
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+        assets: InferenceAssets | None,
+    ) -> str:
+        revision = backend._reference_model_cache_revision(options, resolved, assets)
+        return f"{revision}:{FLUX2_PROCESSING_REVISION}:quant"
+
+    def process(
+        self,
+        backend: "ComfyUIBackend",
+        assets: InferenceAssets,
+        output_path: Path,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> InferenceOutcome:
+        try:
+            backend._unload_cobra_worker()
+            return backend._process_flux2(assets, output_path, resolved, options)
+        except Exception:
+            logger.exception("FLUX.2 Qwen3 4B 量化实验档失败，回退到质量工作流")
             return backend._fallback_to_quality(assets, output_path, options, resolved)
 
 
@@ -270,6 +310,7 @@ class ComfyUIBackend(InferenceBackend):
         "sd15-colorize",
         "cobra",
         "flux2-klein-4b",
+        "flux2-klein-4b-qwen3-fp8",
     )
 
     def __init__(
@@ -285,6 +326,8 @@ class ComfyUIBackend(InferenceBackend):
         flux2_enabled: bool = False,
         flux2_workflow: Path | None = None,
         flux2_reference_limit: int = 3,
+        flux2_quant_enabled: bool = False,
+        flux2_quant_workflow: Path | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
@@ -296,12 +339,15 @@ class ComfyUIBackend(InferenceBackend):
         self.flux2_enabled = flux2_enabled
         self.flux2_workflow = flux2_workflow
         self.flux2_reference_limit = max(1, min(3, flux2_reference_limit))
+        self.flux2_quant_enabled = flux2_quant_enabled
+        self.flux2_quant_workflow = flux2_quant_workflow
         self._profile_ready_cache: dict[str, tuple[float, bool]] = {}
         strategies: tuple[ComfyUIModeStrategy, ...] = (
             PresetModeStrategy(ProcessingMode.FAST),
             PresetModeStrategy(ProcessingMode.QUALITY),
             CobraModeStrategy(),
             Flux2ModeStrategy(),
+            Flux2QuantModeStrategy(),
         )
         self._mode_strategies = {strategy.mode: strategy for strategy in strategies}
 
@@ -317,6 +363,9 @@ class ComfyUIBackend(InferenceBackend):
 
     def flux2_profile_ready(self) -> bool:
         return self.mode_available(ProcessingMode.FLUX2)
+
+    def flux2_quant_profile_ready(self) -> bool:
+        return self.mode_available(ProcessingMode.FLUX2_QUANT)
 
     def mode_available(self, mode: ProcessingMode | str) -> bool:
         return self._strategy(mode).available(self)
@@ -499,16 +548,28 @@ class ComfyUIBackend(InferenceBackend):
         assets: InferenceAssets,
         output_path: Path,
         resolved: ResolvedAdapter,
+        options: ProcessOptions | None = None,
     ) -> InferenceOutcome:
-        if not self.flux2_profile_ready():
+        selected_options = options or ProcessOptions(mode="flux2")
+        profile_ready = (
+            self.flux2_quant_profile_ready()
+            if selected_options.mode == ProcessingMode.FLUX2_QUANT
+            else self.flux2_profile_ready()
+        )
+        if not profile_ready:
             raise RuntimeError("FLUX.2 服务未就绪")
         references = self._flux2_reference_images(assets)
         if not references:
             raise RuntimeError("FLUX.2 需要至少一张角色参考图")
-        if self.flux2_workflow is None:
+        workflow_path = (
+            self.flux2_quant_workflow
+            if selected_options.mode == ProcessingMode.FLUX2_QUANT
+            else self.flux2_workflow
+        )
+        if workflow_path is None:
             raise RuntimeError("FLUX.2 工作流未配置")
         loaded_workflow = self.workflow_loader.load(
-            ProcessOptions(mode="flux2"),
+            selected_options,
             resolved,
         )
         generated = self._run_flux2_prompt(
@@ -517,14 +578,14 @@ class ComfyUIBackend(InferenceBackend):
             loaded_workflow.prompt,
         )
         generated = self._restore_geometry(assets.image_bytes, generated)
-        self._save_output(
-            self._protect_flux2_structure(assets.image_bytes, generated),
-            output_path,
-        )
+        # FLUX.2's ComfyUI output is the contract for this tier. Do not merge
+        # source luminance/chroma here: that would make the browser result look
+        # different from the ComfyUI preview and can introduce edge artifacts.
+        self._save_output(generated, output_path)
         return InferenceOutcome(
             adapter_applied=False,
             reference_applied=True,
-            model_profile="flux2-klein-4b",
+            model_profile=loaded_workflow.model_profile,
         )
 
     def _cobra_reference_images(self, assets: InferenceAssets) -> list[bytes]:
@@ -706,44 +767,6 @@ class ComfyUIBackend(InferenceBackend):
         paper_mask = ImageChops.multiply(
             source_paper_mask,
             ImageChops.multiply(generated_light_mask, generated_neutral_mask),
-        )
-        structure_mask = ImageChops.lighter(ink_mask, paper_mask)
-        return Image.composite(source, colorized, structure_mask)
-
-    @staticmethod
-    def _protect_flux2_structure(source_bytes: bytes, generated: Image.Image) -> Image.Image:
-        """Keep source geometry while taking only chroma from FLUX.2.
-
-        The model can invent dark facial details or duplicate glyphs even when
-        prompted to preserve the page. Keeping the source luminance makes those
-        geometry changes impossible while still retaining the model's colors.
-        Pure paper and existing ink are copied back exactly so bubbles and text
-        remain neutral and legible.
-        """
-        with Image.open(BytesIO(source_bytes)) as source_file:
-            source = ImageOps.exif_transpose(source_file).convert("RGB")
-        generated = generated.convert("RGB").resize(
-            source.size,
-            Image.Resampling.LANCZOS,
-        )
-        source_y, _, _ = source.convert("YCbCr").split()
-        _, generated_cb, generated_cr = generated.convert("YCbCr").split()
-        colorized = Image.merge(
-            "YCbCr",
-            (source_y, generated_cb, generated_cr),
-        ).convert("RGB")
-
-        # Keep paper and line art exact. The source luminance above also
-        # suppresses new dark details in otherwise existing gray regions.
-        ink_mask = source_y.point(
-            lambda value: 255
-            if value <= 96
-            else max(0, min(255, round((136 - value) * 255 / 40)))
-        )
-        paper_mask = source_y.point(
-            lambda value: 255
-            if value >= 242
-            else max(0, min(255, round((value - 218) * 255 / 24)))
         )
         structure_mask = ImageChops.lighter(ink_mask, paper_mask)
         return Image.composite(source, colorized, structure_mask)
