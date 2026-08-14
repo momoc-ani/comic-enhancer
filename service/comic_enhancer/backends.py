@@ -152,12 +152,9 @@ class ComfyUIBackend(InferenceBackend):
         workflow_loader: WorkflowLoader,
         reference_enabled: bool = False,
         reference_ready_file: Path | None = None,
-        cobra_url: str | None = None,
+        cobra_base_url: str | None = None,
         cobra_enabled: bool = False,
-        cobra_timeout_seconds: int = 120,
-        cobra_steps: int = 10,
-        cobra_top_k: int = 3,
-        cobra_style: str = "line + shadow",
+        cobra_workflow: Path | None = None,
         cobra_reference_limit: int = 3,
     ):
         self.base_url = base_url.rstrip("/")
@@ -169,12 +166,9 @@ class ComfyUIBackend(InferenceBackend):
         self.workflow_loader = workflow_loader
         self._reference_ready_cached_until = 0.0
         self._reference_ready_cached_value = False
-        self.cobra_url = (cobra_url or "").rstrip("/")
-        self.cobra_enabled = cobra_enabled and bool(self.cobra_url)
-        self.cobra_timeout_seconds = cobra_timeout_seconds
-        self.cobra_steps = cobra_steps
-        self.cobra_top_k = cobra_top_k
-        self.cobra_style = cobra_style
+        self.cobra_base_url = (cobra_base_url or "").rstrip("/")
+        self.cobra_enabled = cobra_enabled and bool(self.cobra_base_url)
+        self.cobra_workflow = cobra_workflow
         self.cobra_reference_limit = max(1, min(12, cobra_reference_limit))
         self._cobra_ready_cached_until = 0.0
         self._cobra_ready_cached_value = False
@@ -192,15 +186,15 @@ class ComfyUIBackend(InferenceBackend):
         )
 
     def cobra_profile_ready(self) -> bool:
-        if not self.cobra_enabled:
+        if not self.cobra_enabled or not self.workflow_loader.supports_cobra():
             return False
         now = time.monotonic()
         if now < self._cobra_ready_cached_until:
             return self._cobra_ready_cached_value
         try:
-            response = httpx.get(f"{self.cobra_url}/v1/health", timeout=2)
-            ready = response.status_code == 200 and bool(response.json().get("ready"))
-        except (httpx.HTTPError, ValueError, TypeError):
+            response = httpx.get(f"{self.cobra_base_url}/system_stats", timeout=2)
+            ready = response.status_code == 200
+        except httpx.HTTPError:
             ready = False
         self._cobra_ready_cached_value = ready
         self._cobra_ready_cached_until = now + (5 if ready else 1)
@@ -219,7 +213,12 @@ class ComfyUIBackend(InferenceBackend):
                     hashlib.sha256(value).hexdigest()
                     for value in (assets.character_references or {}).values()
                 )
-            return ":".join(["cobra-http-v1", *reference_hashes])
+            workflow_revision = self.workflow_loader.revision(
+                options,
+                resolved,
+                reference_available=False,
+            )
+            return ":".join([workflow_revision, *reference_hashes])
         reference_available = self._reference_available(options, assets)
         workflow_revision = self.workflow_loader.revision(
             options,
@@ -274,7 +273,7 @@ class ComfyUIBackend(InferenceBackend):
     ) -> InferenceOutcome:
         if str(options.mode) == "cobra":
             try:
-                return self._process_cobra(assets, output_path)
+                return self._process_cobra(assets, output_path, resolved)
             except Exception:
                 logger.exception("Cobra 实验档失败，回退到质量工作流")
                 quality_options = options.model_copy(update={"mode": "quality"})
@@ -337,39 +336,24 @@ class ComfyUIBackend(InferenceBackend):
         self,
         assets: InferenceAssets,
         output_path: Path,
+        resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
         if not self.cobra_profile_ready():
             raise RuntimeError("Cobra 服务未就绪")
         references = self._cobra_reference_images(assets)
         if not references:
             raise RuntimeError("Cobra 需要至少一张角色参考图")
-        files: list[tuple[str, tuple[str, bytes, str]]] = [
-            ("image", ("comic-page.png", self._normalize_image(assets.image_bytes), "image/png")),
-        ]
-        for index, reference in enumerate(references, 1):
-            files.append(
-                (
-                    "references",
-                    (
-                        f"character-reference-{index}.png",
-                        self._normalize_image(reference),
-                        "image/png",
-                    ),
-                )
-            )
-        with httpx.Client(base_url=self.cobra_url, timeout=self.cobra_timeout_seconds) as client:
-            response = client.post(
-                "/v1/colorize",
-                files=files,
-                data={
-                    "style": self.cobra_style,
-                    "steps": str(self.cobra_steps),
-                    "top_k": str(self.cobra_top_k),
-                },
-            )
-            response.raise_for_status()
-        with Image.open(BytesIO(response.content)) as generated_file:
-            generated = ImageOps.exif_transpose(generated_file).convert("RGB").copy()
+        if self.cobra_workflow is None:
+            raise RuntimeError("Cobra 工作流未配置")
+        loaded_workflow = self.workflow_loader.load(
+            ProcessOptions(mode="cobra"),
+            resolved,
+        )
+        generated = self._run_cobra_prompt(
+            assets.image_bytes,
+            references,
+            loaded_workflow.prompt,
+        )
         generated = self._restore_geometry(assets.image_bytes, generated)
         self._save_output(
             self._protect_cobra_structure(assets.image_bytes, generated),
@@ -398,15 +382,42 @@ class ComfyUIBackend(InferenceBackend):
                 break
         return unique
 
-    @staticmethod
-    def _normalize_image(image_bytes: bytes) -> bytes:
-        stream = BytesIO()
-        with Image.open(BytesIO(image_bytes)) as source:
-            ImageOps.exif_transpose(source).convert("RGB").save(
-                stream,
-                format="PNG",
+    def _run_cobra_prompt(
+        self,
+        image_bytes: bytes,
+        references: list[bytes],
+        workflow_template: dict,
+    ) -> Image.Image:
+        workflow = json.loads(json.dumps(workflow_template))
+        with httpx.Client(base_url=self.cobra_base_url, timeout=self.timeout_seconds) as client:
+            input_images = {
+                "INPUT_IMAGE": self._upload(client, image_bytes, "page"),
+            }
+            for index in range(1, 4):
+                input_images[f"REFERENCE_IMAGE_{index}"] = self._upload(
+                    client,
+                    references[min(index - 1, len(references) - 1)],
+                    f"reference-{index}",
+                )
+            output_nodes = self._bind_io(
+                workflow,
+                input_images=input_images,
+                output_prefix=f"comic-enhancer/cobra-{uuid.uuid4().hex}",
             )
-        return stream.getvalue()
+            queued = client.post(
+                "/prompt",
+                json={"prompt": workflow, "client_id": uuid.uuid4().hex},
+            )
+            queued.raise_for_status()
+            image_info = self._wait_for_output(
+                client,
+                queued.json()["prompt_id"],
+                output_nodes,
+            )
+            result = client.get("/view", params=image_info)
+            result.raise_for_status()
+        with Image.open(BytesIO(result.content)) as generated_file:
+            return ImageOps.exif_transpose(generated_file).convert("RGB").copy()
 
     @staticmethod
     def _protect_cobra_structure(source_bytes: bytes, generated: Image.Image) -> Image.Image:

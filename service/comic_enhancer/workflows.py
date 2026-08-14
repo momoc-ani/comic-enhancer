@@ -25,6 +25,10 @@ class WorkflowLoader(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def supports_cobra(self) -> bool:
+        raise NotImplementedError
+
+    @abstractmethod
     def load(
         self,
         options: ProcessOptions,
@@ -55,6 +59,7 @@ class PresetWorkflowLoader(WorkflowLoader):
         quality_workflow: Path,
         workflow_root: Path,
         reference_quality_workflow: Path | None = None,
+        cobra_workflow: Path | None = None,
     ):
         self.fast_workflow = fast_workflow.resolve()
         self.quality_workflow = quality_workflow.resolve()
@@ -64,12 +69,18 @@ class PresetWorkflowLoader(WorkflowLoader):
             if reference_quality_workflow is not None
             else None
         )
+        self.cobra_workflow = (
+            cobra_workflow.resolve() if cobra_workflow is not None else None
+        )
 
     def supports_reference(self) -> bool:
         return bool(
             self.reference_quality_workflow
             and self.reference_quality_workflow.is_file()
         )
+
+    def supports_cobra(self) -> bool:
+        return bool(self.cobra_workflow and self.cobra_workflow.is_file())
 
     def load(
         self,
@@ -136,6 +147,13 @@ class PresetWorkflowLoader(WorkflowLoader):
                 False,
                 True,
                 "manganinja-reference",
+            )
+        if mode == "cobra" and self.cobra_workflow is not None:
+            return (
+                self.cobra_workflow,
+                False,
+                False,
+                "cobra",
             )
         fallback_mode = "quality" if mode == "manganinja" else mode
         path = self.quality_workflow if fallback_mode == "quality" else self.fast_workflow

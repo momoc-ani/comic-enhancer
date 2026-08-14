@@ -34,15 +34,18 @@ Mac / Chrome 插件
         |
         | 局域网 HTTP + Bearer Token
         v
-192.168.38.226:8765  漫画增强 API 容器
+192.168.38.226:8765  漫画增强 API（唯一对外入口）
         |
-        | Docker 宿主机 8190
-        v
-已有 ComfyUI 容器 + RTX 4090
+        +-- ComfyUI 8190：快速/质量工作流
+        +-- ComfyUI 8191：MangaNinja 实验工作流
+        +-- ComfyUI 8192：Cobra 实验工作流
+        +-- MAGIv2：人物分析内部服务
         |
         v
-/data1/models/ComfyUI/models 统一模型挂载目录
+/data1/models/ComfyUI/models 统一模型挂载目录（RTX 4090）
 ```
+
+插件只连接 `8765`；上面的 ComfyUI 和分析器都是 API 的内部执行组件，地址、工作流和模型由服务端配置，插件不需要也不能直接访问。
 
 本次不使用 Mac 的 RX 6750 XT 推理。macOS 原生程序可以尝试 PyTorch MPS/Metal，但 Docker Desktop 运行的是 Linux 虚拟机，无法直通 macOS AMD 显卡，也不能提供 ROCm 所需的 `/dev/kfd`。
 
@@ -78,7 +81,7 @@ node --check extension/popup.js
 5. 输入部署 Token，保存并连接，然后授予漫画图片域名读取权限。
 6. 打开拷贝漫画章节页面。
 
-插件的唯一入口是本项目漫画增强服务，不直接连接 ComfyUI、MAGIv2、MangaNinja 或 Cobra。增强服务按 `fast`、`quality`、`manganinja`、`cobra` 选择完整处理链；作品 LoRA、通用 LoRA 和无 LoRA 的回退也由增强服务完成。Cobra 只在候选容器健康且服务端明确开启时由能力接口返回，参考图来自作品元数据择优结果，最多 3 张；参考图不足或 Cobra 失败时自动回退质量档。漫画增强服务地址可编辑，默认是 `http://192.168.38.226:8765`；内部推理后端迁移时只修改服务端部署配置，插件配置保持不变。
+插件的唯一入口是本项目漫画增强服务，不直接连接 ComfyUI、MAGIv2、MangaNinja 或 Cobra。增强服务按 `fast`、`quality`、`manganinja`、`cobra` 选择完整处理链，并统一向内部 ComfyUI 提交预设工作流；作品 LoRA、通用 LoRA 和无 LoRA 的回退也由增强服务完成。Cobra 只在 ComfyUI Cobra 工作流和候选节点健康、且服务端明确开启时由能力接口返回，参考图来自作品元数据择优结果，最多 3 张；参考图不足或 Cobra 失败时自动回退质量档。漫画增强服务地址可编辑，默认是 `http://192.168.38.226:8765`；内部推理后端迁移时只修改服务端部署配置，插件配置保持不变。
 
 外部元数据层可提供作品和角色参考候选；显式 `external_ids` 精确命中的数据源优先。只有 MangaNinja 实验档会预分析最多 8 页，并只为可靠绑定的分格生成角色参考板；歧义人物保持拒绝。没有可靠参考、参考服务未就绪或推理失败时，同一请求回退到质量工作流及其作品/通用 LoRA。角色图片只缓存于运行目录，不会自动进入 Git/Gitee 或被重新发布。
 

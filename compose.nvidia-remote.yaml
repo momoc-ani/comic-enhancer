@@ -1,10 +1,10 @@
 services:
-  cobra-candidate:
+  comfyui-cobra:
     profiles: ["candidate-cobra"]
     build:
       context: .
-      dockerfile: Dockerfile.cobra
-    container_name: comic-enhancer-cobra-candidate
+      dockerfile: Dockerfile.cobra-comfyui
+    container_name: comic-enhancer-comfyui-cobra
     restart: unless-stopped
     gpus: all
     ipc: host
@@ -14,7 +14,7 @@ services:
       HF_ENDPOINT: https://hf-mirror.com
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     ports:
-      - "127.0.0.1:8780:8780"
+      - "127.0.0.1:8192:8188"
     volumes:
       - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/models:ro
 
@@ -51,7 +51,7 @@ services:
     environment:
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     ports:
-      - "8191:8188"
+      - "127.0.0.1:8191:8188"
     volumes:
       - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/root/sd/ComfyUI/models
 
@@ -74,12 +74,9 @@ services:
       COMIC_ENHANCER_ANALYZER_ENABLED: ${COMIC_ENHANCER_ANALYZER_ENABLED:-true}
       COMIC_ENHANCER_ANALYZER_URL: http://magiv2-analyzer:8770
       COMIC_ENHANCER_ANALYZER_TIMEOUT: 300
-      COMIC_ENHANCER_COBRA_URL: ${COMIC_ENHANCER_COBRA_URL:-http://host.docker.internal:8780}
-      COMIC_ENHANCER_COBRA_ENABLED: ${COMIC_ENHANCER_COBRA_ENABLED:-false}
-      COMIC_ENHANCER_COBRA_TIMEOUT: ${COMIC_ENHANCER_COBRA_TIMEOUT:-120}
-      COMIC_ENHANCER_COBRA_STEPS: ${COMIC_ENHANCER_COBRA_STEPS:-10}
-      COMIC_ENHANCER_COBRA_TOP_K: ${COMIC_ENHANCER_COBRA_TOP_K:-3}
-      COMIC_ENHANCER_COBRA_STYLE: ${COMIC_ENHANCER_COBRA_STYLE:-line + shadow}
+      COMIC_ENHANCER_COMFYUI_COBRA_URL: ${COMIC_ENHANCER_COMFYUI_COBRA_URL:-http://comfyui-cobra:8188}
+      COMIC_ENHANCER_COMFYUI_COBRA_ENABLED: ${COMIC_ENHANCER_COMFYUI_COBRA_ENABLED:-false}
+      COMIC_ENHANCER_WORKFLOW_COBRA: ${COMIC_ENHANCER_WORKFLOW_COBRA:-/app/workflows/cobra-colorize.json}
       COMIC_ENHANCER_COBRA_REFERENCE_LIMIT: ${COMIC_ENHANCER_COBRA_REFERENCE_LIMIT:-3}
       COMIC_ENHANCER_WORK_IDENTITY_INDEX: /app/config/work-identities.json
       COMIC_ENHANCER_ADAPTER_INDEX: /app/runtime/adapters/index.json

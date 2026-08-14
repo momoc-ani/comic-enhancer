@@ -164,13 +164,16 @@ def test_capabilities_declare_processing_modes_and_manganinja_state(
 
 
 def test_capabilities_advertise_cobra_only_when_candidate_is_ready(tmp_path, monkeypatch):
+    cobra_workflow = tmp_path / "cobra.json"
+    cobra_workflow.write_text("{}", encoding="utf-8")
     settings = Settings(
         api_token="test-token",
         runtime_dir=tmp_path / "runtime",
         adapter_index=tmp_path / "missing.json",
         backend="comfyui",
-        cobra_url="http://cobra",
-        cobra_enabled=True,
+        comfyui_cobra_url="http://cobra",
+        comfyui_cobra_enabled=True,
+        comfyui_workflow_cobra=cobra_workflow,
     )
     app = create_app(settings)
     monkeypatch.setattr(app.state.processor.backend, "ready", lambda: True)
@@ -264,7 +267,7 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     assert settings.comfyui_reference_enabled is True
     assert settings.comfyui_workflow_fast == Path("fast.json")
     assert settings.comfyui_workflow_reference_quality == Path("reference.json")
-    assert settings.cobra_enabled is False
+    assert settings.comfyui_cobra_enabled is False
     assert settings.comfyui_reference_ready_file == Path("models/ready")
     assert settings.work_identity_index == Path("identities.json")
     assert settings.comfyui_workflow_root == Path("workflows")

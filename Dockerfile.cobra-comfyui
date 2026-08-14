@@ -1,0 +1,59 @@
+FROM xm-register.tencentcloudcr.com/ai/comfyui:20260720-RC2
+
+ARG COBRA_REF=2b5d19c204545fd065b6c3864a93d9142dff88c8
+ARG COBRA_ARCHIVE_SHA256=fe39b17e64475b0a9fec0d545d51ef20fcf8a256f712d3a2d8720d5fb5ad7f2f
+ARG GITHUB_MIRROR=https://ghfast.top/https://github.com
+ARG PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HF_ENDPOINT=https://hf-mirror.com \
+    PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_DEFAULT_TIMEOUT=120 \
+    COBRA_MODEL_PATH=/models/cobra/JunhaoZhuang-Cobra \
+    COBRA_PIXART_MODEL_PATH=/models/cobra/PixArt-XL-2-1024-MS
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl libgl1 libglib2.0-0 patch \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fL --retry 5 --retry-all-errors \
+        "${GITHUB_MIRROR}/Zhuang2002/Cobra/archive/${COBRA_REF}.tar.gz" \
+        -o /tmp/cobra.tar.gz \
+    && echo "${COBRA_ARCHIVE_SHA256}  /tmp/cobra.tar.gz" | sha256sum --check - \
+    && mkdir -p /opt/cobra \
+    && tar -xzf /tmp/cobra.tar.gz --strip-components=1 -C /opt/cobra \
+    && rm /tmp/cobra.tar.gz
+
+COPY cobra_service/upstream-local-models.patch /tmp/upstream-local-models.patch
+RUN cd /opt/cobra \
+    && patch -p1 < /tmp/upstream-local-models.patch \
+    && rm /tmp/upstream-local-models.patch \
+    && python3 -m pip install --no-cache-dir -e ./diffusers \
+    && python3 -m pip install --no-cache-dir \
+        accelerate==1.5.2 \
+        datasets==3.2.0 \
+        einops==0.8.1 \
+        gradio==5.22.0 \
+        gradio_client==1.8.0 \
+        huggingface-hub==0.30.2 \
+        matplotlib==3.10.1 \
+        numpy==1.26.4 \
+        opencv-python-headless==4.11.0.86 \
+        pandas \
+        peft==0.15.0 \
+        Pillow==11.1.0 \
+        safetensors==0.5.3 \
+        sentencepiece==0.2.0 \
+        tqdm==4.67.1 \
+        transformers==4.48.3
+
+COPY comfyui_nodes/cobra_colorize \
+    /root/sd/ComfyUI/custom_nodes/cobra_colorize
+
+EXPOSE 8188
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=300s --retries=20 \
+  CMD test -d /models/cobra/JunhaoZhuang-Cobra \
+      && python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8188/system_stats', timeout=3)"
+
+ENTRYPOINT ["python3", "main.py", "--listen=0.0.0.0", "--port=8188"]

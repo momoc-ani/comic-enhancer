@@ -566,7 +566,7 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument(
         "--mode",
-        choices=("fast", "quality", "manganinja"),
+        choices=("fast", "quality", "manganinja", "cobra"),
         required=True,
     )
     parser.add_argument("--analyze", action="store_true")

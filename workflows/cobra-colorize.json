@@ -1,0 +1,61 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "preset-page.png"
+    },
+    "_meta": {
+      "title": "INPUT_IMAGE"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "preset-reference-1.png"
+    },
+    "_meta": {
+      "title": "REFERENCE_IMAGE_1"
+    }
+  },
+  "3": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "preset-reference-2.png"
+    },
+    "_meta": {
+      "title": "REFERENCE_IMAGE_2"
+    }
+  },
+  "4": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "preset-reference-3.png"
+    },
+    "_meta": {
+      "title": "REFERENCE_IMAGE_3"
+    }
+  },
+  "5": {
+    "class_type": "CobraColorize",
+    "inputs": {
+      "image": ["1", 0],
+      "reference_1": ["2", 0],
+      "reference_2": ["3", 0],
+      "reference_3": ["4", 0],
+      "seed": 20260814,
+      "steps": 10,
+      "top_k": 3,
+      "style": "line + shadow"
+    },
+    "_meta": {
+      "title": "Cobra 固定参数"
+    }
+  },
+  "6": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["5", 0],
+      "filename_prefix": "comic-enhancer/cobra"
+    }
+  }
+}
