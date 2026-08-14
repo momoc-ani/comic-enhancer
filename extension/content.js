@@ -343,7 +343,9 @@
 
   function ensureWrapper(image) {
     if (image.parentElement?.classList.contains("comic-enhancer-page")) {
-      return image.parentElement;
+      const wrapper = image.parentElement;
+      syncWrapperGeometry(image, wrapper);
+      return wrapper;
     }
     const wrapper = document.createElement("span");
     wrapper.className = "comic-enhancer-page";

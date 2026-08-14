@@ -79,8 +79,13 @@ test("result overlay sizing overrides generic page image sizing", () => {
 
   assert.match(css, /\.comic-enhancer-page\s*>\s*\.comic-enhancer-result\s*\{/);
   assert.match(css, /display:\s*grid/);
+  assert.match(css, /position:\s*absolute/);
+  assert.match(css, /inset:\s*0/);
   assert.match(css, /visibility:\s*hidden/);
   assert.match(css, /width:\s*100%\s*!important/);
+  assert.match(css, /height:\s*100%\s*!important/);
+  assert.match(css, /object-fit:\s*contain/);
+  assert.doesNotMatch(css, /object-fit:\s*fill/);
 });
 
 test("retries failed pages with the real lazy-load URL after settings change", async () => {
@@ -187,6 +192,7 @@ test("retries failed pages with the real lazy-load URL after settings change", a
   assert.equal(image.dataset.src, undefined);
   assert.equal(image.classList.contains("lazyload"), false);
   assert.equal(image.parentElement.dataset.state, "completed");
+  assert.equal(image.parentElement.style.aspectRatio, "1124 / 1600");
 
   refresh(
     {

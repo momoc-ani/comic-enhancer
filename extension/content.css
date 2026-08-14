@@ -16,15 +16,16 @@
 }
 
 .comic-enhancer-page > .comic-enhancer-result {
-  position: relative;
-  grid-area: 1 / 1;
+  position: absolute;
+  inset: 0;
   width: 100% !important;
   max-width: none !important;
   height: 100% !important;
   min-width: 0;
   min-height: 0;
-  object-fit: fill;
-  object-position: 0 0;
+  display: block !important;
+  object-fit: contain;
+  object-position: center;
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
