@@ -33,6 +33,29 @@ MAGIv2 固定版本为 `ragavsachdeva/magiv2@fbc890fec52977142e8ee00bfe26e9458b6
 
 五个权重全部校验通过后，下载脚本才会生成 `MangaNinjia.ready`。专用容器的健康检查和增强 API 都检查该标记；下载未完成、哈希不一致或 8191 不可达时，MangaNinja 档请求回退至 8190 的质量工作流，不会进入一个必然失败的 MangaNinja 队列。本机下载可运行 `scripts/download_manganinja_local.sh`，默认从 `hf-mirror.com` 并行断点续传全部五项权重至 `runtime/model-downloads/MangaNinjia`；也可用 `MANGANINJA_HF_BASE_URL` 切换其他兼容国内镜像。完成后运行 `scripts/upload_manganinja_weights.sh`，五个文件均以 `.uploading` 名称续传并逐个原子改名，远端五项哈希全部通过后才生成正式就绪标记。
 
+### Cobra 与 FLUX.2 Klein 候选模型
+
+候选模型先在本机通过国内镜像断点下载，再上传到 4090 主机。本次新增下载约 19.7GB；Cobra 需要的 PixArt T5-XXL 直接复用 4090 主机已有的 `clip/t5xxl_fp16.safetensors`，避免重复下载约 19.05GB 的 FP32 分片。该文件与 PixArt 官方权重转为 FP16 后的代表性张量哈希一致，且 Cobra 上游固定以 FP16 加载 Pipeline。下载脚本固定 Cobra 与 PixArt 提交，并对 12 个新增大权重使用 Hugging Face LFS/Xet 公布的 SHA-256 校验：
+
+```bash
+CANDIDATE_DOWNLOAD_CONNECTIONS=4 \
+  ./scripts/download_candidate_models_local.sh
+
+./scripts/upload_candidate_models.sh
+```
+
+默认镜像为 `https://hf-mirror.com`，可通过 `CANDIDATE_HF_BASE_URL` 覆盖。只有全部新增权重和配置完成后才生成本机 `runtime/model-downloads/CandidateModels.ready`。上传脚本逐项比较远端哈希，一致文件直接跳过，不一致文件先续传到 `.uploading`，复验成功后原子改名；全部通过后还会严格校验远端 FP16 T5 的大小和 SHA-256，并在 PixArt `text_encoder` 目录建立容器内可解析的相对软链接。远端已有 `vae/flux2-vae.safetensors` 且所有检查通过后，才生成 `/data1/models/ComfyUI/models/candidate-models.ready`。
+
+远端目录映射如下：
+
+- FLUX.2 Klein 4B FP8：`diffusion_models/flux-2-klein-4b-fp8.safetensors`
+- Qwen3 4B 编码器：`text_encoders/qwen_3_4b.safetensors`
+- Cobra 项目权重：`cobra/JunhaoZhuang-Cobra`
+- Cobra PixArt 基座：`cobra/PixArt-XL-2-1024-MS`
+- Cobra 复用 T5：`cobra/PixArt-XL-2-1024-MS/text_encoder/model.safetensors -> ../../../clip/t5xxl_fp16.safetensors`
+
+Cobra 通过 Compose 的 `candidate-cobra` profile 独立监听 `127.0.0.1:8780`，不会随默认服务启动。候选验收期间应先释放 MangaNinja 和 MAGIv2 的常驻显存，再分别执行 Cobra 与 FLUX.2 Klein 的冷启动、热模型和同页参考图基准；没有真实输出和显存峰值证据前，不把候选加入浏览器插件的正式档位。
+
 未配置 Gitee 仓库和 Token 时保持 `COMIC_ENHANCER_GITEE_ENABLED=false`，基础上色和本地 LoRA 仍可使用。填写完整 Gitee 配置后再改为 `true` 并重建 API 容器。
 
 插件配置：
