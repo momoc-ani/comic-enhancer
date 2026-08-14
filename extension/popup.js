@@ -1,77 +1,22 @@
 import { describeModelTier } from "./model-status.js";
-
-const REMOTE_API_URL = "http://192.168.38.226:8765";
-const LOCAL_API_URL = "http://127.0.0.1:8765";
-
-const PROFILES = Object.freeze({
-  "remote-fast": {
-    title: "远端增强服务 · 快速",
-    detail: "10 步快速上色，预处理后续 3 页",
-    endpoint: "remote",
-    mode: "fast",
-    prefetchPages: 3,
-  },
-  "remote-quality": {
-    title: "远端增强服务 · 质量",
-    detail: "16 步质量上色，优先作品 LoRA 并预处理后续 2 页",
-    endpoint: "remote",
-    mode: "quality",
-    prefetchPages: 2,
-  },
-  "remote-manganinja": {
-    title: "远端增强服务 · MangaNinja",
-    detail: "角色参考实验档，人物可靠时分格上色，否则回退质量档",
-    endpoint: "remote",
-    mode: "manganinja",
-    prefetchPages: 1,
-  },
-  "local-fast": {
-    title: "本机服务 · 快速",
-    detail: "连接本机 8765 端口，预处理后续 3 页",
-    apiBaseUrl: LOCAL_API_URL,
-    mode: "fast",
-    prefetchPages: 3,
-  },
-  "local-quality": {
-    title: "本机服务 · 质量",
-    detail: "连接本机 8765 端口，预处理后续 2 页",
-    apiBaseUrl: LOCAL_API_URL,
-    mode: "quality",
-    prefetchPages: 2,
-  },
-  "local-manganinja": {
-    title: "本机服务 · MangaNinja",
-    detail: "需要服务端部署 MAGIv2 与 MangaNinja，失败时回退质量档",
-    apiBaseUrl: LOCAL_API_URL,
-    mode: "manganinja",
-    prefetchPages: 1,
-  },
-});
-
-const DEFAULTS = Object.freeze({
-  enabled: true,
-  profile: "remote-fast",
-  apiBaseUrl: REMOTE_API_URL,
-  apiToken: "",
-  mode: "fast",
-  prefetchPages: 3,
-  preferWorkAdapter: true,
-  allowGenericAdapter: true,
-  remoteApiBaseUrl: REMOTE_API_URL,
-  customApiBaseUrl: "",
-  customMode: "fast",
-});
+import {
+  DEFAULT_SETTINGS,
+  LOCAL_API_URL,
+  MODE_OPTIONS,
+  REMOTE_API_URL,
+  activateDeployment,
+  migrateSettings,
+  normalizeMode,
+  normalizeUrl,
+} from "./settings.js";
 
 const elements = {
   enabled: document.getElementById("enabled"),
-  profile: document.getElementById("profile"),
+  deploymentTabs: [...document.querySelectorAll(".deployment-tab")],
+  mode: document.getElementById("mode"),
+  apiBaseUrl: document.getElementById("apiBaseUrl"),
+  apiBaseUrlLabel: document.getElementById("apiBaseUrlLabel"),
   apiToken: document.getElementById("apiToken"),
-  remoteFields: document.getElementById("remoteFields"),
-  remoteApiBaseUrl: document.getElementById("remoteApiBaseUrl"),
-  customFields: document.getElementById("customFields"),
-  customApiBaseUrl: document.getElementById("customApiBaseUrl"),
-  customMode: document.getElementById("customMode"),
-  profileSummary: document.getElementById("profileSummary"),
   save: document.getElementById("save"),
   status: document.getElementById("status"),
   modelTier: document.getElementById("modelTier"),
@@ -79,91 +24,120 @@ const elements = {
   extensionVersion: document.getElementById("extensionVersion"),
 };
 
-let storedSettings = { ...DEFAULTS };
+let activeDeployment = "remote";
+let storedSettings = { ...DEFAULT_SETTINGS };
+let drafts = {
+  remote: { apiBaseUrl: REMOTE_API_URL, apiToken: "", mode: "fast" },
+  local: { apiBaseUrl: LOCAL_API_URL, apiToken: "", mode: "fast" },
+};
 let lastModelExecution = null;
-let serviceCapabilities = null;
+const capabilityCache = new Map();
 
 elements.extensionVersion.textContent = `v${chrome.runtime.getManifest().version}`;
-
-elements.profile.addEventListener("change", renderSelection);
-elements.remoteApiBaseUrl.addEventListener("input", renderSelection);
-elements.customMode.addEventListener("change", renderSelection);
+elements.deploymentTabs.forEach((tab) => {
+  tab.addEventListener("click", () => switchDeployment(tab.dataset.deployment));
+});
+elements.mode.addEventListener("change", renderSelection);
+elements.apiBaseUrl.addEventListener("input", markConnectionDirty);
+elements.apiToken.addEventListener("input", markConnectionDirty);
 elements.save.addEventListener("click", save);
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local" || !changes.lastModelExecution) return;
   lastModelExecution = changes.lastModelExecution.newValue || null;
   renderModelTier(resolveSettings(storedSettings));
 });
+
 load();
 
 async function load() {
   const raw = await chrome.storage.local.get(null);
-  const stored = { ...DEFAULTS, ...raw };
-  storedSettings = stored;
+  storedSettings = migrateSettings(raw);
   lastModelExecution = raw.lastModelExecution || null;
-  const profile = inferProfile(raw);
-  elements.enabled.checked = Boolean(stored.enabled);
-  elements.profile.value = profile;
-  elements.apiToken.value = stored.apiToken || "";
-  elements.remoteApiBaseUrl.value =
-    raw.remoteApiBaseUrl ||
-    (profile.startsWith("remote-") ? raw.apiBaseUrl : "") ||
-    REMOTE_API_URL;
-  elements.customApiBaseUrl.value =
-    stored.customApiBaseUrl || (profile === "custom" ? stored.apiBaseUrl : "");
-  elements.customMode.value = stored.customMode || stored.mode || "fast";
+  activeDeployment = storedSettings.deployment;
+  drafts = {
+    remote: {
+      apiBaseUrl: storedSettings.remoteApiBaseUrl,
+      apiToken: storedSettings.remoteApiToken,
+      mode: storedSettings.remoteMode,
+    },
+    local: {
+      apiBaseUrl: storedSettings.localApiBaseUrl,
+      apiToken: storedSettings.localApiToken,
+      mode: storedSettings.localMode,
+    },
+  };
+  elements.enabled.checked = Boolean(storedSettings.enabled);
+  populateActiveForm();
+  await checkService(resolveSettings(storedSettings));
+}
+
+function snapshotActiveForm() {
+  drafts[activeDeployment] = {
+    apiBaseUrl: normalizeUrl(elements.apiBaseUrl.value),
+    apiToken: elements.apiToken.value.trim(),
+    mode: normalizeMode(elements.mode.value),
+  };
+}
+
+function populateActiveForm() {
+  const draft = drafts[activeDeployment];
+  elements.mode.value = draft.mode;
+  elements.apiBaseUrl.value = draft.apiBaseUrl;
+  elements.apiToken.value = draft.apiToken;
+  elements.apiBaseUrlLabel.textContent =
+    activeDeployment === "remote" ? "远端服务地址" : "本地服务地址";
+  elements.apiBaseUrl.placeholder =
+    activeDeployment === "remote" ? REMOTE_API_URL : LOCAL_API_URL;
+  elements.deploymentTabs.forEach((tab) => {
+    const selected = tab.dataset.deployment === activeDeployment;
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  });
   renderSelection();
-  await checkService(resolveSettings(stored));
 }
 
-function inferProfile(settings) {
-  if (settings.profile && (settings.profile === "custom" || PROFILES[settings.profile])) {
-    return settings.profile;
+async function switchDeployment(deployment) {
+  if (!["remote", "local"].includes(deployment) || deployment === activeDeployment) {
+    return;
   }
-  const url = normalizeUrl(settings.apiBaseUrl || "");
-  const mode = normalizeMode(settings.mode);
-  if (url === REMOTE_API_URL) return `remote-${mode}`;
-  if (url === LOCAL_API_URL || url === "http://localhost:8765") return `local-${mode}`;
-  return "custom";
-}
-
-function renderProfile() {
-  const profileId = elements.profile.value;
-  const custom = profileId === "custom";
-  const remote = PROFILES[profileId]?.endpoint === "remote";
-  elements.remoteFields.hidden = !remote;
-  elements.customFields.hidden = !custom;
-  const profile = custom
-    ? {
-        title: `自定义服务 · ${modeLabel(elements.customMode.value)}`,
-        detail: "使用指定服务地址，自动启用作品 LoRA 回退和页面预处理",
-      }
-    : PROFILES[profileId];
-  elements.profileSummary.innerHTML = `<strong>${profile.title}</strong>${profile.detail}`;
+  snapshotActiveForm();
+  activeDeployment = deployment;
+  populateActiveForm();
+  await checkService(resolveSettings(storedSettings));
 }
 
 function renderSelection() {
-  renderProfile();
-  renderModelTier(resolveSettings(storedSettings));
+  const settings = resolveSettings(storedSettings);
+  const capabilities = cachedCapabilities(settings);
+  applyModeAvailability(capabilities);
+  renderModelTier(settings, capabilities);
 }
 
-function renderModelTier(settings) {
-  const view = describeModelTier(
-    settings,
-    lastModelExecution,
-    serviceCapabilities,
-  );
+function renderModelTier(settings, capabilities = cachedCapabilities(settings)) {
+  const view = describeModelTier(settings, lastModelExecution, capabilities);
   elements.modelTier.textContent = view.title;
   elements.modelDetail.textContent = view.detail;
   elements.modelTier.dataset.state = view.state;
 }
 
+function applyModeAvailability(capabilities) {
+  const available = new Set(capabilities?.processing_modes || []);
+  for (const option of elements.mode.options) {
+    option.disabled = Boolean(capabilities) && !available.has(option.value);
+  }
+}
+
+function markConnectionDirty() {
+  snapshotActiveForm();
+  renderSelection();
+  setStatus("配置已修改", "checking");
+}
+
 async function save() {
   elements.save.disabled = true;
-  setStatus("正在保存配置", "checking");
+  setStatus("正在连接服务", "checking");
   try {
-    const current = await chrome.storage.local.get(DEFAULTS);
-    const settings = resolveSettings(current);
+    const settings = resolveSettings(storedSettings);
     if (!settings.apiBaseUrl) throw new Error("请输入漫画增强服务地址");
     if (!settings.apiToken) throw new Error("请输入 API Token");
 
@@ -172,12 +146,14 @@ async function save() {
     });
     if (!granted) throw new Error("需要漫画图片读取权限");
 
+    await checkService(settings, { strict: true });
     await chrome.storage.local.set(settings);
     storedSettings = settings;
     await chrome.runtime.sendMessage({
       type: "COMIC_ENHANCER_REFRESH_TABS",
       settings: {
         enabled: settings.enabled,
+        deployment: settings.deployment,
         profile: settings.profile,
         apiBaseUrl: settings.apiBaseUrl,
         mode: settings.mode,
@@ -186,7 +162,6 @@ async function save() {
         allowGenericAdapter: settings.allowGenericAdapter,
       },
     });
-    await checkService(settings);
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), "failed");
   } finally {
@@ -194,40 +169,28 @@ async function save() {
   }
 }
 
-function resolveSettings(current = DEFAULTS) {
-  const profileId = elements.profile.value;
-  const preset = PROFILES[profileId];
-  const customMode = normalizeMode(elements.customMode.value);
-  const mode = preset?.mode || customMode;
-  const apiBaseUrl = normalizeUrl(
-    preset?.endpoint === "remote"
-      ? elements.remoteApiBaseUrl.value
-      : preset?.apiBaseUrl || elements.customApiBaseUrl.value,
-  );
-  return {
+function resolveSettings(current = DEFAULT_SETTINGS) {
+  snapshotActiveForm();
+  const merged = {
     ...current,
     enabled: elements.enabled.checked,
-    profile: profileId,
-    apiBaseUrl,
-    apiToken: elements.apiToken.value.trim(),
-    mode,
-    prefetchPages:
-      preset?.prefetchPages || (mode === "manganinja" ? 1 : mode === "quality" ? 2 : 3),
-    preferWorkAdapter: true,
-    allowGenericAdapter: true,
-    remoteApiBaseUrl: normalizeUrl(elements.remoteApiBaseUrl.value),
-    customApiBaseUrl: normalizeUrl(elements.customApiBaseUrl.value),
-    customMode,
+    remoteApiBaseUrl: drafts.remote.apiBaseUrl,
+    remoteApiToken: drafts.remote.apiToken,
+    remoteMode: drafts.remote.mode,
+    localApiBaseUrl: drafts.local.apiBaseUrl,
+    localApiToken: drafts.local.apiToken,
+    localMode: drafts.local.mode,
   };
+  return activateDeployment(merged, activeDeployment);
 }
 
-async function checkService(settings) {
+async function checkService(settings, { strict = false } = {}) {
   if (!settings.apiToken) {
-    serviceCapabilities = null;
     setStatus("等待填写 API Token", "failed");
-    renderModelTier(settings);
-    return;
+    renderModelTier(settings, null);
+    return null;
   }
+
   setStatus("正在检查推理服务", "checking");
   const started = performance.now();
   try {
@@ -236,31 +199,48 @@ async function checkService(settings) {
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const capabilities = await response.json();
-    serviceCapabilities = capabilities;
-    const elapsed = Math.round(performance.now() - started);
-    setStatus(`已连接 · ${capabilities.backend} · ${elapsed}ms`, "connected");
-    renderModelTier(settings);
+    capabilityCache.set(capabilityKey(settings), capabilities);
+    if (!modeAvailable(capabilities, settings.mode)) {
+      throw new Error(`当前服务未启用${modeLabel(settings.mode)}`);
+    }
+    if (settings.deployment === activeDeployment) {
+      const elapsed = Math.round(performance.now() - started);
+      setStatus(`已连接 · ${capabilities.backend} · ${elapsed}ms`, "connected");
+      applyModeAvailability(capabilities);
+      renderModelTier(settings, capabilities);
+    }
+    return capabilities;
   } catch (error) {
-    serviceCapabilities = null;
-    setStatus(`连接失败 · ${error instanceof Error ? error.message : error}`, "failed");
-    renderModelTier(settings);
+    if (settings.deployment === activeDeployment) {
+      applyModeAvailability(cachedCapabilities(settings));
+      renderModelTier(settings, cachedCapabilities(settings));
+      setStatus(
+        `连接失败 · ${error instanceof Error ? error.message : error}`,
+        "failed",
+      );
+    }
+    if (strict) throw error;
+    return null;
   }
+}
+
+function cachedCapabilities(settings) {
+  return capabilityCache.get(capabilityKey(settings)) || null;
+}
+
+function capabilityKey(settings) {
+  return `${normalizeUrl(settings.apiBaseUrl)}\n${settings.apiToken || ""}`;
+}
+
+function modeAvailable(capabilities, mode) {
+  return (capabilities.processing_modes || []).includes(normalizeMode(mode));
+}
+
+function modeLabel(mode) {
+  return MODE_OPTIONS.find((option) => option.value === normalizeMode(mode))?.label || mode;
 }
 
 function setStatus(message, state) {
   elements.status.textContent = message;
   elements.status.dataset.state = state;
-}
-
-function normalizeUrl(value) {
-  return String(value || "").trim().replace(/\/$/, "");
-}
-
-function normalizeMode(value) {
-  return ["fast", "quality", "manganinja"].includes(value) ? value : "fast";
-}
-
-function modeLabel(value) {
-  if (value === "manganinja") return "MangaNinja";
-  return value === "quality" ? "质量" : "快速";
 }

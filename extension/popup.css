@@ -89,6 +89,16 @@ main {
   padding: 16px;
 }
 
+.deployment-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid #c8cac5;
+  border-radius: 7px;
+  background: #eceeeb;
+}
+
 .field {
   display: grid;
   gap: 6px;
@@ -115,25 +125,6 @@ input, select {
 input:focus, select:focus {
   border-color: #d94632;
   box-shadow: 0 0 0 2px rgb(217 70 50 / 12%);
-}
-
-.summary {
-  min-height: 50px;
-  padding: 10px 11px;
-  border-left: 3px solid #d94632;
-  border-radius: 0 5px 5px 0;
-  color: #5d605b;
-  background: #fff;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.summary strong {
-  display: block;
-  margin-bottom: 2px;
-  color: #252724;
-  font-size: 12px;
-  letter-spacing: 0;
 }
 
 .model-tier {
@@ -173,13 +164,6 @@ input:focus, select:focus {
   grid-column: 1 / -1;
   margin: 0;
 }
-
-.custom-fields {
-  display: grid;
-  gap: 12px;
-}
-
-.custom-fields[hidden] { display: none; }
 
 .switch input { display: none; }
 
@@ -222,3 +206,21 @@ button {
 
 button:hover { background: #c83d2b; }
 button:disabled { cursor: wait; opacity: 0.65; }
+
+.deployment-tab {
+  min-height: 34px;
+  border: 0;
+  border-radius: 5px;
+  color: #555853;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.deployment-tab:hover { background: rgb(255 255 255 / 65%); }
+
+.deployment-tab[aria-selected="true"] {
+  color: #202124;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(32 33 36 / 14%);
+}

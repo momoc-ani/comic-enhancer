@@ -115,3 +115,28 @@ test("ignores execution state from another endpoint or mode", () => {
     "服务已连接，等待当前档位首次推理",
   );
 });
+
+test("shows experimental mode availability from backend capabilities", () => {
+  const cobraSettings = {
+    ...settings,
+    profile: "remote-cobra",
+    mode: "cobra",
+  };
+  const unavailable = describeModelTier(cobraSettings, null, {
+    ready: true,
+    processing_modes: ["fast", "quality"],
+  });
+  assert.equal(unavailable.title, "Cobra 档");
+  assert.match(unavailable.detail, /未启用 Cobra/);
+
+  const execution = buildModelExecution(
+    { model_profile: "cobra", elapsed_ms: 3200 },
+    cobraSettings,
+  );
+  const actual = describeModelTier(cobraSettings, execution, {
+    ready: true,
+    processing_modes: ["fast", "quality", "cobra"],
+  });
+  assert.equal(actual.title, "Cobra 档 · 基础模型");
+  assert.match(actual.detail, /Cobra 多参考上色/);
+});

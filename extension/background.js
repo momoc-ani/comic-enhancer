@@ -1,16 +1,5 @@
 import { buildModelExecution } from "./model-status.js";
-
-const DEFAULT_SETTINGS = Object.freeze({
-  enabled: true,
-  profile: "remote-fast",
-  apiBaseUrl: "http://192.168.38.226:8765",
-  apiToken: "",
-  mode: "fast",
-  prefetchPages: 3,
-  preferWorkAdapter: true,
-  allowGenericAdapter: true,
-  remoteApiBaseUrl: "http://192.168.38.226:8765",
-});
+import { DEFAULT_SETTINGS, migrateSettings } from "./settings.js";
 
 const SUPPORTED_PAGE_PATTERNS = Object.freeze([
   "*://*.copymanga.com/*",
@@ -21,17 +10,7 @@ const SUPPORTED_PAGE_PATTERNS = Object.freeze([
 
 chrome.runtime.onInstalled.addListener(async () => {
   const stored = await chrome.storage.local.get(null);
-  const profile = stored.profile || inferLegacyProfile(stored);
-  const remoteApiBaseUrl =
-    stored.remoteApiBaseUrl ||
-    (profile.startsWith("remote-") ? stored.apiBaseUrl : "") ||
-    DEFAULT_SETTINGS.remoteApiBaseUrl;
-  await chrome.storage.local.set({
-    ...DEFAULT_SETTINGS,
-    ...stored,
-    profile,
-    remoteApiBaseUrl,
-  });
+  await chrome.storage.local.set(migrateSettings(stored));
   await injectIntoOpenMangaTabs();
 });
 
@@ -79,18 +58,6 @@ function isSupportedPage(url) {
   }
 }
 
-function inferLegacyProfile(settings) {
-  const url = String(settings.apiBaseUrl || "").replace(/\/$/, "");
-  const mode = ["fast", "quality", "manganinja"].includes(settings.mode)
-    ? settings.mode
-    : "fast";
-  if (url === "http://192.168.38.226:8765") return `remote-${mode}`;
-  if (url === "http://127.0.0.1:8765" || url === "http://localhost:8765") {
-    return `local-${mode}`;
-  }
-  return url ? "custom" : "remote-fast";
-}
-
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "COMIC_ENHANCER_REFRESH_TABS") {
     refreshOpenMangaTabs(message.settings).then(
@@ -101,7 +68,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message?.type === "COMIC_ENHANCER_SETTINGS") {
-    chrome.storage.local.get(DEFAULT_SETTINGS).then(sendResponse);
+    getActiveSettings().then(sendResponse);
     return true;
   }
 
@@ -139,7 +106,7 @@ async function refreshOpenMangaTabs(settings) {
 }
 
 async function processPage(payload) {
-  const settings = await chrome.storage.local.get(DEFAULT_SETTINGS);
+  const settings = await getActiveSettings();
   if (!settings.enabled) {
     throw new Error("漫画增强功能已关闭");
   }
@@ -204,7 +171,7 @@ async function processPage(payload) {
 }
 
 async function analyzePages(payload) {
-  const settings = await chrome.storage.local.get(DEFAULT_SETTINGS);
+  const settings = await getActiveSettings();
   if (!settings.enabled || settings.mode !== "manganinja") return null;
   const form = new FormData();
   for (const [index, imageUrl] of payload.imageUrls.entries()) {
@@ -244,6 +211,10 @@ async function responseToDataUrl(response) {
 function normalizeError(error) {
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+async function getActiveSettings() {
+  return migrateSettings(await chrome.storage.local.get(null));
 }
 
 export { DEFAULT_SETTINGS, isSupportedPage };

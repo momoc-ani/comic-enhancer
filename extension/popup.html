@@ -25,57 +25,37 @@
     </header>
 
     <main>
+      <div class="deployment-tabs" role="tablist" aria-label="部署位置">
+        <button id="remoteTab" class="deployment-tab" type="button" role="tab" data-deployment="remote">远端模式</button>
+        <button id="localTab" class="deployment-tab" type="button" role="tab" data-deployment="local">本地模式</button>
+      </div>
+
       <label class="field">
         <span>运行方案</span>
-        <select id="profile">
-          <optgroup label="远端增强服务">
-            <option value="remote-fast">快速模式</option>
-            <option value="remote-quality">质量模式</option>
-            <option value="remote-manganinja">MangaNinja 实验档</option>
-          </optgroup>
-          <optgroup label="本机服务">
-            <option value="local-fast">快速模式</option>
-            <option value="local-quality">质量模式</option>
-            <option value="local-manganinja">MangaNinja 实验档</option>
-          </optgroup>
-          <option value="custom">自定义服务</option>
+        <select id="mode">
+          <option value="fast">快速模式</option>
+          <option value="quality">质量模式</option>
+          <option value="manganinja">MangaNinja 实验档</option>
+          <option value="cobra">Cobra 实验档</option>
+          <option value="flux2">FLUX.2 实验档</option>
         </select>
       </label>
 
-      <div id="profileSummary" class="summary" aria-live="polite"></div>
+      <label class="field">
+        <span id="apiBaseUrlLabel">远端服务地址</span>
+        <input id="apiBaseUrl" type="url" spellcheck="false" placeholder="http://192.168.38.226:8765">
+      </label>
+
+      <label class="field">
+        <span>推理服务 Token</span>
+        <input id="apiToken" type="password" autocomplete="off" placeholder="COMIC_ENHANCER_TOKEN">
+      </label>
 
       <section class="model-tier" aria-labelledby="modelTierLabel">
         <span id="modelTierLabel">当前模型档位</span>
         <strong id="modelTier">等待连接</strong>
         <p id="modelDetail" aria-live="polite">等待服务状态</p>
       </section>
-
-      <section id="remoteFields" class="custom-fields" hidden>
-        <label class="field">
-          <span>漫画增强服务地址</span>
-          <input id="remoteApiBaseUrl" type="url" spellcheck="false" placeholder="http://192.168.38.226:8765">
-        </label>
-      </section>
-
-      <section id="customFields" class="custom-fields" hidden>
-        <label class="field">
-          <span>自定义漫画增强服务地址</span>
-          <input id="customApiBaseUrl" type="url" spellcheck="false" placeholder="http://192.168.1.10:8765">
-        </label>
-        <label class="field">
-          <span>处理模式</span>
-          <select id="customMode">
-            <option value="fast">快速模式</option>
-            <option value="quality">质量模式</option>
-            <option value="manganinja">MangaNinja 实验档</option>
-          </select>
-        </label>
-      </section>
-
-      <label class="field">
-        <span>推理服务 Token（COMIC_ENHANCER_TOKEN）</span>
-        <input id="apiToken" type="password" autocomplete="off" placeholder="输入推理服务 Token">
-      </label>
     </main>
 
     <footer>

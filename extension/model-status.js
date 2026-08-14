@@ -1,7 +1,17 @@
 const PROFILE_LABELS = Object.freeze({
   "sd15-colorize": "SD1.5 Anime + Lineart",
   "manganinja-reference": "MangaNinja 角色参考",
+  cobra: "Cobra 多参考上色",
+  "flux2-klein-4b": "FLUX.2 Klein 4B",
   passthrough: "开发透传后端",
+});
+
+const MODE_TITLES = Object.freeze({
+  fast: "快速档",
+  quality: "质量档",
+  manganinja: "MangaNinja 档",
+  cobra: "Cobra 档",
+  flux2: "FLUX.2 档",
 });
 
 export function buildModelExecution(result, settings, completedAt = Date.now()) {
@@ -23,15 +33,18 @@ export function buildModelExecution(result, settings, completedAt = Date.now()) 
 
 export function describeModelTier(settings, execution, capabilities = null) {
   const mode = normalizeMode(settings.mode);
-  const configuredTitle =
-    mode === "manganinja" ? "MangaNinja 档" : mode === "quality" ? "质量档" : "快速档";
+  const configuredTitle = MODE_TITLES[mode];
   if (!matchesCurrentSettings(settings, execution)) {
-    const unavailable =
-      mode === "manganinja" && capabilities && !capabilities.manganinja_available;
+    const advertisedModes = capabilities?.processing_modes;
+    const unavailable = Boolean(
+      capabilities &&
+        ((Array.isArray(advertisedModes) && !advertisedModes.includes(mode)) ||
+          (mode === "manganinja" && !capabilities.manganinja_available)),
+    );
     return {
       title: configuredTitle,
       detail: unavailable
-        ? "服务未启用 MangaNinja，当前请求会回退质量档"
+        ? `服务未启用 ${configuredTitle}`
         : capabilities?.ready
           ? "服务已连接，等待当前档位首次推理"
           : "等待连接服务并完成首次推理",
@@ -84,5 +97,7 @@ function normalizeUrl(value) {
 }
 
 function normalizeMode(value) {
-  return ["fast", "quality", "manganinja"].includes(value) ? value : "fast";
+  return ["fast", "quality", "manganinja", "cobra", "flux2"].includes(value)
+    ? value
+    : "fast";
 }
