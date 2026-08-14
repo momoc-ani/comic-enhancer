@@ -432,6 +432,8 @@ def test_shipped_flux2_workflows_protect_text_then_upscale_final_result(name):
 
     assert workflow["35"]["class_type"] == "Image Blending Mode"
     assert workflow["35"]["inputs"]["mode"] == "color"
+    assert "immutable source pixels" in workflow["8"]["inputs"]["text"]
+    assert "changed punctuation" in workflow["9"]["inputs"]["text"]
     assert workflow["38"]["class_type"] == "ThresholdMask"
     assert workflow["40"]["class_type"] == "ImageCompositeMasked"
     assert workflow["41"]["inputs"]["model_name"] == (

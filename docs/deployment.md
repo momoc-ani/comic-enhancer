@@ -46,6 +46,8 @@ CANDIDATE_DOWNLOAD_CONNECTIONS=4 \
 
 Cobra 节点安装在统一 ComfyUI 镜像中，调试地址为 `http://192.168.38.226:8192/`，API 内部地址始终是 `http://comfyui:8188`。API 不调用 Cobra Python HTTP 服务，也不存在 `cobra_url:8780`。Cobra 的旧 Diffusers 运行时隔离在同容器的 `/opt/cobra-venv`，ComfyUI 节点通过 Unix Socket 调用常驻 worker，因此不会覆盖主环境中 FLUX.2 所需的新版本依赖，也不会新增网络端口。要启用 Cobra，设置 `COMIC_ENHANCER_COMFYUI_COBRA_ENABLED=true`；要启用当前最高质量档 FLUX.2 Klein 4B，设置 `COMIC_ENHANCER_COMFYUI_FLUX2_ENABLED=true`。两个档位都由增强 API 处理参考图和质量回退。ComfyUI 调试界面没有业务鉴权，只应在可信局域网使用；插件仍必须走 `8765` API。
 
+FLUX.2 最高质量档在上色完成后，先从原图恢复文字和墨线，再使用 `RealESRGAN_x4plus_anime_6B.pth` 对最终结果超分；API 输出固定为原图宽高各 2 倍且比例不变。该链路不会先放大输入图后再执行 FLUX.2。
+
 未配置 Gitee 仓库和 Token 时保持 `COMIC_ENHANCER_GITEE_ENABLED=false`，基础上色和本地 LoRA 仍可使用。填写完整 Gitee 配置后再改为 `true` 并重建 API 容器。
 
 插件配置：

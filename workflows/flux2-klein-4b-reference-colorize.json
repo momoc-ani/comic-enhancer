@@ -43,7 +43,7 @@
   },
   "8": {
     "inputs": {
-      "text": "Colorize only the existing regions of the first black-and-white manga page. The input page is authoritative: use the original pixels, line art and panel borders as a strict structural mask. Use the character reference images only as color and identity guides for characters that are already visible. Preserve every existing face, eye, mouth, pose, silhouette, prop, screentone, speech bubble, sound effect, crop and panel layout exactly. Apply varied natural anime colors to the existing skin, hair, clothing, objects and backgrounds. This is colorization and restoration, not redrawing or image generation.",
+      "text": "Colorize only the existing regions of the first black-and-white manga page. The input page is authoritative: use the original pixels, line art and panel borders as a strict structural mask. Use the character reference images only as color and identity guides for characters that are already visible. Preserve every existing face, eye, mouth, pose, silhouette, prop, screentone, speech bubble, sound effect, crop and panel layout exactly. Treat every glyph, punctuation mark, numeral, letter, word, line break and blank space in speech bubbles, captions and sound effects as immutable source pixels; never interpret, rewrite, translate, redraw, recolor or replace them. Apply varied natural anime colors to the existing skin, hair, clothing, objects and backgrounds. This is colorization and restoration, not redrawing or image generation.",
       "clip": ["6", 0]
     },
     "class_type": "CLIPTextEncode",
@@ -51,7 +51,7 @@
   },
   "9": {
     "inputs": {
-      "text": "new content, invented content, hallucinated details, extra character, extra person, extra body, extra face, new face, reconstructed face, invented eyes, invented mouth, changed expression, altered pose, anatomy correction, redraw, repaint, new object, removed object, changed crop, changed panel layout, warped line art, broken line art, altered speech bubble, rewritten text, translated text, missing text, illegible text, watermark, logo",
+      "text": "new content, invented content, hallucinated details, extra character, extra person, extra body, extra face, new face, reconstructed face, invented eyes, invented mouth, changed expression, altered pose, anatomy correction, redraw, repaint, new object, removed object, changed crop, changed panel layout, warped line art, broken line art, altered speech bubble, altered glyph, changed punctuation, changed typography, invented punctuation, colored text, rewritten text, translated text, missing text, illegible text, watermark, logo",
       "clip": ["6", 0]
     },
     "class_type": "CLIPTextEncode",
