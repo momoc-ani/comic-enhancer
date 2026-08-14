@@ -23,7 +23,7 @@ from .workflows import WorkflowLoader
 
 
 logger = logging.getLogger(__name__)
-FLUX2_PROCESSING_REVISION = "flux2-full-color-ink-overlay-v2"
+FLUX2_PROCESSING_REVISION = "flux2-source-luminance-color-v3"
 
 
 class InferenceBackend(ABC):
@@ -712,7 +712,14 @@ class ComfyUIBackend(InferenceBackend):
 
     @staticmethod
     def _protect_flux2_structure(source_bytes: bytes, generated: Image.Image) -> Image.Image:
-        """Restore original ink without replacing FLUX.2's generated colors."""
+        """Keep source geometry while taking only chroma from FLUX.2.
+
+        The model can invent dark facial details or duplicate glyphs even when
+        prompted to preserve the page. Keeping the source luminance makes those
+        geometry changes impossible while still retaining the model's colors.
+        Pure paper and existing ink are copied back exactly so bubbles and text
+        remain neutral and legible.
+        """
         with Image.open(BytesIO(source_bytes)) as source_file:
             source = ImageOps.exif_transpose(source_file).convert("RGB")
         generated = generated.convert("RGB").resize(
@@ -720,14 +727,26 @@ class ComfyUIBackend(InferenceBackend):
             Image.Resampling.LANCZOS,
         )
         source_y, _, _ = source.convert("YCbCr").split()
+        _, generated_cb, generated_cr = generated.convert("YCbCr").split()
+        colorized = Image.merge(
+            "YCbCr",
+            (source_y, generated_cb, generated_cr),
+        ).convert("RGB")
+
+        # Keep paper and line art exact. The source luminance above also
+        # suppresses new dark details in otherwise existing gray regions.
         ink_mask = source_y.point(
-            lambda value: (
-                255
-                if value <= 32
-                else max(0, min(192, round((80 - value) * 192 / 48)))
-            )
+            lambda value: 255
+            if value <= 96
+            else max(0, min(255, round((136 - value) * 255 / 40)))
         )
-        return Image.composite(source, generated, ink_mask)
+        paper_mask = source_y.point(
+            lambda value: 255
+            if value >= 242
+            else max(0, min(255, round((value - 218) * 255 / 24)))
+        )
+        structure_mask = ImageChops.lighter(ink_mask, paper_mask)
+        return Image.composite(source, colorized, structure_mask)
 
     def _run_page_prompt(
         self,

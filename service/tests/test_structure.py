@@ -85,8 +85,8 @@ def test_cobra_structure_removes_generated_neutral_text_ghosts():
     assert min(result.getpixel((4, 4))) >= 250
 
 
-def test_flux2_structure_keeps_full_color_and_restores_black_ink():
-    source = Image.new("RGB", (8, 8), "white")
+def test_flux2_structure_keeps_generated_color_and_restores_black_ink():
+    source = Image.new("RGB", (8, 8), (180, 180, 180))
     source.putpixel((3, 3), (0, 0, 0))
     generated = Image.new("RGB", (8, 8), (35, 120, 240))
 
@@ -98,7 +98,20 @@ def test_flux2_structure_keeps_full_color_and_restores_black_ink():
     assert max(result.getpixel((3, 3))) <= 16
     colored = result.getpixel((0, 0))
     assert colored[2] >= 235
-    assert colored[2] > colored[0] + 180
+    assert colored[2] > colored[0] + 100
+
+
+def test_flux2_structure_rejects_new_marks_on_source_paper():
+    source = Image.new("RGB", (8, 8), "white")
+    generated = Image.new("RGB", (8, 8), (35, 120, 240))
+    generated.putpixel((4, 4), (0, 0, 0))
+
+    result = ComfyUIBackend._protect_flux2_structure(
+        image_bytes(source),
+        generated,
+    )
+
+    assert min(result.getpixel((4, 4))) >= 245
 
 
 def test_geometry_round_trip_preserves_portrait_ratio():

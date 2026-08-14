@@ -317,6 +317,19 @@
       overlay.alt = image.alt || "Enhanced manga page";
       wrapper.append(overlay);
     }
+    // 结果图先完成加载，再切换可见状态，避免站点 lazy-load/响应式样式
+    // 在加载中途改变叠加层的几何尺寸。
+    const loaded = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("增强结果加载超时")), 15000);
+      overlay.addEventListener("load", () => {
+        clearTimeout(timeout);
+        resolve();
+      }, { once: true });
+      overlay.addEventListener("error", () => {
+        clearTimeout(timeout);
+        reject(new Error("增强结果加载失败"));
+      }, { once: true });
+    });
     overlay.src = result.image_data_url;
     overlay.dataset.adapterSource = result.adapter_source;
     overlay.dataset.adapterId = result.adapter_id || "none";
@@ -324,7 +337,8 @@
     overlay.dataset.modelProfile = result.model_profile || "unknown";
     overlay.dataset.referenceApplied = String(result.reference_applied);
     overlay.dataset.processedPanels = String(result.processed_panels || 0);
-    overlay.addEventListener("load", () => markState(image, "completed"), { once: true });
+    await loaded;
+    markState(image, "completed");
   }
 
   function ensureWrapper(image) {
@@ -335,7 +349,17 @@
     wrapper.className = "comic-enhancer-page";
     image.before(wrapper);
     wrapper.append(image);
+    syncWrapperGeometry(image, wrapper);
     return wrapper;
+  }
+
+  function syncWrapperGeometry(image, wrapper) {
+    if (!wrapper.style) return;
+    const width = Number(image.naturalWidth) || 0;
+    const height = Number(image.naturalHeight) || 0;
+    if (width > 0 && height > 0) {
+      wrapper.style.aspectRatio = `${width} / ${height}`;
+    }
   }
 
   function markState(image, state, message = "") {

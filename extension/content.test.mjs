@@ -22,6 +22,7 @@ class FakeWrapper {
     this.dataset = {};
     this.title = "";
     this.children = [];
+    this.style = {};
   }
 
   append(child) {
@@ -77,7 +78,9 @@ test("result overlay sizing overrides generic page image sizing", () => {
   const css = readFileSync(new URL("./content.css", import.meta.url), "utf8");
 
   assert.match(css, /\.comic-enhancer-page\s*>\s*\.comic-enhancer-result\s*\{/);
-  assert.match(css, /height:\s*100%/);
+  assert.match(css, /display:\s*grid/);
+  assert.match(css, /visibility:\s*hidden/);
+  assert.match(css, /width:\s*100%\s*!important/);
 });
 
 test("retries failed pages with the real lazy-load URL after settings change", async () => {
