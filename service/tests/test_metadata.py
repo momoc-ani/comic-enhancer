@@ -207,6 +207,14 @@ def test_aggregator_caches_provider_failures(tmp_path: Path):
     assert second.errors == first.errors
 
 
+def test_aggregator_cache_key_changes_with_external_ids(tmp_path: Path):
+    aggregator = MetadataAggregator(tmp_path, providers=[])
+    manga_entry = work(external_ids={"bangumi": "418302"})
+    anime_entry = work(external_ids={"bangumi": "511177"})
+
+    assert aggregator._cache_path(manga_entry) != aggregator._cache_path(anime_entry)
+
+
 def test_aggregator_prefers_provider_order_after_confidence_threshold(tmp_path: Path):
     class Provider:
         def __init__(self, name, confidence, cover):
