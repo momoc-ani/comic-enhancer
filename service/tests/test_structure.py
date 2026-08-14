@@ -44,6 +44,21 @@ def test_masked_structure_colors_light_regions_and_preserves_black_ink():
     assert min(colored) < 220
 
 
+def test_reference_chroma_is_limited_but_anime_color_remains_visible():
+    source = Image.new("RGB", (8, 8), "white")
+    generated = Image.new("RGB", (8, 8), (0, 255, 255))
+
+    result = ComfyUIBackend._protect_masked_structure(
+        image_bytes(source),
+        generated,
+    )
+
+    pixel = result.getpixel((0, 0))
+    assert max(pixel) - min(pixel) < 190
+    assert pixel[1] > pixel[0] + 35
+    assert pixel[2] > pixel[0] + 35
+
+
 def test_manganinja_geometry_round_trip_preserves_portrait_ratio():
     source = Image.new("RGB", (100, 200), "red")
 

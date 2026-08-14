@@ -19,8 +19,10 @@ from .workflows import WorkflowLoader
 
 
 logger = logging.getLogger(__name__)
-REFERENCE_PROCESSING_REVISION = "reference-focus-anchors-v3"
+REFERENCE_PROCESSING_REVISION = "quality-base-reference-overlay-v5"
 CHARACTER_ANCHOR_FRACTIONS = (0.18, 0.40, 0.65, 0.82)
+REFERENCE_CHROMA_SCALE = 0.62
+REFERENCE_CHROMA_LIMIT = 64
 
 
 class InferenceBackend(ABC):
@@ -191,9 +193,15 @@ class ComfyUIBackend(InferenceBackend):
             f"{key}:{hashlib.sha256(value).hexdigest()}"
             for key, value in sorted((assets.character_references or {}).items())
         ]
+        base_workflow_revision = self.workflow_loader.revision(
+            options,
+            resolved,
+            reference_available=False,
+        )
         return ":".join(
             [
                 workflow_revision,
+                base_workflow_revision,
                 REFERENCE_PROCESSING_REVISION,
                 analysis_hash,
                 *reference_hashes,
@@ -230,45 +238,61 @@ class ComfyUIBackend(InferenceBackend):
         if loaded_workflow.reference_required and not assets.has_panel_references:
             raise RuntimeError("reference workflow requires matched panel characters")
         if loaded_workflow.reference_required:
+            base_workflow = self.workflow_loader.load(
+                options,
+                resolved,
+                reference_available=False,
+            )
+            base_generated = self._run_page_prompt(
+                self.base_url,
+                assets.image_bytes,
+                base_workflow.prompt,
+            )
+            base_image = self._protect_source_structure(
+                assets.image_bytes,
+                base_generated,
+            )
             try:
                 return self._process_reference_panels(
                     assets,
                     output_path,
                     loaded_workflow.prompt,
                     loaded_workflow.model_profile,
+                    base_image,
+                    base_workflow.adapter_applied,
                 )
             except Exception:
                 logger.exception(
                     "MangaNinja 分格参考工作流失败，回退到主质量工作流"
                 )
-                loaded_workflow = self.workflow_loader.load(
-                    options,
-                    resolved,
-                    reference_available=False,
+                self._save_output(base_image, output_path)
+                return InferenceOutcome(
+                    adapter_applied=base_workflow.adapter_applied,
+                    model_profile=base_workflow.model_profile,
                 )
-        base_url = (
-            self.reference_base_url
-            if loaded_workflow.reference_required
-            else self.base_url
+        generated = self._run_page_prompt(
+            self.base_url,
+            assets.image_bytes,
+            loaded_workflow.prompt,
         )
-        page_bytes = assets.image_bytes
-        reference_bytes = assets.reference_bytes
-        if loaded_workflow.model_profile == "manganinja-reference":
-            page_bytes = self._pad_square(assets.image_bytes)
-            if reference_bytes is not None:
-                reference_bytes = self._pad_square(reference_bytes)
+        image = self._protect_source_structure(assets.image_bytes, generated)
+        self._save_output(image, output_path)
+        return InferenceOutcome(
+            adapter_applied=loaded_workflow.adapter_applied,
+            model_profile=loaded_workflow.model_profile,
+        )
+
+    def _run_page_prompt(
+        self,
+        base_url: str,
+        image_bytes: bytes,
+        workflow_template: dict,
+    ) -> Image.Image:
+        workflow = json.loads(json.dumps(workflow_template))
         with httpx.Client(base_url=base_url, timeout=self.timeout_seconds) as client:
             comfy_inputs = {
-                "INPUT_IMAGE": self._upload(client, page_bytes, "page"),
+                "INPUT_IMAGE": self._upload(client, image_bytes, "page"),
             }
-            if loaded_workflow.reference_required and reference_bytes is not None:
-                comfy_inputs["REFERENCE_IMAGE"] = self._upload(
-                    client,
-                    reference_bytes,
-                    "reference",
-                )
-
-            workflow = loaded_workflow.prompt
             output_nodes = self._bind_io(
                 workflow,
                 input_images=comfy_inputs,
@@ -281,24 +305,15 @@ class ComfyUIBackend(InferenceBackend):
             image_info = self._wait_for_output(client, prompt_id, output_nodes)
             result = client.get("/view", params=image_info)
             result.raise_for_status()
+        with Image.open(BytesIO(result.content)) as source:
+            return ImageOps.exif_transpose(source).convert("RGB").copy()
 
+    @staticmethod
+    def _save_output(image: Image.Image, output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = output_path.with_suffix(".tmp.webp")
-        with Image.open(BytesIO(result.content)) as source:
-            generated = ImageOps.exif_transpose(source).convert("RGB")
-            if loaded_workflow.model_profile == "manganinja-reference":
-                generated = self._restore_geometry(
-                    assets.image_bytes,
-                    generated,
-                )
-            image = self._protect_source_structure(assets.image_bytes, generated)
-            image.save(temporary, format="WEBP", quality=93, method=4)
+        image.save(temporary, format="WEBP", quality=93, method=4)
         temporary.replace(output_path)
-        return InferenceOutcome(
-            adapter_applied=loaded_workflow.adapter_applied,
-            reference_applied=loaded_workflow.reference_required,
-            model_profile=loaded_workflow.model_profile,
-        )
 
     def _process_reference_panels(
         self,
@@ -306,12 +321,17 @@ class ComfyUIBackend(InferenceBackend):
         output_path: Path,
         workflow_template: dict,
         model_profile: str,
+        base_image: Image.Image,
+        base_adapter_applied: bool,
     ) -> InferenceOutcome:
         if assets.analysis is None or not assets.character_references:
             raise RuntimeError("panel analysis and character references are required")
         with Image.open(BytesIO(assets.image_bytes)) as source_file:
             source = ImageOps.exif_transpose(source_file).convert("RGB")
-        composite = source.copy()
+        composite = base_image.convert("RGB").resize(
+            source.size,
+            Image.Resampling.LANCZOS,
+        )
         characters = {item.instance_id: item for item in assets.analysis.characters}
         processed_panel_indexes: set[int] = set()
 
@@ -381,7 +401,7 @@ class ComfyUIBackend(InferenceBackend):
         composite.save(temporary, format="WEBP", quality=93, method=4)
         temporary.replace(output_path)
         return InferenceOutcome(
-            adapter_applied=False,
+            adapter_applied=base_adapter_applied,
             reference_applied=True,
             processed_panels=len(processed_panel_indexes),
             model_profile=model_profile,
@@ -769,6 +789,10 @@ class ComfyUIBackend(InferenceBackend):
 
         source_y, _, _ = source.convert("YCbCr").split()
         _, generated_cb, generated_cr = generated.convert("YCbCr").split()
+        generated_cb, generated_cr = ComfyUIBackend._limit_reference_chroma(
+            generated_cb,
+            generated_cr,
+        )
         neutral = Image.new("L", source.size, 128)
         chroma = ImageChops.lighter(
             ImageChops.difference(generated_cb, neutral),
@@ -794,6 +818,25 @@ class ComfyUIBackend(InferenceBackend):
             )
         )
         return Image.composite(source, colorized, ink_mask)
+
+    @staticmethod
+    def _limit_reference_chroma(
+        generated_cb: Image.Image,
+        generated_cr: Image.Image,
+    ) -> tuple[Image.Image, Image.Image]:
+        """Reduce reference color overshoot without flattening ordinary anime colors."""
+        neutral = 128
+
+        def limit(value: int) -> int:
+            delta = value - neutral
+            delta = round(delta * REFERENCE_CHROMA_SCALE)
+            delta = max(-REFERENCE_CHROMA_LIMIT, min(REFERENCE_CHROMA_LIMIT, delta))
+            return neutral + delta
+
+        return (
+            generated_cb.point(limit),
+            generated_cr.point(limit),
+        )
 
     @staticmethod
     def _decode_character_mask(mask: CharacterMask) -> Image.Image:

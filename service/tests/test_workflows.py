@@ -413,6 +413,13 @@ def test_reference_cache_revision_includes_processing_algorithm(tmp_path, monkey
     )
 
     assert REFERENCE_PROCESSING_REVISION in revision
+    write_workflow(quality, marker="quality-v2")
+    changed_revision = backend.cache_revision(
+        ProcessOptions(mode="manganinja"),
+        resolved(),
+        reference_assets(),
+    )
+    assert changed_revision != revision
 
 
 def test_rejected_character_never_selects_reference_workflow(tmp_path, monkeypatch):
@@ -544,6 +551,67 @@ def test_reference_failure_falls_back_to_selected_quality_workflow(tmp_path, mon
 
     assert requested["base_url"] == "http://main"
     assert requested["prompt"]["marker"]["inputs"]["value"] == "quality"
+
+
+def test_reference_workflow_overlays_characters_on_quality_base(tmp_path, monkeypatch):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    reference = tmp_path / "reference.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    write_workflow(reference, marker="reference")
+    loader = PresetWorkflowLoader(
+        fast_workflow=fast,
+        quality_workflow=quality,
+        reference_quality_workflow=reference,
+        workflow_root=tmp_path,
+    )
+    backend = ComfyUIBackend(
+        base_url="http://main",
+        reference_base_url="http://reference",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=loader,
+        reference_enabled=True,
+    )
+    assets = reference_assets()
+    monkeypatch.setattr(backend, "_reference_ready", lambda: True)
+    requested = {}
+
+    def run_page_prompt(base_url, _image_bytes, workflow):
+        requested["base_url"] = base_url
+        requested["base_marker"] = workflow["marker"]["inputs"]["value"]
+        return object()
+
+    base_image = object()
+    monkeypatch.setattr(backend, "_run_page_prompt", run_page_prompt)
+    monkeypatch.setattr(
+        backend,
+        "_protect_source_structure",
+        lambda *_args: base_image,
+    )
+
+    def process_reference(*args):
+        requested["reference_marker"] = args[2]["marker"]["inputs"]["value"]
+        requested["base_image"] = args[4]
+        return SimpleNamespace(model_profile="manganinja-reference")
+
+    monkeypatch.setattr(backend, "_process_reference_panels", process_reference)
+
+    outcome = backend.process(
+        assets,
+        tmp_path / "output.webp",
+        ProcessOptions(mode="manganinja"),
+        resolved(),
+    )
+
+    assert outcome.model_profile == "manganinja-reference"
+    assert requested == {
+        "base_url": "http://main",
+        "base_marker": "quality",
+        "reference_marker": "reference",
+        "base_image": base_image,
+    }
 
 
 def test_reference_board_and_target_points_keep_multiple_characters_aligned():
@@ -745,6 +813,8 @@ def test_manganinja_workflow_declares_page_and_reference_inputs():
     )
     assert sampler["inputs"]["width"] == 512
     assert sampler["inputs"]["height"] == 512
+    assert sampler["inputs"]["guidance_scale_ref"] <= 6
+    assert sampler["inputs"]["guidance_scale_point"] <= 8
     assert sampler["inputs"]["guidance_scale_point"] > 0
     # The sampler must preprocess ordinary manga panels into lineart itself.
     assert sampler["inputs"]["is_lineart"] is False

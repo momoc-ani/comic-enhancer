@@ -46,7 +46,7 @@ API Token: 与远端 .env 中 COMIC_ENHANCER_TOKEN 相同
 
 插件只配置漫画增强服务地址，不提供 ComfyUI、MAGIv2 或 MangaNinja 地址入口。基础增强 ComfyUI 可部署在宿主机或另一台机器，通过 API 容器的 `COMIC_ENHANCER_COMFYUI_URL` 配置；参考工作流地址通过 `COMIC_ENHANCER_COMFYUI_REFERENCE_URL` 配置。插件无需感知任何内部推理后端地址。
 
-真实基准中，MangaNinja 使用 GhostMix V2、25 步、节点线稿预处理、每个人物 4 对 PointNet 对应点和 SAM 掩码回注。RTX 4090 上单人物热推理约 8.6 秒，两个不同分格人物约 16.8 秒，缓存命中为 0 毫秒，因此作为浏览器预推理的独立实验档，不满足快速模式秒级目标。插件以 8 页为人物分析窗口，并让 MAGIv2 分析与 MangaNinja 推理在同一页面队列中串行，避免两个 GPU 服务同时抢占显存；4090 上并存其他 GPU 服务时仍必须预留采样峰值。OOM 会由 API 回退到 8190，不能通过降低匹配安全阈值或强制占用其他业务显存解决。
+真实基准中，MangaNinja 使用 GhostMix V2、25 步、节点线稿预处理、每个人物 4 对 PointNet 对应点和 SAM 掩码回注。实验档会先运行一次 8190 质量工作流作为整页底图，再覆盖可靠角色；参考步骤失败时直接使用该底图。RTX 4090 上旧链路单人物热推理约 8.6 秒、两个不同分格人物约 16.8 秒；增加质量底图后的同一双人物页实测约 21.7 秒，缓存命中为 0 毫秒，因此只能作为浏览器预推理的独立实验档，不满足快速模式秒级目标。插件以 8 页为人物分析窗口，并让 MAGIv2 分析与 MangaNinja 推理在同一页面队列中串行，避免两个 GPU 服务同时抢占显存；4090 上并存其他 GPU 服务时仍必须预留采样峰值。OOM 会由 API 回退到已生成的质量底图，不能通过降低匹配安全阈值或强制占用其他业务显存解决。
 
 替换其他 ComfyUI 工作流时，导出 API 格式 JSON，并在 `settings.json` 或环境变量中修改对应工作流路径。单输入工作流必须只有一个 `LoadImage`；多输入工作流使用 `_meta.title` 声明 `INPUT_IMAGE`、`REFERENCE_IMAGE` 等角色；所有工作流至少有一个 `SaveImage`，其余模型、LoRA 和参数必须全部预设。服务不依赖固定节点编号。
 
