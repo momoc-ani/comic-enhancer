@@ -77,6 +77,45 @@ def test_cobra_structure_preserves_dark_text_without_flattening_color():
     assert max(colored) - min(colored) > 50
 
 
+def test_cobra_structure_does_not_treat_colored_white_regions_as_paper():
+    source = Image.new("RGB", (8, 8), "white")
+    generated = Image.new("RGB", (8, 8), (80, 150, 240))
+
+    result = ComfyUIBackend._protect_cobra_structure(
+        image_bytes(source),
+        generated,
+    )
+
+    colored = result.getpixel((4, 4))
+    assert colored[2] > 220
+    assert colored[2] > colored[0] + 60
+
+
+def test_cobra_structure_restores_neutral_white_paper():
+    source = Image.new("RGB", (8, 8), "white")
+    generated = Image.new("RGB", (8, 8), (242, 240, 238))
+
+    result = ComfyUIBackend._protect_cobra_structure(
+        image_bytes(source),
+        generated,
+    )
+
+    assert min(result.getpixel((4, 4))) >= 250
+
+
+def test_cobra_structure_removes_generated_neutral_text_ghosts():
+    source = Image.new("RGB", (8, 8), "white")
+    generated = Image.new("RGB", (8, 8), "white")
+    generated.putpixel((4, 4), (0, 0, 0))
+
+    result = ComfyUIBackend._protect_cobra_structure(
+        image_bytes(source),
+        generated,
+    )
+
+    assert min(result.getpixel((4, 4))) >= 250
+
+
 def test_manganinja_geometry_round_trip_preserves_portrait_ratio():
     source = Image.new("RGB", (100, 200), "red")
 

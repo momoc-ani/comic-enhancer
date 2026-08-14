@@ -1,60 +1,97 @@
 {
   "1": {
     "class_type": "LoadImage",
-    "inputs": {
-      "image": "preset-page.png"
-    },
-    "_meta": {
-      "title": "INPUT_IMAGE"
-    }
+    "inputs": {"image": "preset-page.png"},
+    "_meta": {"title": "INPUT_IMAGE"}
   },
   "2": {
     "class_type": "LoadImage",
-    "inputs": {
-      "image": "preset-reference-1.png"
-    },
-    "_meta": {
-      "title": "REFERENCE_IMAGE_1"
-    }
+    "inputs": {"image": "preset-reference-1.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_1"}
   },
   "3": {
     "class_type": "LoadImage",
-    "inputs": {
-      "image": "preset-reference-2.png"
-    },
-    "_meta": {
-      "title": "REFERENCE_IMAGE_2"
-    }
+    "inputs": {"image": "preset-reference-2.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_2"}
   },
   "4": {
     "class_type": "LoadImage",
-    "inputs": {
-      "image": "preset-reference-3.png"
-    },
-    "_meta": {
-      "title": "REFERENCE_IMAGE_3"
-    }
+    "inputs": {"image": "preset-reference-3.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_3"}
   },
   "5": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "preset-reference-4.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_4"}
+  },
+  "6": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "preset-reference-5.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_5"}
+  },
+  "7": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "preset-reference-6.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_6"}
+  },
+  "8": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "preset-reference-7.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_7"}
+  },
+  "9": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "preset-reference-8.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_8"}
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "preset-reference-9.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_9"}
+  },
+  "11": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "preset-reference-10.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_10"}
+  },
+  "12": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "preset-reference-11.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_11"}
+  },
+  "13": {
+    "class_type": "LoadImage",
+    "inputs": {"image": "preset-reference-12.png"},
+    "_meta": {"title": "REFERENCE_IMAGE_12"}
+  },
+  "14": {
     "class_type": "CobraColorize",
     "inputs": {
       "image": ["1", 0],
       "reference_1": ["2", 0],
       "reference_2": ["3", 0],
       "reference_3": ["4", 0],
+      "reference_4": ["5", 0],
+      "reference_5": ["6", 0],
+      "reference_6": ["7", 0],
+      "reference_7": ["8", 0],
+      "reference_8": ["9", 0],
+      "reference_9": ["10", 0],
+      "reference_10": ["11", 0],
+      "reference_11": ["12", 0],
+      "reference_12": ["13", 0],
+      "reference_count": 3,
       "seed": 20260814,
       "steps": 10,
       "top_k": 3,
       "style": "line + shadow"
     },
-    "_meta": {
-      "title": "Cobra 固定参数"
-    }
+    "_meta": {"title": "Cobra 固定参数"}
   },
-  "6": {
+  "15": {
     "class_type": "SaveImage",
     "inputs": {
-      "images": ["5", 0],
+      "images": ["14", 0],
       "filename_prefix": "comic-enhancer/cobra"
     }
   }

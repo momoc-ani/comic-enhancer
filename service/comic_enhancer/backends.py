@@ -153,7 +153,7 @@ class ComfyUIBackend(InferenceBackend):
         reference_ready_file: Path | None = None,
         cobra_enabled: bool = False,
         cobra_workflow: Path | None = None,
-        cobra_reference_limit: int = 3,
+        cobra_reference_limit: int = 12,
     ):
         self.base_url = base_url.rstrip("/")
         self.reference_enabled = reference_enabled
@@ -385,16 +385,36 @@ class ComfyUIBackend(InferenceBackend):
         workflow_template: dict,
     ) -> Image.Image:
         workflow = json.loads(json.dumps(workflow_template))
+        cobra_nodes = [
+            node
+            for node in workflow.values()
+            if isinstance(node, dict) and node.get("class_type") == "CobraColorize"
+        ]
+        if len(cobra_nodes) != 1:
+            raise RuntimeError(
+                "Cobra workflow must contain exactly one CobraColorize node"
+            )
         with httpx.Client(base_url=self.base_url, timeout=self.timeout_seconds) as client:
-            input_images = {
-                "INPUT_IMAGE": self._upload(client, image_bytes, "page"),
-            }
-            for index in range(1, 4):
-                input_images[f"REFERENCE_IMAGE_{index}"] = self._upload(
+            uploaded_references = [
+                self._upload(
                     client,
-                    references[min(index - 1, len(references) - 1)],
+                    reference,
                     f"reference-{index}",
                 )
+                for index, reference in enumerate(references, 1)
+            ]
+            input_images = {
+                "INPUT_IMAGE": self._upload(client, image_bytes, "page"),
+                **{
+                    f"REFERENCE_IMAGE_{index}": uploaded_references[
+                        min(index - 1, len(uploaded_references) - 1)
+                    ]
+                    for index in range(1, 13)
+                },
+            }
+            cobra_nodes[0].setdefault("inputs", {})["reference_count"] = len(
+                uploaded_references
+            )
             output_nodes = self._bind_io(
                 workflow,
                 input_images=input_images,
@@ -417,15 +437,35 @@ class ComfyUIBackend(InferenceBackend):
 
     @staticmethod
     def _protect_cobra_structure(source_bytes: bytes, generated: Image.Image) -> Image.Image:
-        """Keep only near-black lettering/ink and white bubble paper from tinting."""
+        """Keep source geometry while retaining Cobra chroma in colored highlights."""
         with Image.open(BytesIO(source_bytes)) as source_file:
             source = ImageOps.exif_transpose(source_file).convert("RGB")
         source = source.resize(generated.size, Image.Resampling.LANCZOS)
         source_y, _, _ = source.convert("YCbCr").split()
-        _, generated_cb, generated_cr = generated.convert("YCbCr").split()
+        generated = generated.convert("RGB")
+        generated_y, generated_cb, generated_cr = generated.convert("YCbCr").split()
+        _, generated_saturation, _ = generated.convert("HSV").split()
+        source_highlight_mask = source_y.point(
+            lambda value: 255 if value >= 248 else max(0, round((value - 220) * 255 / 28))
+        )
+        generated_color_mask = generated_saturation.point(
+            lambda value: 255 if value >= 56 else max(0, round((value - 20) * 255 / 36))
+        )
+        generated_color_luma_mask = generated_y.point(
+            lambda value: 255 if value >= 160 else max(0, round((value - 96) * 255 / 64))
+        )
+        colored_highlight_mask = ImageChops.multiply(
+            source_highlight_mask,
+            ImageChops.multiply(generated_color_mask, generated_color_luma_mask),
+        )
+        highlight_y = ImageChops.darker(
+            source_y,
+            ImageChops.lighter(generated_y, Image.new("L", generated.size, 192)),
+        )
+        protected_y = Image.composite(highlight_y, source_y, colored_highlight_mask)
         colorized = Image.merge(
             "YCbCr",
-            (source_y, generated_cb, generated_cr),
+            (protected_y, generated_cb, generated_cr),
         ).convert("RGB")
         ink_mask = source_y.point(
             lambda value: (
@@ -434,8 +474,16 @@ class ComfyUIBackend(InferenceBackend):
                 else max(0, min(180, round((84 - value) * 180 / 32)))
             )
         )
-        paper_mask = source_y.point(
-            lambda value: 255 if value >= 248 else max(0, round((value - 232) * 255 / 16))
+        source_paper_mask = source_highlight_mask
+        generated_light_mask = generated_y.point(
+            lambda value: 255 if value >= 244 else max(0, round((value - 224) * 255 / 20))
+        )
+        generated_neutral_mask = generated_saturation.point(
+            lambda value: 255 if value <= 16 else max(0, round((48 - value) * 255 / 32))
+        )
+        paper_mask = ImageChops.multiply(
+            source_paper_mask,
+            ImageChops.multiply(generated_light_mask, generated_neutral_mask),
         )
         structure_mask = ImageChops.lighter(ink_mask, paper_mask)
         return Image.composite(source, colorized, structure_mask)

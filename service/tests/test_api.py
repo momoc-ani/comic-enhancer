@@ -271,6 +271,7 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     assert settings.comfyui_workflow_fast == Path("fast.json")
     assert settings.comfyui_workflow_reference_quality == Path("reference.json")
     assert settings.comfyui_cobra_enabled is False
+    assert settings.cobra_reference_limit == 12
     assert settings.comfyui_reference_ready_file == Path("models/ready")
     assert settings.work_identity_index == Path("identities.json")
     assert settings.comfyui_workflow_root == Path("workflows")

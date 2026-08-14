@@ -110,27 +110,35 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
     cobra = tmp_path / "cobra.json"
     write_workflow(fast, marker="fast")
     write_workflow(quality, marker="quality")
-    cobra.write_text(
-        json.dumps(
-            {
-                "1": {"class_type": "LoadImage", "inputs": {"image": "page.png"}, "_meta": {"title": "INPUT_IMAGE"}},
-                "2": {"class_type": "LoadImage", "inputs": {"image": "ref-1.png"}, "_meta": {"title": "REFERENCE_IMAGE_1"}},
-                "3": {"class_type": "LoadImage", "inputs": {"image": "ref-2.png"}, "_meta": {"title": "REFERENCE_IMAGE_2"}},
-                "4": {"class_type": "LoadImage", "inputs": {"image": "ref-3.png"}, "_meta": {"title": "REFERENCE_IMAGE_3"}},
-                    "5": {
-                        "class_type": "CobraColorize",
-                        "inputs": {
-                            "image": ["1", 0],
-                            "reference_1": ["2", 0],
-                            "reference_2": ["3", 0],
-                            "reference_3": ["4", 0],
-                        },
-                    },
-                "6": {"class_type": "SaveImage", "inputs": {"images": ["5", 0]}},
-            }
-        ),
-        encoding="utf-8",
-    )
+    cobra_prompt = {
+        "1": {
+            "class_type": "LoadImage",
+            "inputs": {"image": "page.png"},
+            "_meta": {"title": "INPUT_IMAGE"},
+        }
+    }
+    for index in range(1, 13):
+        cobra_prompt[str(index + 1)] = {
+            "class_type": "LoadImage",
+            "inputs": {"image": f"ref-{index}.png"},
+            "_meta": {"title": f"REFERENCE_IMAGE_{index}"},
+        }
+    cobra_prompt["14"] = {
+        "class_type": "CobraColorize",
+        "inputs": {
+            "image": ["1", 0],
+            **{
+                f"reference_{index}": [str(index + 1), 0]
+                for index in range(1, 13)
+            },
+            "reference_count": 3,
+        },
+    }
+    cobra_prompt["15"] = {
+        "class_type": "SaveImage",
+        "inputs": {"images": ["14", 0]},
+    }
+    cobra.write_text(json.dumps(cobra_prompt), encoding="utf-8")
     backend = ComfyUIBackend(
         base_url="http://comfy",
         timeout_seconds=10,
@@ -143,7 +151,7 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
         ),
         cobra_enabled=True,
         cobra_workflow=cobra,
-        cobra_reference_limit=3,
+        cobra_reference_limit=12,
     )
     monkeypatch.setattr(backend, "cobra_profile_ready", lambda: True)
     generated = png_bytes(Image.new("RGB", (16, 24), (230, 70, 120)))
@@ -188,7 +196,7 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
                         "cobra-prompt": {
                             "status": {"status_str": "success"},
                             "outputs": {
-                                "6": {
+                                    "15": {
                                     "images": [{"filename": "cobra.png", "subfolder": "", "type": "output"}]
                                 }
                             },
@@ -222,7 +230,9 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
     assert outcome.reference_applied is True
     assert captured["base_url"] == "http://comfy"
     assert captured["path"] == "/prompt"
-    assert captured["prompt"]["5"]["inputs"]["reference_1"] == ["2", 0]
+    assert captured["prompt"]["14"]["inputs"]["reference_1"] == ["2", 0]
+    assert captured["prompt"]["14"]["inputs"]["reference_12"] == ["13", 0]
+    assert captured["prompt"]["14"]["inputs"]["reference_count"] == 2
     with Image.open(output_path) as result:
         assert result.size == source.size
 
@@ -942,7 +952,7 @@ def test_shipped_workflows_are_self_contained_and_restore_dark_pixels(name):
     assert any(node["class_type"] == "ImageCompositeMasked" for node in workflow.values())
 
 
-def test_shipped_cobra_workflow_declares_three_reference_inputs_and_fixed_values():
+def test_shipped_cobra_workflow_declares_twelve_reference_inputs_and_fixed_values():
     workflow = json.loads(
         (PROJECT_ROOT / "workflows" / "cobra-colorize.json").read_text(
             encoding="utf-8"
@@ -952,17 +962,19 @@ def test_shipped_cobra_workflow_declares_three_reference_inputs_and_fixed_values
         workflow,
         input_images={
             "INPUT_IMAGE": "uploaded/page.png",
-            "REFERENCE_IMAGE_1": "uploaded/ref-1.png",
-            "REFERENCE_IMAGE_2": "uploaded/ref-2.png",
-            "REFERENCE_IMAGE_3": "uploaded/ref-3.png",
+            **{
+                f"REFERENCE_IMAGE_{index}": f"uploaded/ref-{index}.png"
+                for index in range(1, 13)
+            },
         },
         output_prefix="comic-enhancer/cobra-test",
     )
 
-    assert outputs == ("6",)
-    assert workflow["5"]["inputs"]["steps"] == 10
-    assert workflow["5"]["inputs"]["top_k"] == 3
-    assert workflow["5"]["inputs"]["style"] == "line + shadow"
+    assert outputs == ("15",)
+    assert workflow["14"]["inputs"]["reference_count"] == 3
+    assert workflow["14"]["inputs"]["steps"] == 10
+    assert workflow["14"]["inputs"]["top_k"] == 3
+    assert workflow["14"]["inputs"]["style"] == "line + shadow"
 
 
 def test_manganinja_workflow_declares_page_and_reference_inputs():

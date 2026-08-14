@@ -33,7 +33,7 @@ class Settings:
     comfyui_poll_interval_seconds: float = 0.25
     comfyui_cobra_enabled: bool = False
     comfyui_workflow_cobra: Path | None = None
-    cobra_reference_limit: int = 3
+    cobra_reference_limit: int = 12
     comfyui_workflow_fast: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json"
     comfyui_workflow_quality: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json"
     comfyui_workflow_reference_quality: Path | None = None

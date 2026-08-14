@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare standalone Cobra and FLUX.2 Klein candidates on one manifest."""
+"""Compare Cobra and FLUX.2 Klein ComfyUI workflows on one manifest."""
 
 from __future__ import annotations
 
@@ -49,39 +49,62 @@ def load_rgb(data: bytes) -> Image.Image:
 def run_cobra(
     client: httpx.Client,
     page: Path,
-    references: list[Path],
+    reference_inputs: dict[str, str],
+    workflow: dict,
     *,
     seed: int,
     steps: int,
     top_k: int,
-) -> tuple[bytes, int | None, str | None]:
-    files: list[tuple[str, tuple[str, bytes, str]]] = [
-        ("image", (page.name, page.read_bytes(), "application/octet-stream"))
+    style: str,
+    timeout_seconds: int,
+) -> tuple[bytes, int | None, str]:
+    prompt = deepcopy(workflow)
+    cobra_nodes = [
+        node
+        for node in prompt.values()
+        if isinstance(node, dict) and node.get("class_type") == "CobraColorize"
     ]
-    files.extend(
-        (
-            "references",
-            (reference.name, reference.read_bytes(), "application/octet-stream"),
-        )
-        for reference in references
+    if len(cobra_nodes) != 1:
+        raise ValueError("Cobra workflow must contain exactly one CobraColorize node")
+    cobra_nodes[0]["inputs"].update(
+        {
+            "reference_count": len(reference_inputs),
+            "seed": seed,
+            "steps": steps,
+            "top_k": top_k,
+            "style": style,
+        }
+    )
+    uploaded_references = list(reference_inputs.values())
+    inputs = {
+        "INPUT_IMAGE": upload(client, page, "INPUT_IMAGE"),
+        **{
+            f"REFERENCE_IMAGE_{index}": uploaded_references[
+                min(index - 1, len(uploaded_references) - 1)
+            ]
+            for index in range(1, 13)
+        },
+    }
+    output_nodes = ComfyUIBackend._bind_io(
+        prompt,
+        input_images=inputs,
+        output_prefix=f"comic-enhancer/candidate-cobra-{uuid.uuid4().hex}",
     )
     response = client.post(
-        "/v1/colorize",
-        files=files,
-        data={
-            "style": "line + shadow",
-            "seed": str(seed),
-            "steps": str(steps),
-            "top_k": str(top_k),
-        },
+        "/prompt",
+        json={"prompt": prompt, "client_id": uuid.uuid4().hex},
     )
     response.raise_for_status()
-    backend_ms = response.headers.get("X-Inference-Ms")
-    return (
-        response.content,
-        int(backend_ms) if backend_ms and backend_ms.isdigit() else None,
-        None,
+    prompt_id = response.json()["prompt_id"]
+    image_info, _ = wait_for_output(
+        client,
+        prompt_id,
+        output_nodes,
+        timeout_seconds,
     )
+    result = client.get("/view", params=image_info)
+    result.raise_for_status()
+    return result.content, None, prompt_id
 
 
 def run_flux2(
@@ -132,6 +155,7 @@ def summarize(results: list[dict[str, object]]) -> dict[str, object]:
         if item.get("backend_elapsed_ms") is not None
     ]
     protected_metrics = [item["protected_metrics"] for item in results]
+    geometry_metrics = [item["geometry_metrics"] for item in results]
     raw_metrics = [item["raw_metrics"] for item in results]
     return {
         "pages": len(results),
@@ -149,6 +173,16 @@ def summarize(results: list[dict[str, object]]) -> dict[str, object]:
         ),
         "raw_maximum_dominant_hue_ratio": max(
             float(item["dominant_hue_ratio"]) for item in raw_metrics
+        ),
+        "geometry_median_saturated_pixel_ratio": round(
+            statistics.median(
+                float(item["saturated_pixel_ratio"]) for item in geometry_metrics
+            ),
+            4,
+        ),
+        "geometry_median_active_hue_bins": round(
+            statistics.median(int(item["active_hue_bins"]) for item in geometry_metrics),
+            2,
         ),
         "protected_median_saturated_pixel_ratio": round(
             statistics.median(
@@ -185,6 +219,11 @@ def main() -> None:
     parser.add_argument("--phase", choices=("cold", "warm"), required=True)
     parser.add_argument("--cobra-steps", type=int, default=10)
     parser.add_argument("--cobra-top-k", type=int, default=3)
+    parser.add_argument(
+        "--cobra-style",
+        choices=("line + shadow", "line"),
+        default="line + shadow",
+    )
     parser.add_argument("--seed", type=int, default=20260814)
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--resource-ssh-host")
@@ -200,14 +239,17 @@ def main() -> None:
     missing_references = [str(item) for item in references if not item.is_file()]
     if missing_references:
         parser.error(f"参考图不存在: {missing_references}")
+    if args.candidate == "cobra" and not 1 <= len(references) <= 12:
+        parser.error("Cobra 候选需要 1 到 12 张角色参考图")
     if args.candidate == "flux2-klein-4b" and len(references) != 3:
         parser.error("FLUX.2 当前候选工作流需要恰好 3 张角色参考图")
     if args.candidate == "flux2-klein-4b" and not args.workflow:
         parser.error("FLUX.2 候选必须提供 --workflow")
 
-    workflow = None
-    if args.workflow:
-        workflow = json.loads(args.workflow.resolve().read_text(encoding="utf-8"))
+    workflow_path = args.workflow
+    if args.candidate == "cobra" and workflow_path is None:
+        workflow_path = PROJECT_ROOT / "workflows" / "cobra-colorize.json"
+    workflow = json.loads(workflow_path.resolve().read_text(encoding="utf-8"))
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output_dir = args.output_dir.resolve() / f"{args.candidate}-{args.phase}-{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -221,16 +263,14 @@ def main() -> None:
     resource_samples: list[dict[str, object]] = []
     try:
         with httpx.Client(base_url=args.base_url.rstrip("/"), timeout=args.timeout) as client:
-            reference_inputs = {}
-            if args.candidate == "flux2-klein-4b":
-                reference_inputs = {
-                    f"REFERENCE_IMAGE_{index}": upload(
-                        client,
-                        reference,
-                        f"REFERENCE_IMAGE_{index}",
-                    )
-                    for index, reference in enumerate(references, 1)
-                }
+            reference_inputs = {
+                f"REFERENCE_IMAGE_{index}": upload(
+                    client,
+                    reference,
+                    f"REFERENCE_IMAGE_{index}",
+                )
+                for index, reference in enumerate(references, 1)
+            }
             for index, page in enumerate(pages, 1):
                 if monitor:
                     monitor.set_page_index(index)
@@ -239,10 +279,13 @@ def main() -> None:
                     raw_bytes, backend_ms, prompt_id = run_cobra(
                         client,
                         page,
-                        references,
+                        reference_inputs,
+                        workflow,
                         seed=args.seed + index - 1,
                         steps=args.cobra_steps,
                         top_k=args.cobra_top_k,
+                        style=args.cobra_style,
+                        timeout_seconds=args.timeout,
                     )
                 else:
                     raw_bytes, backend_ms, prompt_id = run_flux2(
@@ -256,14 +299,29 @@ def main() -> None:
                 elapsed_ms = round((time.perf_counter() - started) * 1000)
                 source_bytes = page.read_bytes()
                 raw_image = load_rgb(raw_bytes)
-                protected_image = ComfyUIBackend._protect_source_structure(
-                    source_bytes,
-                    raw_image,
-                )
+                if args.candidate == "cobra":
+                    geometry_image = ComfyUIBackend._restore_geometry(
+                        source_bytes,
+                        raw_image,
+                    )
+                    protected_image = ComfyUIBackend._protect_cobra_structure(
+                        source_bytes,
+                        geometry_image,
+                    )
+                else:
+                    geometry_image = raw_image
+                    protected_image = ComfyUIBackend._protect_source_structure(
+                        source_bytes,
+                        geometry_image,
+                    )
                 raw_path = output_dir / f"page-{index:02d}-raw.png"
+                geometry_path = output_dir / f"page-{index:02d}-geometry.png"
                 protected_path = output_dir / f"page-{index:02d}-protected.png"
                 raw_image.save(raw_path, format="PNG", optimize=True)
+                geometry_image.save(geometry_path, format="PNG", optimize=True)
                 protected_image.save(protected_path, format="PNG", optimize=True)
+                geometry_stream = BytesIO()
+                geometry_image.save(geometry_stream, format="PNG")
                 protected_stream = BytesIO()
                 protected_image.save(protected_stream, format="PNG")
                 item = {
@@ -272,8 +330,13 @@ def main() -> None:
                     "client_elapsed_ms": elapsed_ms,
                     "backend_elapsed_ms": backend_ms,
                     "raw_output": str(raw_path.relative_to(PROJECT_ROOT)),
+                    "geometry_output": str(geometry_path.relative_to(PROJECT_ROOT)),
                     "protected_output": str(protected_path.relative_to(PROJECT_ROOT)),
                     "raw_metrics": image_metrics(source_bytes, raw_bytes),
+                    "geometry_metrics": image_metrics(
+                        source_bytes,
+                        geometry_stream.getvalue(),
+                    ),
                     "protected_metrics": image_metrics(
                         source_bytes,
                         protected_stream.getvalue(),
@@ -293,6 +356,20 @@ def main() -> None:
         "manifest": str(args.manifest),
         "benchmark_scope": manifest.get("scope"),
         "reference_count": len(references),
+        "reference_images": [
+            str(reference.relative_to(PROJECT_ROOT)) for reference in references
+        ],
+        "workflow": str(workflow_path.resolve().relative_to(PROJECT_ROOT)),
+        "parameters": (
+            {
+                "style": args.cobra_style,
+                "steps": args.cobra_steps,
+                "top_k": args.cobra_top_k,
+                "seed": args.seed,
+            }
+            if args.candidate == "cobra"
+            else {"seed": args.seed}
+        ),
         "summary": summarize(results),
         "resource_summary": summarize_resources(resource_samples),
         "results": results,

@@ -16,7 +16,7 @@
   "comfyui_poll_interval_seconds": 0.25,
   "comfyui_cobra_enabled": false,
   "comfyui_workflow_cobra": "workflows/cobra-colorize.json",
-  "cobra_reference_limit": 3,
+  "cobra_reference_limit": 12,
   "comfyui_workflow_fast": "workflows/sd15-colorize-fast.json",
   "comfyui_workflow_quality": "workflows/sd15-colorize-quality.json",
   "comfyui_workflow_reference_quality": "workflows/manganinja-reference-quality.json",

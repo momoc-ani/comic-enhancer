@@ -99,6 +99,16 @@ class CobraColorize:
                 "reference_1": ("IMAGE",),
                 "reference_2": ("IMAGE",),
                 "reference_3": ("IMAGE",),
+                "reference_4": ("IMAGE",),
+                "reference_5": ("IMAGE",),
+                "reference_6": ("IMAGE",),
+                "reference_7": ("IMAGE",),
+                "reference_8": ("IMAGE",),
+                "reference_9": ("IMAGE",),
+                "reference_10": ("IMAGE",),
+                "reference_11": ("IMAGE",),
+                "reference_12": ("IMAGE",),
+                "reference_count": ("INT", {"default": 3, "min": 1, "max": 12}),
                 "seed": ("INT", {"default": 20260814, "min": 0, "max": 2**31 - 1}),
                 "steps": ("INT", {"default": 10, "min": 1, "max": 30}),
                 "top_k": ("INT", {"default": 3, "min": 1, "max": 20}),
@@ -120,6 +130,16 @@ class CobraColorize:
         reference_1: torch.Tensor,
         reference_2: torch.Tensor,
         reference_3: torch.Tensor,
+        reference_4: torch.Tensor,
+        reference_5: torch.Tensor,
+        reference_6: torch.Tensor,
+        reference_7: torch.Tensor,
+        reference_8: torch.Tensor,
+        reference_9: torch.Tensor,
+        reference_10: torch.Tensor,
+        reference_11: torch.Tensor,
+        reference_12: torch.Tensor,
+        reference_count: int,
         seed: int,
         steps: int,
         top_k: int,
@@ -133,10 +153,21 @@ class CobraColorize:
                 output_path = temp_root / "output.png"
                 _tensor_to_image(image).save(image_path, format="PNG")
                 reference_paths = []
-                for index, reference in enumerate(
-                    (reference_1, reference_2, reference_3),
-                    1,
-                ):
+                references = (
+                    reference_1,
+                    reference_2,
+                    reference_3,
+                    reference_4,
+                    reference_5,
+                    reference_6,
+                    reference_7,
+                    reference_8,
+                    reference_9,
+                    reference_10,
+                    reference_11,
+                    reference_12,
+                )
+                for index, reference in enumerate(references[:reference_count], 1):
                     path = temp_root / f"reference-{index:02d}.png"
                     _tensor_to_image(reference).save(path, format="PNG")
                     reference_paths.append(str(path))
