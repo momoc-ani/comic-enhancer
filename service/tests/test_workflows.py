@@ -430,12 +430,17 @@ def test_shipped_flux2_workflows_protect_text_then_upscale_final_result(name):
         (PROJECT_ROOT / "workflows" / name).read_text(encoding="utf-8")
     )
 
-    assert workflow["35"]["class_type"] == "Image Blending Mode"
-    assert workflow["35"]["inputs"]["mode"] == "color"
+    assert not any(
+        node["class_type"] == "Image Blending Mode"
+        for node in workflow.values()
+    )
     assert "immutable source pixels" in workflow["8"]["inputs"]["text"]
     assert "changed punctuation" in workflow["9"]["inputs"]["text"]
     assert workflow["38"]["class_type"] == "ThresholdMask"
+    assert workflow["38"]["inputs"]["value"] == 0.18
+    assert workflow["39"]["inputs"]["expand"] == 0
     assert workflow["40"]["class_type"] == "ImageCompositeMasked"
+    assert workflow["40"]["inputs"]["destination"] == ["33", 0]
     assert workflow["41"]["inputs"]["model_name"] == (
         "RealESRGAN_x4plus_anime_6B.pth"
     )

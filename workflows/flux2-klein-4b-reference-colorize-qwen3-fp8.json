@@ -193,16 +193,6 @@
     "inputs": {"samples": ["32", 0], "vae": ["7", 0]},
     "class_type": "VAEDecode"
   },
-  "35": {
-    "inputs": {
-      "image_a": ["10", 0],
-      "image_b": ["33", 0],
-      "mode": "color",
-      "blend_percentage": 1.0
-    },
-    "class_type": "Image Blending Mode",
-    "_meta": {"title": "Restore Original Luminance"}
-  },
   "36": {
     "inputs": {"image": ["10", 0], "channel": "red"},
     "class_type": "ImageToMask",
@@ -213,21 +203,21 @@
     "class_type": "InvertMask"
   },
   "38": {
-    "inputs": {"mask": ["37", 0], "value": 0.35},
+    "inputs": {"mask": ["37", 0], "value": 0.18},
     "class_type": "ThresholdMask",
     "_meta": {"title": "Protect Text and Ink"}
   },
   "39": {
     "inputs": {
       "mask": ["38", 0],
-      "expand": 1,
+      "expand": 0,
       "tapered_corners": false
     },
     "class_type": "GrowMask"
   },
   "40": {
     "inputs": {
-      "destination": ["35", 0],
+      "destination": ["33", 0],
       "source": ["10", 0],
       "x": 0,
       "y": 0,
@@ -235,7 +225,7 @@
       "mask": ["39", 0]
     },
     "class_type": "ImageCompositeMasked",
-    "_meta": {"title": "Restore Original Text and Ink"}
+    "_meta": {"title": "Restore Narrow Original Text and Ink"}
   },
   "41": {
     "inputs": {"model_name": "RealESRGAN_x4plus_anime_6B.pth"},
