@@ -14,7 +14,7 @@ services:
       HF_ENDPOINT: https://hf-mirror.com
       PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
     ports:
-      - "127.0.0.1:8192:8188"
+      - "192.168.38.226:8192:8188"
     volumes:
       - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/models:ro
 

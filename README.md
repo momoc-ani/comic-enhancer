@@ -38,7 +38,7 @@ Mac / Chrome 插件
         |
         +-- ComfyUI 8190：快速/质量工作流
         +-- ComfyUI 8191：MangaNinja 实验工作流
-        +-- ComfyUI 8192：Cobra 实验工作流
+        +-- ComfyUI 8192：Cobra 实验工作流（局域网调试界面）
         +-- MAGIv2：人物分析内部服务
         |
         v
@@ -46,6 +46,8 @@ Mac / Chrome 插件
 ```
 
 插件只连接 `8765`；上面的 ComfyUI 和分析器都是 API 的内部执行组件，地址、工作流和模型由服务端配置，插件不需要也不能直接访问。
+
+Cobra 的 ComfyUI 调试界面临时提供在 `http://192.168.38.226:8192/`，仅用于工作流检查；正式插件请求仍然必须走 `8765` API。
 
 本次不使用 Mac 的 RX 6750 XT 推理。macOS 原生程序可以尝试 PyTorch MPS/Metal，但 Docker Desktop 运行的是 Linux 虚拟机，无法直通 macOS AMD 显卡，也不能提供 ROCm 所需的 `/dev/kfd`。
 

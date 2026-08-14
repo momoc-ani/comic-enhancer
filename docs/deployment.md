@@ -2,7 +2,7 @@
 
 ## 本次 RTX 4090 部署
 
-目标主机为 `holopix@192.168.38.226`。对外只提供漫画增强 API `8765`；已有 ComfyUI `8190`、MangaNinja 专用 ComfyUI `127.0.0.1:8191`、候选 Cobra ComfyUI `127.0.0.1:8192` 和 MAGIv2 分析器 `127.0.0.1:8770` 都是 API 的内部执行组件。专用容器与现有 8190 隔离，不重启或替换现有 ComfyUI，插件不配置这些地址。
+目标主机为 `holopix@192.168.38.226`。对外业务只提供漫画增强 API `8765`；已有 ComfyUI `8190`、MangaNinja 专用 ComfyUI `127.0.0.1:8191`、候选 Cobra ComfyUI `192.168.38.226:8192` 和 MAGIv2 分析器 `127.0.0.1:8770` 都由 API 管理。Cobra 的 `8192` 仅为局域网调试界面，插件不配置该地址。专用容器与现有 8190 隔离，不重启或替换现有 ComfyUI。
 
 远端需要确认：
 
@@ -54,7 +54,7 @@ CANDIDATE_DOWNLOAD_CONNECTIONS=4 \
 - Cobra PixArt 基座：`cobra/PixArt-XL-2-1024-MS`
 - Cobra 复用 T5：`cobra/PixArt-XL-2-1024-MS/text_encoder/model.safetensors -> ../../../clip/t5xxl_fp16.safetensors`
 
-Cobra 通过 Compose 的 `candidate-cobra` profile 运行独立的 ComfyUI 容器，监听宿主机 `127.0.0.1:8192`，内部服务名为 `comfyui-cobra:8188`。该容器加载 Cobra 自定义节点和预设工作流，API 不直接调用 Cobra Python HTTP 服务。候选验收期间应先释放 MangaNinja 和 MAGIv2 的常驻显存，再执行 Cobra 工作流的冷启动、热模型和同页参考图基准；没有真实输出和显存峰值证据前，不把候选加入浏览器插件的正式档位。要在插件中试用 Cobra，API 容器设置 `COMIC_ENHANCER_COMFYUI_COBRA_URL=http://comfyui-cobra:8188`、`COMIC_ENHANCER_COMFYUI_COBRA_ENABLED=true` 后，以 `--profile candidate-cobra` 重建 API 和 ComfyUI；插件只会在该 ComfyUI `/system_stats` 就绪且工作流存在时显示该档位。
+Cobra 通过 Compose 的 `candidate-cobra` profile 运行独立的 ComfyUI 容器，宿主机调试地址为 `http://192.168.38.226:8192/`，容器内部服务名为 `comfyui-cobra:8188`。该容器加载 Cobra 自定义节点和预设工作流，API 不直接调用 Cobra Python HTTP 服务。Cobra ComfyUI 没有独立业务鉴权，只应在可信局域网使用；插件仍必须走 `8765` API。候选验收期间应先释放 MangaNinja 和 MAGIv2 的常驻显存，再执行 Cobra 工作流的冷启动、热模型和同页参考图基准；没有真实输出和显存峰值证据前，不把候选加入浏览器插件的正式档位。要在插件中试用 Cobra，API 容器设置 `COMIC_ENHANCER_COMFYUI_COBRA_URL=http://comfyui-cobra:8188`、`COMIC_ENHANCER_COMFYUI_COBRA_ENABLED=true` 后，以 `--profile candidate-cobra` 重建 API 和 ComfyUI；插件只会在该 ComfyUI `/system_stats` 就绪且工作流存在时显示该档位。
 
 未配置 Gitee 仓库和 Token 时保持 `COMIC_ENHANCER_GITEE_ENABLED=false`，基础上色和本地 LoRA 仍可使用。填写完整 Gitee 配置后再改为 `true` 并重建 API 容器。
 
