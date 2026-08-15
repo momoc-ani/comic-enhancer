@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import hashlib
 from pathlib import Path
 
-from ....models import ProcessingMode, ProcessOptions, ResolvedAdapter
+from ....domain import ProcessingMode, ProcessOptions, ResolvedAdapter
 from ...contracts import AdapterPolicy, InferenceAssets, InferenceOutcome
 from ..transport import ComfyUITransport
 from ..workflows import WorkflowLoader

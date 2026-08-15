@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ....models import ProcessingMode, ProcessOptions, ResolvedAdapter
+from ....domain import ProcessingMode, ProcessOptions, ResolvedAdapter
 from ...contracts import AdapterPolicy, InferenceAssets, InferenceOutcome
 from .flux2_base import FLUX2_PROCESSING_REVISION, Flux2StrategyBase
 

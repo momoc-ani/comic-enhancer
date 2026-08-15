@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from ..models import ProcessOptions, ResolvedAdapter, WorkIdentity
+from ..domain import ProcessOptions, ResolvedAdapter, WorkIdentity
 
 
 class ResultCache:

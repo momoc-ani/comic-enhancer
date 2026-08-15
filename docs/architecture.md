@@ -68,6 +68,21 @@ service/comic_enhancer/
 
 元数据提供方之间不直接依赖，聚合器只面向 `MetadataProvider` 契约；Gitee 分发与本地适配器解析属于同一适配器能力，但保持独立实现；参考图质量判断不执行网络请求，下载存储也不参与候选排序。原有包级导入继续由各目录的 `__init__.py` 提供，`cache.py` 和 `gitee.py` 只保留兼容导出。
 
+服务端业务按领域、应用编排和 HTTP 接口继续分层：
+
+```text
+service/comic_enhancer/
+  domain/{identity,adapters,processing,metadata}.py
+  application/{processing,reference_bank,remote_adapters}.py
+  api/
+    app.py
+    context.py
+    dependencies.py
+    routes/{system,pages,metadata,adapters,results}.py
+```
+
+`domain` 只保存稳定数据契约；`application` 负责任务、角色参考库和远端适配器等用例编排；`api` 负责 FastAPI 对象装配、鉴权、请求校验和响应映射。路由之间不直接调用，统一通过 `ApplicationContext` 获取应用服务。`main.py`、`models.py` 和 `jobs.py` 只保留启动或旧导入路径兼容，不承载业务实现；`comic_enhancer.main:create_app`、`comic_enhancer.main:app` 和 `app.state.processor` 的外部契约保持不变。
+
 ## Real-CUGAN 放大档
 
 放大档固定执行以下链路：

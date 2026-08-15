@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from ..models import (
+from ..domain import (
     AdapterManifest,
     AdapterSource,
     ResolvedAdapter,

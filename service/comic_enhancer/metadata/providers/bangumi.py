@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from ...models import CharacterReference, WorkIdentity, WorkMetadata
+from ...domain import CharacterReference, WorkIdentity, WorkMetadata
 from ..base import (
     MetadataProvider,
     cover,

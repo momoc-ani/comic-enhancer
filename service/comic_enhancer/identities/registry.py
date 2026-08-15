@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..models import CharacterReference, WorkIdentity
+from ..domain import CharacterReference, WorkIdentity
 from .matching import (
     alias_title_matches,
     normalize_character_name,

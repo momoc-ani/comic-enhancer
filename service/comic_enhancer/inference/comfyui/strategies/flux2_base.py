@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import uuid
 
-from ....models import ProcessingMode, ProcessOptions, ResolvedAdapter
+from ....domain import ProcessingMode, ProcessOptions, ResolvedAdapter
 from ...contracts import InferenceAssets, InferenceOutcome
 from ..image_ops import restore_geometry, save_output
 from .base import (

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from ...models import ProcessingMode, ProcessOptions, ResolvedAdapter
+from ...domain import ProcessingMode, ProcessOptions, ResolvedAdapter
 from ..contracts import (
     AdapterPolicy,
     InferenceAssets,

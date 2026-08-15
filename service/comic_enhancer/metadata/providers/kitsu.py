@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from ...models import WorkIdentity, WorkMetadata
+from ...domain import WorkIdentity, WorkMetadata
 from ..base import MetadataProvider, confidence, cover, now, text
 
 

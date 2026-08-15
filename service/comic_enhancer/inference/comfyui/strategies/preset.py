@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from ....models import ProcessOptions, ResolvedAdapter
+from ....domain import ProcessOptions, ResolvedAdapter
 from ...contracts import InferenceAssets, InferenceOutcome
 from ..image_ops import protect_source_structure, save_output
 from .base import ComfyUIModeStrategy

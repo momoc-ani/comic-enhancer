@@ -1,20 +1,19 @@
-"""兼容旧领域模型导入路径，业务实现位于 domain 包。"""
+"""导出服务端稳定的领域模型。"""
 
-from .domain import (
-    AdapterManifest,
-    AdapterSource,
-    Capabilities,
+from .adapters import AdapterManifest, AdapterSource, ResolvedAdapter
+from .identity import (
     ChapterIdentity,
     CharacterBankEntry,
     CharacterReference,
-    MetadataResolution,
+    WorkIdentity,
+)
+from .metadata import MetadataResolution, WorkMetadata
+from .processing import (
+    Capabilities,
     ProcessingMode,
     ProcessingModeOption,
     ProcessOptions,
     ProcessResult,
-    ResolvedAdapter,
-    WorkIdentity,
-    WorkMetadata,
 )
 
 __all__ = [

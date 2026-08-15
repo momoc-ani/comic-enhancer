@@ -7,7 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from ...models import ProcessOptions, ResolvedAdapter
+from ...domain import ProcessOptions, ResolvedAdapter
 
 
 @dataclass(frozen=True)

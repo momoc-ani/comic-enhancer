@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image, ImageEnhance, ImageOps
 
-from ..models import ProcessingMode, ProcessOptions, ResolvedAdapter
+from ..domain import ProcessingMode, ProcessOptions, ResolvedAdapter
 from .contracts import InferenceAssets, InferenceBackend, InferenceOutcome
 
 

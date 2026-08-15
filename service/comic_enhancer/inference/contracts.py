@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..models import ProcessOptions, ResolvedAdapter
+from ..domain import ProcessOptions, ResolvedAdapter
 
 
 class InferenceBackend(ABC):

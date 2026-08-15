@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from ..models import AdapterManifest
+from ..domain import AdapterManifest
 
 
 class GiteeError(RuntimeError):

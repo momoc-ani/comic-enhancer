@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 import uuid
 
-from ....models import ProcessingMode, ProcessOptions, ResolvedAdapter
+from ....domain import ProcessingMode, ProcessOptions, ResolvedAdapter
 from ...contracts import AdapterPolicy, InferenceAssets, InferenceOutcome
 from ..image_ops import protect_cobra_structure, restore_geometry, save_output
 from .base import (

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import re
 from typing import Any
 
-from ..models import WorkIdentity, WorkMetadata
+from ..domain import WorkIdentity, WorkMetadata
 
 
 # 方法说明：将任意元数据值规范化为文本。

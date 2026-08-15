@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from ..models import MetadataResolution, WorkIdentity, WorkMetadata
+from ..domain import MetadataResolution, WorkIdentity, WorkMetadata
 from .base import MetadataProvider
 from .providers import (
     AniListProvider,
