@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
+await import("./copy-manga.js");
+
 class ClassList {
   // 方法说明：初始化当前对象及其运行状态。
   constructor(values = []) {
@@ -46,10 +48,11 @@ class FakeWrapper {
 
 class FakeImage {
   // 方法说明：初始化当前对象及其运行状态。
-  constructor() {
-    this.dataset = { src: "https://img.example/page-1.webp" };
+  constructor(url = "https://img.example/page-1.webp", bottom = 100) {
+    this.dataset = { src: url };
     this.currentSrc = "https://img.example/loading.jpg";
     this.src = this.currentSrc;
+    this.bottom = bottom;
     this.naturalWidth = 1124;
     this.naturalHeight = 1600;
     this.complete = true;
@@ -72,7 +75,7 @@ class FakeImage {
 
   // 方法说明：返回测试图片的布局尺寸。
   getBoundingClientRect() {
-    return { width: 1124, height: 1600, bottom: 100 };
+    return { width: 1124, height: 1600, bottom: this.bottom };
   }
 
   // 方法说明：在测试图片前插入包装节点。

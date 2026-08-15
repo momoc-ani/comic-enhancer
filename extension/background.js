@@ -42,11 +42,17 @@ async function injectContent(tabId) {
   if (!Number.isInteger(tabId)) return;
   const existing = await chrome.scripting.executeScript({
     target: { tabId },
-    func: () => Boolean(globalThis.__comicEnhancerInjected),
+    func: () =>
+      Boolean(
+        globalThis.__comicEnhancerInjected && globalThis.ComicEnhancerCopyManga,
+      ),
   });
   if (existing.some((result) => result.result === true)) return;
   await chrome.scripting.insertCSS({ target: { tabId }, files: ["content.css"] });
-  await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["copy-manga.js", "content.js"],
+  });
 }
 
 // 方法说明：判断地址是否属于受支持的漫画页面。
@@ -148,6 +154,8 @@ async function processPage(payload) {
   }
 
   const result = await response.json();
+  if (payload.prefetchOnly) return result;
+
   const imageResponse = await fetch(`${apiBaseUrl}${result.result_url}`, {
     headers: { Authorization: `Bearer ${settings.apiToken}` },
   });
@@ -187,4 +195,4 @@ async function getActiveSettings() {
   return migrateSettings(await chrome.storage.local.get(null));
 }
 
-export { DEFAULT_SETTINGS, isSupportedPage };
+export { DEFAULT_SETTINGS, isSupportedPage, processPage };

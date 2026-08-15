@@ -1,8 +1,16 @@
 (() => {
   if (globalThis.__comicEnhancerInjected) return;
+  const CopyMangaAdapter = globalThis.ComicEnhancerCopyManga?.CopyMangaAdapter;
+  if (!CopyMangaAdapter) {
+    console.warn("Comic Enhancer: 拷贝漫画适配器未加载");
+    return;
+  }
   globalThis.__comicEnhancerInjected = true;
 
   const entriesByImage = new WeakMap();
+  const entriesByUrl = new Map();
+  const warmedUrls = new Set();
+  const queuedPrefetchUrls = new Set();
   const pending = [];
   let active = false;
   let settings = null;
@@ -11,126 +19,8 @@
   let settingsVersion = 0;
   const retainedPagesBehind = 2;
   const minimumRetainedPagesAhead = 3;
-
-  class CopyMangaAdapter {
-    // 方法说明：判断当前页面是否属于支持的漫画站点。
-    static matches() {
-      return /(^|\.)(copymanga\.(com|site|tv)|mangacopy\.com)$/i.test(
-        location.hostname,
-      );
-    }
-
-    // 方法说明：从页面中提取稳定的作品身份信息。
-    getWork() {
-      const pathParts = location.pathname.split("/").filter(Boolean);
-      const comicIndex = pathParts.indexOf("comic");
-      const sourceWorkId =
-        comicIndex >= 0 && pathParts[comicIndex + 1]
-          ? decodeURIComponent(pathParts[comicIndex + 1])
-          : this.meta("property", "og:url") || location.pathname;
-
-      return {
-        source: "copy_manga",
-        source_work_id: sourceWorkId,
-        title:
-          this.meta("property", "og:title") ||
-          document.querySelector("h1")?.textContent?.trim() ||
-          document.title,
-        author: this.findAuthor(),
-        tags: this.findTags(),
-        cover_url: this.meta("property", "og:image") || null,
-      };
-    }
-
-    // 方法说明：从页面中提取当前章节信息。
-    getChapter() {
-      const parts = location.pathname.split("/").filter(Boolean);
-      const chapterIndex = parts.indexOf("chapter");
-      return {
-        chapter_id:
-          chapterIndex >= 0 && parts[chapterIndex + 1]
-            ? decodeURIComponent(parts[chapterIndex + 1])
-            : location.pathname,
-        title:
-          document.querySelector("[class*='chapter'] h1, [class*='chapter'] h2")
-            ?.textContent?.trim() || "",
-      };
-    }
-
-    // 方法说明：查找并去重页面中的有效漫画图片。
-    findImages() {
-      const selectors = [
-        ".comicContent-list img",
-        ".comicContent img",
-        "[class*='comic-content'] img",
-        "[class*='chapter-content'] img",
-        "main img",
-      ];
-      const candidates = [...document.querySelectorAll(selectors.join(","))];
-      const bestByUrl = new Map();
-      for (const image of candidates) {
-        const url = this.imageUrl(image);
-        const width = image.naturalWidth || Number(image.getAttribute("width")) || 0;
-        const height = image.naturalHeight || Number(image.getAttribute("height")) || 0;
-        if (!url || !(height >= 500 || height > width * 1.1)) continue;
-        const previous = bestByUrl.get(url);
-        if (!previous || imageScore(image) > imageScore(previous)) {
-          bestByUrl.set(url, image);
-        }
-      }
-      return [...bestByUrl.values()];
-    }
-
-    // 方法说明：解析图片真实地址并过滤占位数据。
-    imageUrl(image) {
-      const raw =
-        image.dataset.src ||
-        image.dataset.original ||
-        image.getAttribute("data-lazy-src") ||
-        image.currentSrc ||
-        image.src;
-      if (!raw || raw.startsWith("data:")) return "";
-      try {
-        return new URL(raw, location.href).href;
-      } catch {
-        return "";
-      }
-    }
-
-    // 方法说明：读取指定页面元标签的内容。
-    meta(attribute, value) {
-      return document
-        .querySelector(`meta[${attribute}="${value}"]`)
-        ?.getAttribute("content")
-        ?.trim();
-    }
-
-    // 方法说明：从页面标注中提取作者名称。
-    findAuthor() {
-      const labelled = [...document.querySelectorAll("a, span, div")].find((node) =>
-        /^(作者|作者：|作者:)/.test(node.textContent?.trim() || ""),
-      );
-      return labelled?.textContent?.replace(/^作者[：:]?/, "").trim() || "";
-    }
-
-    // 方法说明：从页面中提取作品标签。
-    findTags() {
-      return [...document.querySelectorAll("[class*='tag'] a, [class*='theme'] a")]
-        .map((node) => node.textContent?.trim())
-        .filter(Boolean)
-        .slice(0, 20);
-    }
-  }
-
-  // 方法说明：计算候选漫画图片的选择分数。
-  function imageScore(image) {
-    const box = image.getBoundingClientRect();
-    return (
-      (image.classList.contains("blank") ? -1000 : 0) +
-      (box.width > 0 && box.height > 0 ? 100 : 0) +
-      (image.complete && image.naturalWidth > 0 ? 10 : 0)
-    );
-  }
+  const currentChapterPrefetchPriority = 100;
+  const nextChapterPrefetchPriority = 200;
 
   class Scheduler {
     // 方法说明：初始化当前对象及其运行状态。
@@ -138,6 +28,7 @@
       this.adapter = adapter;
       this.work = work;
       this.chapter = chapter;
+      this.prefetchVersion = -1;
       this.observer = new IntersectionObserver(
         (observations) => {
           for (const observation of observations) {
@@ -152,14 +43,59 @@
     discover() {
       const images = this.adapter.findImages();
       images.forEach((image, index) => {
+        const imageUrl = this.adapter.imageUrl(image);
         if (!entriesByImage.has(image)) {
-          entriesByImage.set(image, { image, index, state: "idle" });
+          entriesByImage.set(image, { image, imageUrl, index, state: "idle" });
           this.observer.observe(image);
         } else {
-          entriesByImage.get(image).index = index;
+          const entry = entriesByImage.get(image);
+          entry.index = index;
+          entry.imageUrl = imageUrl;
         }
+        if (imageUrl) entriesByUrl.set(imageUrl, entriesByImage.get(image));
       });
       this.prefetchAroundViewport(images);
+    }
+
+    // 方法说明：为当前设置版本启动当前话和下一话的顺序缓存预热。
+    startOrderedPrefetch() {
+      if (this.prefetchVersion === settingsVersion) return;
+      const version = settingsVersion;
+      this.prefetchVersion = version;
+      this.scheduleOrderedPrefetch(version).catch((error) => {
+        if (version !== settingsVersion) return;
+        console.warn(
+          "Comic Enhancer 顺序预生成失败:",
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    }
+
+    // 方法说明：先按页码加入当前话，再按页码加入紧邻下一话。
+    async scheduleOrderedPrefetch(version) {
+      const currentUrls = await this.adapter.getChapterImageUrls();
+      if (version !== settingsVersion) return;
+      currentUrls.forEach((imageUrl, index) => {
+        this.enqueuePrefetch(
+          imageUrl,
+          index,
+          this.chapter,
+          currentChapterPrefetchPriority,
+          "current",
+        );
+      });
+
+      const nextChapter = await this.adapter.loadNextChapter();
+      if (version !== settingsVersion || !nextChapter) return;
+      nextChapter.imageUrls.forEach((imageUrl, index) => {
+        this.enqueuePrefetch(
+          imageUrl,
+          index,
+          nextChapter.chapter,
+          nextChapterPrefetchPriority,
+          "next",
+        );
+      });
     }
 
     // 方法说明：调度当前视口附近的漫画页预取。
@@ -210,6 +146,9 @@
     resetForSettingsChange() {
       settingsVersion += 1;
       pending.length = 0;
+      warmedUrls.clear();
+      queuedPrefetchUrls.clear();
+      this.prefetchVersion = -1;
       for (const image of this.adapter.findImages()) {
         const entry = entriesByImage.get(image);
         if (!entry) continue;
@@ -219,6 +158,16 @@
         wrapper.title = "";
       }
       this.discover();
+      this.startOrderedPrefetch();
+    }
+
+    // 方法说明：停用增强功能时废弃所有尚未执行的跨章节任务。
+    cancelPending() {
+      settingsVersion += 1;
+      pending.length = 0;
+      warmedUrls.clear();
+      queuedPrefetchUrls.clear();
+      this.prefetchVersion = -1;
     }
 
     // 方法说明：按优先级将漫画页加入处理队列。
@@ -227,58 +176,130 @@
       if (!entry || entry.state !== "idle") return;
       const imageUrl = this.adapter.imageUrl(image);
       if (!imageUrl) return;
+      entry.imageUrl = imageUrl;
+      entriesByUrl.set(imageUrl, entry);
       entry.state = "queued";
       pending.push({
         ...entry,
+        kind: "display",
         imageUrl,
         priority,
         sequence: sequence++,
         settingsVersion,
       });
-      pending.sort((a, b) => a.priority - b.priority || a.sequence - b.sequence);
+      pending.sort(compareTasks);
       this.drain();
     }
 
-    // 方法说明：串行消费队列并更新页面处理状态。
+    // 方法说明：将无页面覆盖层的缓存预热任务加入统一优先级队列。
+    enqueuePrefetch(imageUrl, index, chapter, priority, chapterScope) {
+      if (!imageUrl || warmedUrls.has(imageUrl) || queuedPrefetchUrls.has(imageUrl)) return;
+      const displayEntry = entriesByUrl.get(imageUrl);
+      if (displayEntry && displayEntry.state !== "idle") return;
+      queuedPrefetchUrls.add(imageUrl);
+      pending.push({
+        kind: "prefetch",
+        imageUrl,
+        index,
+        priority,
+        chapter,
+        chapterScope,
+        sequence: sequence++,
+        settingsVersion,
+      });
+      pending.sort(compareTasks);
+      this.drain();
+    }
+
+    // 方法说明：串行消费显示与缓存预热任务并保持跨章节优先级。
     async drain() {
       if (active || pending.length === 0) return;
-      active = true;
       const task = pending.shift();
-      const entry = entriesByImage.get(task.image);
-      if (!entry || entry.state !== "queued") {
-        active = false;
+      if (task.settingsVersion !== settingsVersion) {
+        queuedPrefetchUrls.delete(task.imageUrl);
         this.drain();
         return;
       }
-
-      entry.state = "processing";
-      markState(task.image, "processing");
+      active = true;
       try {
-        if (task.settingsVersion !== settingsVersion) return;
-        const response = await chrome.runtime.sendMessage({
-          type: "COMIC_ENHANCER_PROCESS",
-          payload: {
-            imageUrl: task.imageUrl,
-            work: this.work,
-            chapter: this.chapter,
-            options: { page_index: task.index, palette_version: "default" },
-          },
-        });
-        if (task.settingsVersion !== settingsVersion) return;
-        if (!response?.ok) throw new Error(response?.error || "Unknown error");
-        await ensureSourceImageLoaded(task.image, task.imageUrl);
-        if (task.settingsVersion !== settingsVersion) return;
-        await showResult(task.image, response.result);
-        entry.state = "completed";
-      } catch (error) {
-        if (task.settingsVersion !== settingsVersion) return;
-        entry.state = "failed";
-        markState(task.image, "failed", error instanceof Error ? error.message : String(error));
+        if (task.kind === "prefetch") await this.processPrefetchTask(task);
+        else await this.processDisplayTask(task);
       } finally {
         active = false;
         this.drain();
       }
     }
+
+    // 方法说明：处理可见页面任务并在成功后显示增强结果。
+    async processDisplayTask(task) {
+      const entry = entriesByImage.get(task.image);
+      if (!entry || entry.state !== "queued") return;
+      entry.state = "processing";
+      markState(task.image, "processing");
+      try {
+        const response = await this.requestProcessing(task, false);
+        if (task.settingsVersion !== settingsVersion) return;
+        await ensureSourceImageLoaded(task.image, task.imageUrl);
+        if (task.settingsVersion !== settingsVersion) return;
+        await showResult(task.image, response.result);
+        entry.state = "completed";
+        warmedUrls.add(task.imageUrl);
+      } catch (error) {
+        if (task.settingsVersion !== settingsVersion) return;
+        entry.state = "failed";
+        markState(
+          task.image,
+          "failed",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    // 方法说明：处理缓存预热任务且不向当前页面下载增强结果。
+    async processPrefetchTask(task) {
+      try {
+        if (warmedUrls.has(task.imageUrl)) return;
+        await this.requestProcessing(task, true);
+        if (task.settingsVersion === settingsVersion) warmedUrls.add(task.imageUrl);
+      } catch (error) {
+        if (task.settingsVersion !== settingsVersion) return;
+        console.warn(
+          `Comic Enhancer ${task.chapterScope === "next" ? "下一话" : "当前话"}` +
+            `第 ${task.index + 1} 页预生成失败:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        queuedPrefetchUrls.delete(task.imageUrl);
+      }
+    }
+
+    // 方法说明：向后台发送显示或仅缓存的统一页面处理请求。
+    async requestProcessing(task, prefetchOnly) {
+      if (task.settingsVersion !== settingsVersion) {
+        throw new Error("页面处理设置已变化");
+      }
+      const response = await chrome.runtime.sendMessage({
+        type: "COMIC_ENHANCER_PROCESS",
+        payload: {
+          imageUrl: task.imageUrl,
+          work: this.work,
+          chapter: task.chapter || this.chapter,
+          options: { page_index: task.index, palette_version: "default" },
+          prefetchOnly,
+        },
+      });
+      if (!response?.ok) throw new Error(response?.error || "Unknown error");
+      return response;
+    }
+  }
+
+  // 方法说明：按任务层级、页码和入队顺序稳定排列处理任务。
+  function compareTasks(left, right) {
+    return (
+      left.priority - right.priority ||
+      left.index - right.index ||
+      left.sequence - right.sequence
+    );
   }
 
   // 方法说明：确保真实漫画原图已经加载完成。
@@ -399,6 +420,7 @@
     const adapter = new CopyMangaAdapter();
     scheduler = new Scheduler(adapter, adapter.getWork(), adapter.getChapter());
     scheduler.discover();
+    scheduler.startOrderedPrefetch();
 
     const mutations = new MutationObserver(() => scheduler.discover());
     mutations.observe(document.documentElement, { childList: true, subtree: true });
@@ -407,14 +429,18 @@
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type !== "COMIC_ENHANCER_REFRESH_SETTINGS") return false;
+    const previouslyEnabled = settings?.enabled;
     const runChanged =
       settings?.mode !== message.settings.mode ||
-      settings?.apiBaseUrl !== message.settings.apiBaseUrl;
+      settings?.apiBaseUrl !== message.settings.apiBaseUrl ||
+      settings?.apiToken !== message.settings.apiToken;
     settings = { ...settings, ...message.settings };
     if (settings.enabled) {
-      if (runChanged) scheduler?.resetForSettingsChange();
+      if (!scheduler) {
+        bootstrap().catch((error) => console.warn("Comic Enhancer:", error));
+      } else if (runChanged || !previouslyEnabled) scheduler.resetForSettingsChange();
       else scheduler?.retryFailed();
-    }
+    } else scheduler?.cancelPending();
     sendResponse({ ok: true });
     return false;
   });

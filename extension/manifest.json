@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "漫画增强器",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "使用本地或局域网推理服务进行漫画上色与画质增强",
   "permissions": ["storage", "scripting"],
   "host_permissions": [
@@ -32,7 +32,7 @@
         "*://*.copymanga.tv/*",
         "*://*.mangacopy.com/*"
       ],
-      "js": ["content.js"],
+      "js": ["copy-manga.js", "content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
