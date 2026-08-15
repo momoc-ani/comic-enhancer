@@ -19,8 +19,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   apiToken: "",
   mode: "fast",
   prefetchPages: 3,
-  preferWorkAdapter: true,
-  allowGenericAdapter: true,
   remoteApiBaseUrl: REMOTE_API_URL,
   remoteApiToken: "",
   remoteMode: "fast",
@@ -28,6 +26,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   localApiToken: "",
   localMode: "fast",
 });
+
+const SETTING_KEYS = new Set(Object.keys(DEFAULT_SETTINGS));
 
 // 方法说明：规范化服务地址并移除末尾斜杠。
 export function normalizeUrl(value) {
@@ -76,20 +76,21 @@ export function activateDeployment(settings, deployment) {
     apiToken,
     mode,
     prefetchPages: prefetchPagesForMode(mode),
-    preferWorkAdapter: true,
-    allowGenericAdapter: true,
   };
 }
 
 // 方法说明：迁移并补全扩展设置。
 export function migrateSettings(raw = {}) {
+  const retainedRaw = Object.fromEntries(
+    Object.entries(raw).filter(([key]) => SETTING_KEYS.has(key)),
+  );
   const deployment = inferDeployment(raw);
   const legacyMode = normalizeMode(raw.mode);
   const legacyUrl = normalizeUrl(raw.apiBaseUrl);
   const legacyToken = String(raw.apiToken || "").trim();
   const merged = {
     ...DEFAULT_SETTINGS,
-    ...raw,
+    ...retainedRaw,
     remoteApiBaseUrl: normalizeUrl(
       raw.remoteApiBaseUrl ||
         (deployment === "remote" ? legacyUrl : "") ||

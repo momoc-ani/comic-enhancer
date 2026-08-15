@@ -2,11 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..adapters import AdapterRegistry, GiteeAdapterStore
 from ..application import (
     ProcessingService,
     ReferenceBankService,
-    RemoteAdapterService,
 )
 from ..config import Settings
 from ..identities import WorkIdentityRegistry
@@ -20,12 +18,9 @@ from ..storage import ResultCache
 class ApplicationContext:
     settings: Settings
     backend: InferenceBackend
-    registry: AdapterRegistry
     cache: ResultCache
     references: ReferenceImageStore
     metadata: MetadataAggregator
     identities: WorkIdentityRegistry
     processor: ProcessingService
     reference_bank: ReferenceBankService
-    gitee_store: GiteeAdapterStore | None
-    remote_adapters: RemoteAdapterService | None

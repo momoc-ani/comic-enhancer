@@ -21,9 +21,6 @@ export function buildModelExecution(result, settings, completedAt = Date.now()) 
     configuredProfile: settings.profile || "custom",
     apiBaseUrl: normalizeUrl(settings.apiBaseUrl),
     modelProfile: String(result.model_profile || "unknown"),
-    adapterSource: String(result.adapter_source || "none"),
-    adapterId: result.adapter_id || null,
-    adapterApplied: Boolean(result.adapter_applied),
     referenceApplied: Boolean(result.reference_applied),
     processedPanels: Number(result.processed_panels) || 0,
     cached: Boolean(result.cached),
@@ -59,10 +56,6 @@ export function describeModelTier(settings, execution, capabilities = null) {
   let actualTier = mode === "upscale" ? "原生超分" : "基础模型";
   if (execution.referenceApplied) {
     actualTier = "角色参考";
-  } else if (execution.adapterApplied && execution.adapterSource === "work") {
-    actualTier = "作品 LoRA";
-  } else if (execution.adapterApplied && execution.adapterSource === "generic") {
-    actualTier = "通用 LoRA";
   }
 
   const modelLabel =

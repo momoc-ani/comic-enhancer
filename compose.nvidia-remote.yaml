@@ -26,7 +26,6 @@ services:
     environment:
       COMIC_ENHANCER_BACKEND: comfyui
       COMIC_ENHANCER_TOKEN: ${COMIC_ENHANCER_TOKEN:?请在.env中设置COMIC_ENHANCER_TOKEN}
-      COMIC_ENHANCER_ADMIN_TOKEN: ${COMIC_ENHANCER_ADMIN_TOKEN:?请在.env中设置管理Token}
       COMIC_ENHANCER_COMFYUI_URL: http://comfyui:8188
       COMIC_ENHANCER_REALCUGAN_ENABLED: ${COMIC_ENHANCER_REALCUGAN_ENABLED:-false}
       COMIC_ENHANCER_REALCUGAN_RESOURCE_ROOT: /app/resource/realcugan
@@ -37,24 +36,13 @@ services:
       COMIC_ENHANCER_COMFYUI_FLUX2_QUANT_ENABLED: ${COMIC_ENHANCER_COMFYUI_FLUX2_QUANT_ENABLED:-false}
       COMIC_ENHANCER_WORKFLOW_FLUX2_QUANT: ${COMIC_ENHANCER_WORKFLOW_FLUX2_QUANT:-/app/workflows/flux2-klein-4b-reference-colorize-qwen3-fp8.json}
       COMIC_ENHANCER_WORK_IDENTITY_INDEX: /app/config/work-identities.json
-      COMIC_ENHANCER_ADAPTER_INDEX: /app/runtime/adapters/index.json
-      COMIC_ENHANCER_ADAPTER_WEIGHTS_ROOT: /models/loras
       COMIC_ENHANCER_RUNTIME_DIR: /app/runtime
       COMIC_ENHANCER_WORKFLOW_FAST: /app/workflows/sd15-colorize-fast.json
       COMIC_ENHANCER_WORKFLOW_QUALITY: /app/workflows/sd15-colorize-quality.json
-      COMIC_ENHANCER_WORKFLOW_ROOT: /app/workflows
-      COMIC_ENHANCER_GITEE_ENABLED: ${COMIC_ENHANCER_GITEE_ENABLED:-true}
-      COMIC_ENHANCER_GITEE_OWNER: ${COMIC_ENHANCER_GITEE_OWNER:-}
-      COMIC_ENHANCER_GITEE_REPO: ${COMIC_ENHANCER_GITEE_REPO:-}
-      COMIC_ENHANCER_GITEE_BRANCH: ${COMIC_ENHANCER_GITEE_BRANCH:-main}
-      COMIC_ENHANCER_GITEE_TOKEN: ${COMIC_ENHANCER_GITEE_TOKEN:-}
-      COMIC_ENHANCER_GITEE_INDEX_PATH: ${COMIC_ENHANCER_GITEE_INDEX_PATH:-adapters/index.json}
-      COMIC_ENHANCER_GITEE_RELEASE_TAG: ${COMIC_ENHANCER_GITEE_RELEASE_TAG:-lora}
     ports:
       - "8765:8765"
     volumes:
       - comic-enhancer-runtime:/app/runtime
-      - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/models
       - ./workflows:/app/workflows:ro
       - ${REALCUGAN_RESOURCE_ROOT:-./resource/realcugan}:/app/resource/realcugan:ro
 

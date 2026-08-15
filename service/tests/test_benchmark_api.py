@@ -66,15 +66,14 @@ def test_percentile_uses_nearest_rank():
     assert percentile([], 95) == 0
 
 
-# 方法说明：验证基准摘要会记录真实模型和回退状态。
-def test_summary_reports_actual_model_and_fallback_state():
+# 方法说明：验证基准摘要会记录真实模型和参考图状态。
+def test_summary_reports_actual_model_and_reference_state():
     results = [
         {
             "client_elapsed_ms": 1100,
             "service_elapsed_ms": 1000,
             "cached": False,
             "model_profile": "sd15-colorize",
-            "adapter_source": "none",
             "reference_applied": False,
             "processed_panels": 0,
             "metrics": {"dark_pixel_retention": 0.99},
@@ -84,7 +83,6 @@ def test_summary_reports_actual_model_and_fallback_state():
             "service_elapsed_ms": 2000,
             "cached": True,
             "model_profile": "flux2-klein-4b",
-            "adapter_source": "work",
             "reference_applied": True,
             "processed_panels": 2,
             "metrics": {"dark_pixel_retention": 0.97},

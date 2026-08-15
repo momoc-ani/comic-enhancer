@@ -1,12 +1,11 @@
 import json
 from io import BytesIO
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
-from comic_enhancer.inference import InferenceAssets, InferenceOutcome
+from comic_enhancer.inference import InferenceAssets
 from comic_enhancer.inference.comfyui import (
     ComfyUIBackend,
     PresetWorkflowLoader,
@@ -19,12 +18,7 @@ from comic_enhancer.inference.comfyui.strategies import (
     Flux2QuantModeStrategy,
     QualityModeStrategy,
 )
-from comic_enhancer.models import (
-    AdapterManifest,
-    AdapterSource,
-    ProcessOptions,
-    ResolvedAdapter,
-)
+from comic_enhancer.models import ProcessOptions
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -49,15 +43,6 @@ def write_workflow(path, *, marker, load_nodes=1, save_nodes=1):
     path.write_text(json.dumps(workflow), encoding="utf-8")
 
 
-# 方法说明：创建测试使用的适配器解析结果。
-def resolved(adapter=None):
-    return ResolvedAdapter(
-        source=AdapterSource.WORK if adapter else AdapterSource.NONE,
-        adapter=adapter,
-        reason="test",
-    )
-
-
 # 方法说明：生成测试使用的 PNG 图片字节。
 def png_bytes(image: Image.Image) -> bytes:
     stream = BytesIO()
@@ -78,7 +63,6 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
         workflow_loader=PresetWorkflowLoader(
             fast_workflow=fast,
             quality_workflow=quality,
-            workflow_root=tmp_path,
         ),
     )
 
@@ -91,8 +75,6 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
     for mode, strategy_type in expected.items():
         strategy = backend.mode_strategy(mode)
         assert isinstance(strategy, strategy_type)
-        expected_workflow = mode if mode in {"fast", "quality"} else "quality"
-        assert strategy.adapter_policy().required_workflow == expected_workflow
     assert len({type(backend.mode_strategy(mode)) for mode in expected}) == len(expected)
 
 
@@ -117,7 +99,6 @@ def test_flux2_strategies_do_not_fallback_to_quality(tmp_path, monkeypatch, mode
         workflow_loader=PresetWorkflowLoader(
             fast_workflow=fast,
             quality_workflow=quality,
-            workflow_root=tmp_path,
             flux2_workflow=flux2,
             flux2_quant_workflow=flux2_quant,
         ),
@@ -145,7 +126,6 @@ def test_flux2_strategies_do_not_fallback_to_quality(tmp_path, monkeypatch, mode
             assets,
             tmp_path / f"{mode}.webp",
             ProcessOptions(mode=mode),
-            resolved(),
         )
 
 
@@ -166,7 +146,6 @@ def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
         workflow_loader=PresetWorkflowLoader(
             fast_workflow=fast,
             quality_workflow=quality,
-            workflow_root=tmp_path,
             flux2_workflow=flux2,
         ),
         flux2_enabled=True,
@@ -207,7 +186,6 @@ def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
         assets,
         output_path,
         ProcessOptions(mode="flux2"),
-        resolved(),
     )
 
     assert outcome.model_profile == "flux2-klein-4b"
@@ -220,7 +198,6 @@ def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
     assert captured["workflow"]["marker"]["inputs"]["value"] == "flux2"
     assert FLUX2_PROCESSING_REVISION in backend.cache_revision(
         ProcessOptions(mode="flux2"),
-        resolved(),
         assets,
     )
     with Image.open(output_path) as result:
@@ -231,37 +208,24 @@ def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
         assert pixel[2] > 90
 
 
-# 方法说明：验证加载器会选择指定档位和完整适配器工作流。
-def test_loader_selects_mode_and_complete_adapter_workflow(tmp_path):
+# 方法说明：验证加载器会选择快速档和质量档的独立完整工作流。
+def test_loader_selects_complete_workflow_for_each_mode(tmp_path):
     fast = tmp_path / "fast.json"
     quality = tmp_path / "quality.json"
-    adapter_workflow = tmp_path / "works" / "42-fast.json"
     write_workflow(fast, marker="fast")
     write_workflow(quality, marker="quality")
-    write_workflow(adapter_workflow, marker="adapter")
     loader = PresetWorkflowLoader(
         fast_workflow=fast,
         quality_workflow=quality,
-        workflow_root=tmp_path,
-    )
-    adapter = AdapterManifest(
-        adapter_id="work-42",
-        name="Work 42",
-        base_model="sd15-anime",
-        revision="v1",
-        file="work.safetensors",
-        workflows={"fast": "works/42-fast.json"},
     )
 
-    loaded = loader.load(ProcessOptions(mode="fast"), resolved(adapter))
-    fallback = loader.load(ProcessOptions(mode="quality"), resolved(adapter))
+    fast_loaded = loader.load(ProcessOptions(mode="fast"))
+    quality_loaded = loader.load(ProcessOptions(mode="quality"))
 
-    assert loaded.prompt["marker"]["inputs"]["value"] == "adapter"
-    assert loaded.adapter_applied is True
-    assert fallback.prompt["marker"]["inputs"]["value"] == "quality"
-    assert fallback.adapter_applied is False
-    assert loader.revision(ProcessOptions(mode="fast"), resolved(adapter)) != loader.revision(
-        ProcessOptions(mode="quality"), resolved(adapter)
+    assert fast_loaded.prompt["marker"]["inputs"]["value"] == "fast"
+    assert quality_loaded.prompt["marker"]["inputs"]["value"] == "quality"
+    assert loader.revision(ProcessOptions(mode="fast")) != loader.revision(
+        ProcessOptions(mode="quality")
     )
 
 
@@ -403,30 +367,6 @@ def test_shipped_flux2_workflows_use_prompt_protection_and_direct_output(name):
         for node in workflow.values()
     )
     assert workflow["34"]["inputs"]["images"] == ["33", 0]
-
-
-# 方法说明：验证适配器工作流路径不能逃逸配置根目录。
-def test_adapter_workflow_cannot_escape_root(tmp_path):
-    fast = tmp_path / "fast.json"
-    quality = tmp_path / "quality.json"
-    write_workflow(fast, marker="fast")
-    write_workflow(quality, marker="quality")
-    loader = PresetWorkflowLoader(
-        fast_workflow=fast,
-        quality_workflow=quality,
-        workflow_root=tmp_path,
-    )
-    adapter = AdapterManifest(
-        adapter_id="unsafe",
-        name="Unsafe",
-        base_model="sd15-anime",
-        revision="v1",
-        file="unsafe.safetensors",
-        workflows={"fast": "../unsafe.json"},
-    )
-
-    with pytest.raises(RuntimeError, match="escapes"):
-        loader.load(ProcessOptions(mode="fast"), resolved(adapter))
 
 
 @pytest.mark.parametrize(

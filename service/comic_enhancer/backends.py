@@ -1,7 +1,6 @@
 """兼容旧导入路径；新代码应直接使用 comic_enhancer.inference。"""
 
 from .inference import (
-    AdapterPolicy,
     InferenceAssets,
     InferenceBackend,
     InferenceOutcome,
@@ -26,7 +25,6 @@ from .inference.comfyui.strategies import (
 
 
 __all__ = [
-    "AdapterPolicy",
     "ComfyUIBackend",
     "ComfyUIModeStrategy",
     "FLUX2_OUTPUT_SCALE",

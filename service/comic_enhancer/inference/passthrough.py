@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image, ImageEnhance, ImageOps
 
-from ..domain import ProcessingMode, ProcessOptions, ResolvedAdapter
+from ..domain import ProcessingMode, ProcessOptions
 from .contracts import InferenceAssets, InferenceBackend, InferenceOutcome
 
 
@@ -20,7 +20,6 @@ class PassthroughBackend(InferenceBackend):
         assets: InferenceAssets,
         output_path: Path,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with Image.open(BytesIO(assets.image_bytes)) as source:
@@ -29,7 +28,4 @@ class PassthroughBackend(InferenceBackend):
                 image = ImageEnhance.Contrast(image).enhance(1.04)
                 image = ImageEnhance.Sharpness(image).enhance(1.08)
             image.save(output_path, format="WEBP", quality=92, method=4)
-        return InferenceOutcome(
-            adapter_applied=False,
-            model_profile="passthrough",
-        )
+        return InferenceOutcome(model_profile="passthrough")

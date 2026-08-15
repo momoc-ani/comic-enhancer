@@ -13,52 +13,33 @@ const settings = {
   apiBaseUrl: "http://192.168.38.226:8765/",
 };
 
-// 方法说明：验证作品 LoRA 仅在实际应用后才会显示。
-test("shows work LoRA only when it was actually applied", () => {
+// 方法说明：验证基础模型及实际耗时能够正确显示。
+test("shows the actual base model and elapsed time", () => {
   const execution = buildModelExecution(
     {
       model_profile: "sd15-colorize",
-      adapter_source: "work",
-      adapter_id: "work-v1",
-      adapter_applied: true,
       elapsed_ms: 5270,
     },
     settings,
   );
 
-  assert.equal(describeModelTier(settings, execution).title, "质量档 · 作品 LoRA");
+  assert.equal(describeModelTier(settings, execution).title, "质量档 · 基础模型");
   assert.match(describeModelTier(settings, execution).detail, /5\.27 秒/);
 });
 
-// 方法说明：验证通用 LoRA 和缓存命中状态能够正确显示。
-test("shows generic LoRA and cache hits", () => {
+// 方法说明：验证基础模型的缓存命中状态能够正确显示。
+test("shows cache hits for the actual base model", () => {
   const execution = buildModelExecution(
     {
       model_profile: "sd15-colorize",
-      adapter_source: "generic",
-      adapter_applied: true,
       cached: true,
     },
     settings,
   );
 
   const view = describeModelTier(settings, execution);
-  assert.equal(view.title, "质量档 · 通用 LoRA");
+  assert.equal(view.title, "质量档 · 基础模型");
   assert.match(view.detail, /缓存命中/);
-});
-
-// 方法说明：验证未实际应用的适配器不会被错误展示。
-test("does not claim an adapter when the selected adapter was not applied", () => {
-  const execution = buildModelExecution(
-    {
-      model_profile: "sd15-colorize",
-      adapter_source: "generic",
-      adapter_applied: false,
-    },
-    settings,
-  );
-
-  assert.equal(describeModelTier(settings, execution).title, "质量档 · 基础模型");
 });
 
 // 方法说明：验证其他服务地址或档位的执行记录会被忽略。

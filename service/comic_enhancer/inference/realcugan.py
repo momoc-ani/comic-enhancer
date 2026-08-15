@@ -206,7 +206,4 @@ class RealCuganUpscaler:
             "Real-CUGAN 两倍放大完成，耗时 %.3f 秒",
             time.perf_counter() - started,
         )
-        return InferenceOutcome(
-            adapter_applied=False,
-            model_profile=self.model_profile,
-        )
+        return InferenceOutcome(model_profile=self.model_profile)

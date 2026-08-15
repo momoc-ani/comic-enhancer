@@ -1,5 +1,4 @@
 from .contracts import (
-    AdapterPolicy,
     InferenceAssets,
     InferenceBackend,
     InferenceOutcome,
@@ -15,7 +14,6 @@ from .routing import RoutedInferenceBackend
 
 
 __all__ = [
-    "AdapterPolicy",
     "InferenceAssets",
     "InferenceBackend",
     "InferenceOutcome",

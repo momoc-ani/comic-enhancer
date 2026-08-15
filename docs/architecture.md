@@ -22,7 +22,7 @@
 API 先通过 `RoutedInferenceBackend` 区分平台原生档位与主推理后端；ComfyUI 后端再通过 `ComfyUIModeStrategy` 注册上色档位。每个档位独立实现可用性、缓存版本、适配器策略和处理逻辑：
 
 - 快速档和质量档复用同一个预设策略实现，只替换完整工作流；
-- 放大档只在显式启用且当前平台的 Real-CUGAN 可执行文件、`models-se/up2x-no-denoise.param` 和 `.bin` 齐全时可用，不选择 LoRA 或角色参考图；
+- 放大档只在显式启用且当前平台的 Real-CUGAN 可执行文件、`models-se/up2x-no-denoise.param` 和 `.bin` 齐全时可用，不选择角色参考图；
 - FLUX.2 独立管理最多 3 张参考图，使用旧基准的四步空 latent 工作流输出上色结果，再交给 UPSCALE 策略执行二阶段 Real-CUGAN 放大；API 不复用 SD1.5 的后端业务后处理。
 
 策略之间不共享业务后处理函数。上传、ComfyUI 队列提交、轮询、结果下载、缓存和鉴权属于后端基础设施，可以复用。`flux2` 和 `flux2_quant` 在 FLUX.2 第一阶段或 UPSCALE 二阶段失败时都直接返回失败，不回退到质量策略；插件收到失败后继续保留原图。
@@ -58,25 +58,24 @@ service/comic_enhancer/
     aggregator.py
     base.py
     providers/{bangumi,anilist,kitsu,shikimori,jikan,mangaupdates}.py
-  adapters/{registry,gitee}.py
   identities/{models,matching,registry}.py
   references/{quality,store}.py
   storage/result_cache.py
 ```
 
-元数据提供方之间不直接依赖，聚合器只面向 `MetadataProvider` 契约；Gitee 分发与本地适配器解析属于同一适配器能力，但保持独立实现；参考图质量判断不执行网络请求，下载存储也不参与候选排序。原有包级导入继续由各目录的 `__init__.py` 提供，`cache.py` 和 `gitee.py` 只保留兼容导出。
+元数据提供方之间不直接依赖，聚合器只面向 `MetadataProvider` 契约；参考图质量判断不执行网络请求，下载存储也不参与候选排序。原有包级导入继续由各目录的 `__init__.py` 提供，`cache.py` 只保留兼容导出。
 
 服务端业务按领域、应用编排和 HTTP 接口继续分层：
 
 ```text
 service/comic_enhancer/
-  domain/{identity,adapters,processing,metadata}.py
-  application/{processing,reference_bank,remote_adapters}.py
+  domain/{identity,processing,metadata}.py
+  application/{processing,reference_bank}.py
   api/
     app.py
     context.py
     dependencies.py
-    routes/{system,pages,metadata,adapters,results}.py
+    routes/{system,pages,metadata,results}.py
 ```
 
 `domain` 只保存稳定数据契约；`application` 负责任务、角色参考库和远端适配器等用例编排；`api` 负责 FastAPI 对象装配、鉴权、请求校验和响应映射。路由之间不直接调用，统一通过 `ApplicationContext` 获取应用服务。`main.py`、`models.py` 和 `jobs.py` 只保留启动或旧导入路径兼容，不承载业务实现；`comic_enhancer.main:create_app`、`comic_enhancer.main:app` 和 `app.state.processor` 的外部契约保持不变。
@@ -143,7 +142,6 @@ service/comic_enhancer/
 输入漫画页
   -> 按模式缩放至 0.55MP 或 0.85MP
   -> SD1.5 动漫 checkpoint
-  -> 可选 LoRA（由对应完整工作流定义节点、权重和强度）
   -> Lineart ControlNet 约束线稿结构
   -> 低降噪图生图 10 或 20 步
   -> Real-ESRGAN Anime 6B 4x
@@ -152,9 +150,7 @@ service/comic_enhancer/
   -> WebP 缓存
 ```
 
-工作流使用 ComfyUI API 格式 JSON，checkpoint、ControlNet、LoRA、提示词、随机种子、分辨率、采样器、步数、CFG、降噪和超分参数全部写在工作流内。服务只自动查找唯一的 `LoadImage` 节点写入上传结果，并查找 `SaveImage` 节点设置输出前缀、从 `/history` 获取结果。接入其他模型只需新增完整工作流并修改配置；工作流存在 `${...}` 占位符会被拒绝。
-
-作品 LoRA 主要学习作品画风、服装和常用配色，但不能单独可靠解决所有角色身份颜色。后续质量版仍需要封面、彩页或动画截图的参考图检索和角色调色板。
+工作流使用 ComfyUI API 格式 JSON，checkpoint、ControlNet、提示词、随机种子、分辨率、采样器、步数、CFG、降噪和超分参数全部写在工作流内。服务只自动查找唯一的 `LoadImage` 节点写入上传结果，并查找 `SaveImage` 节点设置输出前缀、从 `/history` 获取结果。接入其他模型只需新增完整工作流并修改配置；工作流存在 `${...}` 占位符会被拒绝。
 
 ## 并发和预推理
 
@@ -163,16 +159,13 @@ service/comic_enhancer/
 - 当前可视页优先级最高，之后按页面顺序处理预取队列。
 - 插件只保留当前页前 2 页和后续至少 3 页的增强覆盖层；滚远的 Base64 结果从 DOM 释放，回看时从服务端不可变缓存恢复，避免长章节内存随页数持续增长。
 - ComfyUI 命令队列、显存余量和 GPU 并发是三个独立概念，不能因为显存还有余量就自动增加并发。
-- 缓存键包含原图哈希、作品 ID、处理模式、调色板版本、LoRA ID 和版本。
+- 缓存键包含原图哈希、作品 ID、处理模式、调色板版本、工作流版本和模型处理版本。
 
 ## 安全边界
 
 - 处理接口、能力接口和结果接口都要求 Bearer Token。
 - 远端 API 只部署在可信局域网，不直接暴露公网。
 - 结果文件使用 SHA-256 文件名，且由插件后台鉴权拉取。
-- 可下载 LoRA 只接受 `safetensors`。
-- LoRA 索引更新应先下载临时文件，再校验 SHA-256，最后原子替换索引。
-- 训练图片默认只留在用户本地；发布作品 LoRA 必须由用户主动确认。
 
 ## Mac 与 AMD 边界
 

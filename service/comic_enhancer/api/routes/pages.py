@@ -56,9 +56,6 @@ async def process_page(
     if len(image_bytes) > 30 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="image exceeds 30 MiB")
 
-    if context.remote_adapters is not None:
-        await context.remote_adapters.ensure(work, options)
-
     character_references: dict[str, bytes] = {}
     if options.mode in REFERENCE_MODES:
         resolution = await asyncio.to_thread(context.metadata.resolve, work)

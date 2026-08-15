@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ....domain import ProcessingMode, ProcessOptions, ResolvedAdapter
-from ...contracts import AdapterPolicy, InferenceAssets, InferenceOutcome
+from ....domain import ProcessingMode, ProcessOptions
+from ...contracts import InferenceAssets, InferenceOutcome
 from .flux2_base import FLUX2_PROCESSING_REVISION, Flux2StrategyBase
 
 
@@ -25,22 +25,12 @@ class Flux2ModeStrategy(Flux2StrategyBase):
     def cache_revision(
         self,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
         assets: InferenceAssets | None,
     ) -> str:
         return self._flux2_cache_revision(
             options,
-            resolved,
             assets,
             quantized=False,
-        )
-
-    # 方法说明：声明 FLUX.2 仅沿用质量档适配器解析规则。
-    def adapter_policy(self) -> AdapterPolicy:
-        return AdapterPolicy(
-            enabled=True,
-            compatible_base_models=self.supported_base_models,
-            required_workflow=self.adapter_workflow,
         )
 
     # 方法说明：执行 FLUX.2 并将结果交给外层 UPSCALE 二阶段。
@@ -49,9 +39,8 @@ class Flux2ModeStrategy(Flux2StrategyBase):
         assets: InferenceAssets,
         output_path: Path,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
-        return self._process_flux2(assets, output_path, options, resolved)
+        return self._process_flux2(assets, output_path, options)
 
 
 __all__ = ["FLUX2_PROCESSING_REVISION", "Flux2ModeStrategy"]

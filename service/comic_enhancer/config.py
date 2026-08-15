@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 
@@ -19,9 +19,7 @@ class Settings:
     host: str = "127.0.0.1"
     port: int = 8765
     api_token: str = "comic-enhancer-dev"
-    admin_token: str = ""
     backend: str = "passthrough"
-    generic_adapter_id: str = "generic-anime-v1"
     prefetch_pages: int = 3
     max_parallel_inference: int = 1
     realcugan_enabled: bool = False
@@ -37,19 +35,7 @@ class Settings:
     comfyui_workflow_flux2_quant: Path | None = None
     comfyui_workflow_fast: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json"
     comfyui_workflow_quality: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json"
-    comfyui_workflow_root: Path = PROJECT_ROOT / "workflows"
     runtime_dir: Path = PROJECT_ROOT / "runtime"
-    adapter_index: Path = PROJECT_ROOT / "adapters" / "index.json"
-    adapter_weights_root: Path = PROJECT_ROOT / "adapters"
-    gitee_enabled: bool = False
-    gitee_api_url: str = "https://gitee.com/api/v5"
-    gitee_owner: str = ""
-    gitee_repo: str = ""
-    gitee_branch: str = "main"
-    gitee_token: str = ""
-    gitee_index_path: str = "adapters/index.json"
-    gitee_release_tag: str = "lora"
-    gitee_timeout_seconds: int = 60
     metadata_enabled: bool = True
     metadata_ttl_seconds: int = 86400
     metadata_timeout_seconds: int = 8
@@ -69,29 +55,16 @@ def load_settings() -> Settings:
     values: dict[str, object] = {}
     if config_path.exists():
         values.update(json.loads(config_path.read_text(encoding="utf-8")))
-
-    # These endpoints belonged to retired inference layouts.
-    for field_name in (
-        "cobra_url",
-        "comfyui_cobra_url",
-        "comfyui_reference_url",
-        "cobra_timeout_seconds",
-        "cobra_steps",
-        "cobra_top_k",
-        "cobra_style",
-    ):
-        values.pop(field_name, None)
+    supported_fields = {field.name for field in fields(Settings)}
+    values = {key: value for key, value in values.items() if key in supported_fields}
 
     for field_name in (
-        "adapter_index",
-        "adapter_weights_root",
         "runtime_dir",
         "realcugan_resource_root",
         "comfyui_workflow_fast",
         "comfyui_workflow_quality",
         "comfyui_workflow_flux2",
         "comfyui_workflow_flux2_quant",
-        "comfyui_workflow_root",
         "work_identity_index",
     ):
         if field_name in values:
@@ -104,19 +77,7 @@ def load_settings() -> Settings:
         "COMIC_ENHANCER_HOST": ("host", str),
         "COMIC_ENHANCER_PORT": ("port", int),
         "COMIC_ENHANCER_TOKEN": ("api_token", str),
-        "COMIC_ENHANCER_ADMIN_TOKEN": ("admin_token", str),
         "COMIC_ENHANCER_BACKEND": ("backend", str),
-        "COMIC_ENHANCER_ADAPTER_INDEX": ("adapter_index", Path),
-        "COMIC_ENHANCER_ADAPTER_WEIGHTS_ROOT": ("adapter_weights_root", Path),
-        "COMIC_ENHANCER_GITEE_ENABLED": ("gitee_enabled", lambda value: value.lower() in {"1", "true", "yes", "on"}),
-        "COMIC_ENHANCER_GITEE_API_URL": ("gitee_api_url", str),
-        "COMIC_ENHANCER_GITEE_OWNER": ("gitee_owner", str),
-        "COMIC_ENHANCER_GITEE_REPO": ("gitee_repo", str),
-        "COMIC_ENHANCER_GITEE_BRANCH": ("gitee_branch", str),
-        "COMIC_ENHANCER_GITEE_TOKEN": ("gitee_token", str),
-        "COMIC_ENHANCER_GITEE_INDEX_PATH": ("gitee_index_path", str),
-        "COMIC_ENHANCER_GITEE_RELEASE_TAG": ("gitee_release_tag", str),
-        "COMIC_ENHANCER_GITEE_TIMEOUT": ("gitee_timeout_seconds", int),
         "COMIC_ENHANCER_METADATA_ENABLED": ("metadata_enabled", lambda value: value.lower() in {"1", "true", "yes", "on"}),
         "COMIC_ENHANCER_METADATA_TTL": ("metadata_ttl_seconds", int),
         "COMIC_ENHANCER_METADATA_TIMEOUT": ("metadata_timeout_seconds", int),
@@ -154,7 +115,6 @@ def load_settings() -> Settings:
         ),
         "COMIC_ENHANCER_WORKFLOW_FAST": ("comfyui_workflow_fast", Path),
         "COMIC_ENHANCER_WORKFLOW_QUALITY": ("comfyui_workflow_quality", Path),
-        "COMIC_ENHANCER_WORKFLOW_ROOT": ("comfyui_workflow_root", Path),
     }
     for env_name, (field_name, converter) in env_map.items():
         if env_name in os.environ:

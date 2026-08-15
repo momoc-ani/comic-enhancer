@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..domain import ProcessingMode, ProcessOptions, ResolvedAdapter
+from ..domain import ProcessingMode, ProcessOptions
 from .contracts import (
-    AdapterPolicy,
     InferenceAssets,
     InferenceBackend,
     InferenceOutcome,
@@ -24,8 +23,6 @@ class RoutedInferenceBackend(InferenceBackend):
         self.backend = backend
         self.upscaler = upscaler
         self.name = backend.name
-        self.applies_adapters = backend.applies_adapters
-        self.supported_base_models = backend.supported_base_models
 
     # 方法说明：返回当前实际可声明的模型档位。
     @property
@@ -55,29 +52,14 @@ class RoutedInferenceBackend(InferenceBackend):
     def cache_revision(
         self,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
         assets: InferenceAssets | None = None,
     ) -> str:
         if options.mode == ProcessingMode.UPSCALE:
             return self.upscaler.cache_revision()
-        revision = self.backend.cache_revision(options, resolved, assets)
+        revision = self.backend.cache_revision(options, assets)
         if options.mode in {ProcessingMode.FLUX2, ProcessingMode.FLUX2_QUANT}:
             return f"{revision}:post-upscale:{self.upscaler.cache_revision()}"
         return revision if self.name == self.backend.name else f"{self.name}:{revision}"
-
-    # 方法说明：返回独立放大档或主推理档对应的适配器策略。
-    def adapter_policy(
-        self,
-        assets: InferenceAssets,
-        options: ProcessOptions,
-    ) -> AdapterPolicy:
-        if options.mode == ProcessingMode.UPSCALE:
-            return AdapterPolicy(
-                enabled=False,
-                compatible_base_models=frozenset(),
-                required_workflow=None,
-            )
-        return self.backend.adapter_policy(assets, options)
 
     # 方法说明：将请求路由到 Real-CUGAN 或主推理后端。
     def process(
@@ -85,13 +67,12 @@ class RoutedInferenceBackend(InferenceBackend):
         assets: InferenceAssets,
         output_path: Path,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
         if options.mode == ProcessingMode.UPSCALE:
             return self.upscaler.process(assets, output_path)
         if options.mode in {ProcessingMode.FLUX2, ProcessingMode.FLUX2_QUANT}:
-            return self._process_flux2_pipeline(assets, output_path, options, resolved)
-        return self.backend.process(assets, output_path, options, resolved)
+            return self._process_flux2_pipeline(assets, output_path, options)
+        return self.backend.process(assets, output_path, options)
 
     # 方法说明：串联 FLUX.2 首阶段和 Real-CUGAN 二阶段放大策略。
     def _process_flux2_pipeline(
@@ -99,20 +80,18 @@ class RoutedInferenceBackend(InferenceBackend):
         assets: InferenceAssets,
         output_path: Path,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
         if not self.upscale_profile_ready():
             raise RuntimeError("FLUX.2 二阶段放大资源未就绪")
         stage_path = output_path.with_name(f"{output_path.stem}.flux2-stage.webp")
         try:
-            primary = self.backend.process(assets, stage_path, options, resolved)
+            primary = self.backend.process(assets, stage_path, options)
             stage_bytes = stage_path.read_bytes()
             secondary = self.upscaler.process(
                 InferenceAssets(image_bytes=stage_bytes),
                 output_path,
             )
             return InferenceOutcome(
-                adapter_applied=primary.adapter_applied,
                 reference_applied=primary.reference_applied,
                 processed_panels=primary.processed_panels,
                 model_profile=(

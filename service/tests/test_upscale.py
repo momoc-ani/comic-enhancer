@@ -16,10 +16,8 @@ from comic_enhancer.inference.routing import RoutedInferenceBackend
 from comic_enhancer.config import Settings
 from comic_enhancer.main import create_app
 from comic_enhancer.models import (
-    AdapterSource,
     ProcessOptions,
     ProcessingMode,
-    ResolvedAdapter,
 )
 
 
@@ -65,7 +63,6 @@ def test_capabilities_advertise_upscale_only_when_resources_are_ready(tmp_path):
     settings = Settings(
         api_token="test-token",
         runtime_dir=tmp_path / "runtime",
-        adapter_index=tmp_path / "missing.json",
         realcugan_enabled=True,
         realcugan_resource_root=resource_root,
     )
@@ -116,7 +113,6 @@ def test_upscale_process_returns_realcugan_model_and_two_x_image(
     settings = Settings(
         api_token="test-token",
         runtime_dir=tmp_path / "runtime",
-        adapter_index=tmp_path / "missing.json",
         realcugan_enabled=True,
         realcugan_resource_root=resource_root,
     )
@@ -142,8 +138,6 @@ def test_upscale_process_returns_realcugan_model_and_two_x_image(
 
     assert first.status_code == 200
     assert first.json()["model_profile"] == REALCUGAN_MODEL_PROFILE
-    assert first.json()["adapter_source"] == "none"
-    assert first.json()["adapter_applied"] is False
     assert first.json()["cached"] is False
     assert second.json()["cached"] is True
     command = captured["command"]
@@ -181,12 +175,11 @@ def test_flux2_pipeline_uses_upscale_as_second_stage(tmp_path, monkeypatch):
     monkeypatch.setattr(backend, "flux2_profile_ready", lambda: True)
 
     # 方法说明：模拟 FLUX.2 首阶段写入原图两倍结果。
-    def process_flux2(assets, output_path, options, resolved):
+    def process_flux2(assets, output_path, options):
         with Image.open(BytesIO(assets.image_bytes)) as source:
             generated = source.resize((source.width * 2, source.height * 2))
             generated.save(output_path, format="WEBP")
         return InferenceOutcome(
-            adapter_applied=False,
             reference_applied=True,
             model_profile="flux2-klein-4b",
         )
@@ -197,10 +190,7 @@ def test_flux2_pipeline_uses_upscale_as_second_stage(tmp_path, monkeypatch):
             captured["stage_size"] = source.size
             generated = source.resize((source.width * 2, source.height * 2))
             generated.save(output_path, format="WEBP")
-        return InferenceOutcome(
-            adapter_applied=False,
-            model_profile=REALCUGAN_MODEL_PROFILE,
-        )
+        return InferenceOutcome(model_profile=REALCUGAN_MODEL_PROFILE)
 
     monkeypatch.setattr(backend, "process", process_flux2)
     monkeypatch.setattr(upscaler, "process", process_upscale)
@@ -209,7 +199,6 @@ def test_flux2_pipeline_uses_upscale_as_second_stage(tmp_path, monkeypatch):
         InferenceAssets(image_bytes=png_bytes((8, 12))),
         output_path,
         ProcessOptions(mode="flux2"),
-        ResolvedAdapter(source=AdapterSource.NONE, adapter=None, reason="test"),
     )
 
     assert captured["stage_size"] == (16, 24)
@@ -219,7 +208,6 @@ def test_flux2_pipeline_uses_upscale_as_second_stage(tmp_path, monkeypatch):
     assert outcome.model_profile == "flux2-klein-4b+realcugan-se-2x"
     assert "post-upscale" in routed.cache_revision(
         ProcessOptions(mode="flux2"),
-        ResolvedAdapter(source=AdapterSource.NONE, adapter=None, reason="test"),
     )
 
 
@@ -231,11 +219,10 @@ def test_flux2_upscale_failure_does_not_fallback(tmp_path, monkeypatch):
     calls = []
 
     # 方法说明：模拟首阶段成功并记录实际执行档位。
-    def process_flux2(assets, output_path, options, resolved):
+    def process_flux2(assets, output_path, options):
         calls.append(str(options.mode))
         Image.new("RGB", (16, 24), "white").save(output_path, format="WEBP")
         return InferenceOutcome(
-            adapter_applied=False,
             reference_applied=True,
             model_profile="flux2-klein-4b",
         )
@@ -252,7 +239,6 @@ def test_flux2_upscale_failure_does_not_fallback(tmp_path, monkeypatch):
             InferenceAssets(image_bytes=png_bytes((8, 12))),
             tmp_path / "failed.webp",
             ProcessOptions(mode="flux2"),
-            ResolvedAdapter(source=AdapterSource.NONE, adapter=None, reason="test"),
         )
     assert calls == ["flux2"]
 
@@ -262,7 +248,6 @@ def test_upscale_process_rejects_unavailable_profile(tmp_path):
     settings = Settings(
         api_token="test-token",
         runtime_dir=tmp_path / "runtime",
-        adapter_index=tmp_path / "missing.json",
         realcugan_enabled=False,
         realcugan_resource_root=tmp_path / "missing-realcugan",
     )

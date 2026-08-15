@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from ....domain import ProcessOptions, ResolvedAdapter
+from ....domain import ProcessOptions
 from ...contracts import InferenceAssets, InferenceOutcome
 from ..image_ops import protect_source_structure, save_output
 from .base import ComfyUIModeStrategy
@@ -20,14 +20,9 @@ class PresetModeStrategy(ComfyUIModeStrategy):
     def _preset_cache_revision(
         self,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
         assets: InferenceAssets | None,
     ) -> str:
-        return self.workflow_loader.revision(
-            options,
-            resolved,
-            reference_available=False,
-        )
+        return self.workflow_loader.revision(options)
 
     # 方法说明：执行调用档位的预设工作流并应用 SD1.5 结构保护。
     def _process_preset(
@@ -35,13 +30,8 @@ class PresetModeStrategy(ComfyUIModeStrategy):
         assets: InferenceAssets,
         output_path: Path,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
-        loaded_workflow = self.workflow_loader.load(
-            options,
-            resolved,
-            reference_available=False,
-        )
+        loaded_workflow = self.workflow_loader.load(options)
         generated = self.transport.run(
             loaded_workflow.prompt,
             input_images={"INPUT_IMAGE": assets.image_bytes},
@@ -51,7 +41,4 @@ class PresetModeStrategy(ComfyUIModeStrategy):
             protect_source_structure(assets.image_bytes, generated),
             output_path,
         )
-        return InferenceOutcome(
-            adapter_applied=loaded_workflow.adapter_applied,
-            model_profile=loaded_workflow.model_profile,
-        )
+        return InferenceOutcome(model_profile=loaded_workflow.model_profile)

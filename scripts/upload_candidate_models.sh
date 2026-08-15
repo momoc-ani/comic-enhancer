@@ -18,9 +18,9 @@ else
 fi
 
 remote_ready="$remote_root/candidate-models.ready"
-ssh -n "$remote" "mkdir -p '$remote_root/diffusion_models' '$remote_root/text_encoders' '$remote_root/cobra' && rm -f '$remote_ready'"
+ssh -n "$remote" "mkdir -p '$remote_root/diffusion_models' '$remote_root/text_encoders' && rm -f '$remote_ready'"
 
-# 方法说明：上传候选模型文件到远端主机。
+# 方法说明：上传并校验一个 FLUX.2 候选模型文件。
 upload() {
   local_path=$1
   remote_path=$2
@@ -50,42 +50,8 @@ upload flux2/flux-2-klein-4b-fp8.safetensors \
   diffusion_models/flux-2-klein-4b-fp8.safetensors
 upload flux2/qwen_3_4b.safetensors text_encoders/qwen_3_4b.safetensors
 
-cobra_list=$(mktemp)
-trap 'rm -f "$cobra_list"' EXIT INT TERM
-find cobra -type f \
-  ! -name '*.aria2' \
-  ! -name '*.log' \
-  ! -name '*.downloading' \
-  ! -path 'cobra/PixArt-XL-2-1024-MS/text_encoder/model-*.safetensors' \
-  ! -path 'cobra/PixArt-XL-2-1024-MS/text_encoder/model.safetensors.index.json' \
-  | LC_ALL=C sort >"$cobra_list"
-
-expected_cobra_files=$(wc -l <"$cobra_list" | tr -d ' ')
-test "$expected_cobra_files" -ge 20
-processed_cobra_files=0
-while IFS= read -r path; do
-  upload "$path" "$path"
-  processed_cobra_files=$((processed_cobra_files + 1))
-done <"$cobra_list"
-test "$processed_cobra_files" = "$expected_cobra_files"
-rm -f "$cobra_list"
-trap - EXIT INT TERM
-
 ssh -n "$remote" "set -eu
-reused_t5='$remote_root/clip/t5xxl_fp16.safetensors'
-expected_t5_size='9787841024'
-expected_t5_hash='6e480b09fae049a72d2a8c5fbccb8d3e92febeb233bbe9dfe7256958a9167635'
-test -f \"\$reused_t5\"
-actual_t5_size=\$(wc -c < \"\$reused_t5\" | tr -d ' ')
-test \"\$actual_t5_size\" = \"\$expected_t5_size\"
-actual_t5_hash=\$(sha256sum \"\$reused_t5\" | cut -d' ' -f1)
-test \"\$actual_t5_hash\" = \"\$expected_t5_hash\"
-text_encoder_dir='$remote_root/cobra/PixArt-XL-2-1024-MS/text_encoder'
-mkdir -p \"\$text_encoder_dir\"
-rm -f \"\$text_encoder_dir/model.safetensors.index.json\"
-ln -sfn '../../../clip/t5xxl_fp16.safetensors' \"\$text_encoder_dir/model.safetensors\"
-test -s \"\$text_encoder_dir/model.safetensors\"
 test -s '$remote_root/vae/flux2-vae.safetensors'
 touch '$remote_ready'"
 
-echo "候选模型已上传并完成远端 SHA-256 校验：$remote:$remote_root"
+echo "FLUX.2 候选模型已上传并完成远端 SHA-256 校验：$remote:$remote_root"

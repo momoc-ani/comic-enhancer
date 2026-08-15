@@ -1,6 +1,4 @@
-from comic_enhancer.adapters import AdapterRegistry, GiteeAdapterStore
 from comic_enhancer.api.app import create_app
-from comic_enhancer.api.routes.adapters import sync_adapters
 from comic_enhancer.api.routes.metadata import resolve_metadata
 from comic_enhancer.api.routes.pages import process_page
 from comic_enhancer.api.routes.results import result
@@ -8,10 +6,8 @@ from comic_enhancer.api.routes.system import capabilities
 from comic_enhancer.application import (
     ProcessingService,
     ReferenceBankService,
-    RemoteAdapterService,
 )
 from comic_enhancer.domain import (
-    AdapterManifest,
     MetadataResolution,
     ProcessingMode,
     WorkIdentity,
@@ -35,8 +31,6 @@ from comic_enhancer.storage import ResultCache
 
 # 方法说明：验证数据能力类和函数分别归属其职责模块。
 def test_data_capabilities_are_split_into_responsibility_modules():
-    assert AdapterRegistry.__module__ == "comic_enhancer.adapters.registry"
-    assert GiteeAdapterStore.__module__ == "comic_enhancer.adapters.gitee"
     assert WorkIdentityRegistry.__module__ == "comic_enhancer.identities.registry"
     assert MetadataAggregator.__module__ == "comic_enhancer.metadata.aggregator"
     assert ReferenceImageStore.__module__ == "comic_enhancer.references.store"
@@ -63,7 +57,6 @@ def test_metadata_providers_have_independent_implementation_modules():
 # 方法说明：验证领域模型按业务主题拆分且旧导入路径保持兼容。
 def test_domain_models_are_split_by_business_topic():
     assert WorkIdentity.__module__ == "comic_enhancer.domain.identity"
-    assert AdapterManifest.__module__ == "comic_enhancer.domain.adapters"
     assert ProcessingMode.__module__ == "comic_enhancer.domain.processing"
     assert MetadataResolution.__module__ == "comic_enhancer.domain.metadata"
     assert CompatibleWorkIdentity is WorkIdentity
@@ -75,9 +68,6 @@ def test_application_services_have_independent_modules():
     assert ReferenceBankService.__module__ == (
         "comic_enhancer.application.reference_bank"
     )
-    assert RemoteAdapterService.__module__ == (
-        "comic_enhancer.application.remote_adapters"
-    )
     assert CompatibleProcessingService is ProcessingService
 
 
@@ -86,6 +76,5 @@ def test_api_routes_are_split_by_resource():
     assert capabilities.__module__ == "comic_enhancer.api.routes.system"
     assert process_page.__module__ == "comic_enhancer.api.routes.pages"
     assert resolve_metadata.__module__ == "comic_enhancer.api.routes.metadata"
-    assert sync_adapters.__module__ == "comic_enhancer.api.routes.adapters"
     assert result.__module__ == "comic_enhancer.api.routes.results"
     assert compatible_create_app is create_app

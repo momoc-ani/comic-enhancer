@@ -351,9 +351,6 @@
       }, { once: true });
     });
     overlay.src = result.image_data_url;
-    overlay.dataset.adapterSource = result.adapter_source;
-    overlay.dataset.adapterId = result.adapter_id || "none";
-    overlay.dataset.adapterApplied = String(result.adapter_applied);
     overlay.dataset.modelProfile = result.model_profile || "unknown";
     overlay.dataset.referenceApplied = String(result.reference_applied);
     overlay.dataset.processedPanels = String(result.processed_panels || 0);

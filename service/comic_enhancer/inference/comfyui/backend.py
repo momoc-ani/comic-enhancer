@@ -4,9 +4,8 @@ from pathlib import Path
 
 from PIL import Image
 
-from ...domain import ProcessingMode, ProcessOptions, ResolvedAdapter
+from ...domain import ProcessingMode, ProcessOptions
 from ..contracts import (
-    AdapterPolicy,
     InferenceAssets,
     InferenceBackend,
     InferenceOutcome,
@@ -31,8 +30,6 @@ class ComfyUIBackend(InferenceBackend):
     """注册并分派相互独立的 ComfyUI 档位策略。"""
 
     name = "comfyui"
-    applies_adapters = True
-    supported_base_models = frozenset({"sd15-anime"})
     model_profiles = (
         "sd15-colorize",
         "flux2-klein-4b",
@@ -65,7 +62,6 @@ class ComfyUIBackend(InferenceBackend):
         shared_options = {
             "workflow_loader": workflow_loader,
             "transport": self.transport,
-            "supported_base_models": self.supported_base_models,
         }
         quality_strategy = QualityModeStrategy(**shared_options)
         strategies: tuple[ComfyUIModeStrategy, ...] = (
@@ -121,22 +117,9 @@ class ComfyUIBackend(InferenceBackend):
     def cache_revision(
         self,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
         assets: InferenceAssets | None = None,
     ) -> str:
-        return self.mode_strategy(options.mode).cache_revision(
-            options,
-            resolved,
-            assets,
-        )
-
-    # 方法说明：返回所选档位独立声明的适配器策略。
-    def adapter_policy(
-        self,
-        assets: InferenceAssets,
-        options: ProcessOptions,
-    ) -> AdapterPolicy:
-        return self.mode_strategy(options.mode).adapter_policy()
+        return self.mode_strategy(options.mode).cache_revision(options, assets)
 
     # 方法说明：将页面推理请求交给所选档位的独立实现。
     def process(
@@ -144,13 +127,11 @@ class ComfyUIBackend(InferenceBackend):
         assets: InferenceAssets,
         output_path: Path,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
         return self.mode_strategy(options.mode).process(
             assets,
             output_path,
             options,
-            resolved,
         )
 
     # 方法说明：兼容旧调用并绑定 ComfyUI 工作流输入输出节点。

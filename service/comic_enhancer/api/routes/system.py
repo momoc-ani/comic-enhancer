@@ -51,7 +51,6 @@ async def capabilities(
         service_version=__version__,
         backend=backend.name,
         ready=backend.ready(),
-        adapter_policy=["work", "generic", "none"],
         model_profiles=list(backend.model_profiles),
         processing_modes=processing_modes,
         mode_options=[

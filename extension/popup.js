@@ -192,8 +192,6 @@ async function save() {
         apiBaseUrl: settings.apiBaseUrl,
         mode: settings.mode,
         prefetchPages: settings.prefetchPages,
-        preferWorkAdapter: settings.preferWorkAdapter,
-        allowGenericAdapter: settings.allowGenericAdapter,
       },
     });
   } catch (error) {

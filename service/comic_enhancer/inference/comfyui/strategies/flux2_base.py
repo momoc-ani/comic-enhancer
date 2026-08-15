@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import uuid
 
-from ....domain import ProcessOptions, ResolvedAdapter
+from ....domain import ProcessOptions
 from ...contracts import InferenceAssets, InferenceOutcome
 from ..image_ops import restore_geometry, save_output
 from .base import (
@@ -20,7 +20,6 @@ FLUX2_OUTPUT_SCALE = 2
 class Flux2StrategyBase(ComfyUIModeStrategy):
     """复用两个 FLUX.2 档位共有的参考图执行过程。"""
 
-    adapter_workflow = "quality"
     output_prefix = "flux2"
 
     # 方法说明：初始化 FLUX.2 开关、工作流和参考图限制。
@@ -41,7 +40,6 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
     def _flux2_cache_revision(
         self,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
         assets: InferenceAssets | None,
         *,
         quantized: bool,
@@ -49,7 +47,6 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
         revision = reference_cache_revision(
             self.workflow_loader,
             options,
-            resolved,
             assets,
         )
         suffix = f"{FLUX2_PROCESSING_REVISION}:quant" if quantized else FLUX2_PROCESSING_REVISION
@@ -61,7 +58,6 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
         assets: InferenceAssets,
         output_path: Path,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
         if not self.available():
             raise RuntimeError("FLUX.2 服务未就绪")
@@ -70,7 +66,7 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
             raise RuntimeError("FLUX.2 需要至少一张角色参考图")
         if self.workflow_path is None:
             raise RuntimeError("FLUX.2 工作流未配置")
-        loaded_workflow = self.workflow_loader.load(options, resolved)
+        loaded_workflow = self.workflow_loader.load(options)
         input_images = {
             "INPUT_IMAGE": assets.image_bytes,
             **{
@@ -94,7 +90,6 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
         )
         save_output(generated, output_path)
         return InferenceOutcome(
-            adapter_applied=False,
             reference_applied=True,
             model_profile=loaded_workflow.model_profile,
         )

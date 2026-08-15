@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from ..domain import ProcessOptions, ResolvedAdapter, WorkIdentity
+from ..domain import ProcessOptions, WorkIdentity
 
 
 class ResultCache:
@@ -23,18 +23,12 @@ class ResultCache:
         reference_bytes: bytes | None,
         work: WorkIdentity,
         options: ProcessOptions,
-        resolved: ResolvedAdapter,
         backend_revision: str = "",
     ) -> str:
         image_hash = hashlib.sha256(image_bytes).hexdigest()
         reference_hash = (
             hashlib.sha256(reference_bytes).hexdigest()
             if reference_bytes is not None
-            else "none"
-        )
-        adapter_revision = (
-            f"{resolved.adapter.adapter_id}:{resolved.adapter.revision}"
-            if resolved.adapter
             else "none"
         )
         payload = "|".join(
@@ -44,7 +38,6 @@ class ResultCache:
                 work.key,
                 options.mode,
                 options.palette_version,
-                adapter_revision,
                 backend_revision,
             ]
         )

@@ -217,7 +217,6 @@ def summarize(
         "minimum_scale_y": min(scale_y, default=0),
         "maximum_scale_y": max(scale_y, default=0),
         "model_profiles": sorted({str(result["model_profile"]) for result in results}),
-        "adapter_sources": sorted({str(result["adapter_source"]) for result in results}),
         "reference_pages": sum(bool(result["reference_applied"]) for result in results),
         "reference_effective_rate": round(
             sum(bool(result["reference_applied"]) for result in results)
@@ -542,9 +541,6 @@ def process_page(
         "service_elapsed_ms": process_result["elapsed_ms"],
         "cached": process_result["cached"],
         "model_profile": process_result["model_profile"],
-        "adapter_source": process_result["adapter_source"],
-        "adapter_id": process_result["adapter_id"],
-        "adapter_applied": process_result["adapter_applied"],
         "reference_applied": process_result["reference_applied"],
         "processed_panels": process_result["processed_panels"],
         "metrics": image_metrics(source_bytes, image_response.content),
@@ -577,7 +573,7 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument(
         "--mode",
-        choices=("fast", "quality", "upscale", "cobra", "flux2"),
+        choices=("fast", "quality", "upscale", "flux2", "flux2_quant"),
         required=True,
     )
     parser.add_argument(
@@ -672,7 +668,7 @@ def main() -> None:
                     report["pages"].append(result)
                     print(
                         f"第 {page_index + 1} 页: {result['client_elapsed_ms']} ms "
-                        f"{result['model_profile']} {result['adapter_source']}",
+                        f"{result['model_profile']}",
                         flush=True,
                     )
     finally:

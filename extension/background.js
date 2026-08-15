@@ -133,8 +133,6 @@ async function processPage(payload) {
     JSON.stringify({
       ...payload.options,
       mode: settings.mode,
-      prefer_work_adapter: settings.preferWorkAdapter,
-      allow_generic_adapter: settings.allowGenericAdapter,
     }),
   );
 

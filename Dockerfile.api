@@ -10,15 +10,12 @@ COPY pyproject.toml README.md LICENSE ./
 COPY service ./service
 RUN python -m pip install --no-cache-dir .
 
-COPY adapters ./adapters
 COPY config ./config
 COPY workflows ./workflows
-COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN useradd --create-home --uid 10001 comic-enhancer \
     && mkdir -p /app/runtime \
-    && chown -R comic-enhancer:comic-enhancer /app/runtime \
-    && chmod +x /app/docker-entrypoint.sh
+    && chown -R comic-enhancer:comic-enhancer /app/runtime
 
 USER comic-enhancer
 
@@ -27,5 +24,4 @@ EXPOSE 8765
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=6 \
   CMD python -c "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8765/v1/health', timeout=2)); assert data['ready']"
 
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["uvicorn", "comic_enhancer.main:app", "--host", "0.0.0.0", "--port", "8765"]

@@ -7,7 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from ...domain import ProcessOptions, ResolvedAdapter
+from ...domain import ProcessOptions
 
 
 @dataclass(frozen=True)
@@ -16,8 +16,6 @@ class LoadedWorkflow:
 
     prompt: dict
     source: Path
-    adapter_applied: bool
-    reference_required: bool = False
     model_profile: str = "sd15-colorize"
 
 
@@ -32,45 +30,31 @@ class WorkflowLoader(ABC):
     def supports_flux2_quant(self) -> bool:
         return False
 
-    # 方法说明：加载指定档位和适配器对应的完整工作流。
+    # 方法说明：加载指定档位对应的完整工作流。
     @abstractmethod
-    def load(
-        self,
-        options: ProcessOptions,
-        resolved: ResolvedAdapter,
-        *,
-        reference_available: bool = False,
-    ) -> LoadedWorkflow:
+    def load(self, options: ProcessOptions) -> LoadedWorkflow:
         raise NotImplementedError
 
     # 方法说明：计算工作流文件的稳定版本标识。
     @abstractmethod
-    def revision(
-        self,
-        options: ProcessOptions,
-        resolved: ResolvedAdapter,
-        *,
-        reference_available: bool = False,
-    ) -> str:
+    def revision(self, options: ProcessOptions) -> str:
         raise NotImplementedError
 
 
 class PresetWorkflowLoader(WorkflowLoader):
     """加载完整 API 格式工作流且不覆盖其中的模型参数。"""
 
-    # 方法说明：初始化各档位工作流路径与适配器工作流根目录。
+    # 方法说明：初始化各处理档位的工作流路径。
     def __init__(
         self,
         *,
         fast_workflow: Path,
         quality_workflow: Path,
-        workflow_root: Path,
         flux2_workflow: Path | None = None,
         flux2_quant_workflow: Path | None = None,
     ):
         self.fast_workflow = fast_workflow.resolve()
         self.quality_workflow = quality_workflow.resolve()
-        self.workflow_root = workflow_root.resolve()
         self.flux2_workflow = (
             flux2_workflow.resolve() if flux2_workflow is not None else None
         )
@@ -90,19 +74,9 @@ class PresetWorkflowLoader(WorkflowLoader):
             self.flux2_quant_workflow and self.flux2_quant_workflow.is_file()
         )
 
-    # 方法说明：加载指定档位和适配器对应的完整工作流。
-    def load(
-        self,
-        options: ProcessOptions,
-        resolved: ResolvedAdapter,
-        *,
-        reference_available: bool = False,
-    ) -> LoadedWorkflow:
-        path, adapter_applied, reference_required, model_profile = self._select(
-            options,
-            resolved,
-            reference_available=reference_available,
-        )
+    # 方法说明：加载指定处理档位对应的完整工作流。
+    def load(self, options: ProcessOptions) -> LoadedWorkflow:
+        path, model_profile = self._select(options)
         if not path.is_file():
             raise RuntimeError(f"ComfyUI workflow not found: {path}")
         try:
@@ -114,67 +88,29 @@ class PresetWorkflowLoader(WorkflowLoader):
         return LoadedWorkflow(
             prompt=deepcopy(prompt),
             source=path,
-            adapter_applied=adapter_applied,
-            reference_required=reference_required,
             model_profile=model_profile,
         )
 
     # 方法说明：计算工作流文件的稳定版本标识。
-    def revision(
-        self,
-        options: ProcessOptions,
-        resolved: ResolvedAdapter,
-        *,
-        reference_available: bool = False,
-    ) -> str:
-        path, _, _, _ = self._select(
-            options,
-            resolved,
-            reference_available=reference_available,
-        )
+    def revision(self, options: ProcessOptions) -> str:
+        path, _ = self._select(options)
         if not path.is_file():
             return f"missing:{path}"
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
-    # 方法说明：选择指定档位对应的基础或适配器工作流。
-    def _select(
-        self,
-        options: ProcessOptions,
-        resolved: ResolvedAdapter,
-        *,
-        reference_available: bool,
-    ) -> tuple[Path, bool, bool, str]:
+    # 方法说明：选择指定档位对应的预设工作流与模型标识。
+    def _select(self, options: ProcessOptions) -> tuple[Path, str]:
         mode = str(options.mode)
         if mode == "flux2":
             if self.flux2_workflow is None:
                 raise RuntimeError("FLUX.2 工作流未配置")
-            return self.flux2_workflow, False, False, "flux2-klein-4b"
+            return self.flux2_workflow, "flux2-klein-4b"
         if mode == "flux2_quant":
             if self.flux2_quant_workflow is None:
                 raise RuntimeError("FLUX.2 量化工作流未配置")
             return (
                 self.flux2_quant_workflow,
-                False,
-                False,
                 "flux2-klein-4b-qwen3-fp8",
             )
         path = self.quality_workflow if mode == "quality" else self.fast_workflow
-        if resolved.adapter is not None:
-            adapter_workflow = resolved.adapter.workflows.get(mode)
-            if adapter_workflow:
-                return (
-                    self._adapter_workflow_path(adapter_workflow),
-                    True,
-                    False,
-                    "sd15-colorize-lora",
-                )
-        return path, False, False, "sd15-colorize"
-
-    # 方法说明：解析并约束适配器工作流路径。
-    def _adapter_workflow_path(self, relative_path: str) -> Path:
-        path = (self.workflow_root / relative_path).resolve()
-        try:
-            path.relative_to(self.workflow_root)
-        except ValueError as error:
-            raise RuntimeError("adapter workflow path escapes workflow root") from error
-        return path
+        return path, "sd15-colorize"

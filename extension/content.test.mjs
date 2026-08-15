@@ -165,8 +165,6 @@ test("retries failed pages with the real lazy-load URL after settings change", a
             ok: true,
             result: {
               image_data_url: "data:image/webp;base64,AA==",
-              adapter_source: "none",
-              adapter_applied: false,
               reference_applied: false,
               processed_panels: 0,
               model_profile: "sd15-colorize",

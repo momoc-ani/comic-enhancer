@@ -1,8 +1,6 @@
 """兼容旧领域模型导入路径，业务实现位于 domain 包。"""
 
 from .domain import (
-    AdapterManifest,
-    AdapterSource,
     Capabilities,
     ChapterIdentity,
     CharacterBankEntry,
@@ -12,14 +10,11 @@ from .domain import (
     ProcessingModeOption,
     ProcessOptions,
     ProcessResult,
-    ResolvedAdapter,
     WorkIdentity,
     WorkMetadata,
 )
 
 __all__ = [
-    "AdapterManifest",
-    "AdapterSource",
     "Capabilities",
     "ChapterIdentity",
     "CharacterBankEntry",
@@ -29,7 +24,6 @@ __all__ = [
     "ProcessingModeOption",
     "ProcessOptions",
     "ProcessResult",
-    "ResolvedAdapter",
     "WorkIdentity",
     "WorkMetadata",
 ]

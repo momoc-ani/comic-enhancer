@@ -1,6 +1,5 @@
 """导出服务端稳定的领域模型。"""
 
-from .adapters import AdapterManifest, AdapterSource, ResolvedAdapter
 from .identity import (
     ChapterIdentity,
     CharacterBankEntry,
@@ -17,8 +16,6 @@ from .processing import (
 )
 
 __all__ = [
-    "AdapterManifest",
-    "AdapterSource",
     "Capabilities",
     "ChapterIdentity",
     "CharacterBankEntry",
@@ -28,7 +25,6 @@ __all__ = [
     "ProcessingModeOption",
     "ProcessOptions",
     "ProcessResult",
-    "ResolvedAdapter",
     "WorkIdentity",
     "WorkMetadata",
 ]

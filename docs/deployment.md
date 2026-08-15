@@ -21,7 +21,7 @@ docker compose -f compose.nvidia-remote.yaml up -d --build
 curl http://127.0.0.1:8765/v1/health
 ```
 
-API 容器只配置 `COMIC_ENHANCER_COMFYUI_URL=http://comfyui:8188`。4090 主机统一使用 `/data1/models/ComfyUI/models` 作为模型根目录：统一 ComfyUI 挂载为 `/root/sd/ComfyUI/models`，增强 API 挂载为 `/models`。ComfyUI 的 checkpoint、ControlNet 和放大模型都不打进 API 镜像；Real-CUGAN 平台包也不打进镜像，只能从显式挂载的资源目录读取。
+API 容器只配置 `COMIC_ENHANCER_COMFYUI_URL=http://comfyui:8188`，不挂载 ComfyUI 模型目录。4090 主机统一使用 `/data1/models/ComfyUI/models` 作为模型根目录，并只挂载到统一 ComfyUI 的 `/root/sd/ComfyUI/models`。ComfyUI 的 checkpoint、ControlNet 和放大模型都不打进 API 镜像；Real-CUGAN 平台包也不打进镜像，只能从显式挂载的资源目录读取。
 
 ### Real-CUGAN 放大档
 
@@ -69,8 +69,6 @@ ComfyUI 调试地址为 `http://192.168.38.226:8192/`，API 内部地址始终�
 
 FLUX.2 最高质量档恢复旧基准的 `0.85MP` 四步空 latent 直出，以强化提示词锁定气泡、文字、标点、页面结构和网点。工作流不执行全页深色像素回注或颜色混合；API 先将未后处理结果按原图比例恢复为宽高各 2 倍，再交给 UPSCALE 策略使用 Real-CUGAN 放大 2 倍，最终输出原图宽高各 4 倍。三页冒烟中该方案恢复了旧版平滑动漫平涂效果，并完整保留测试页文字；至少 100 页准入完成前仍需保留文字变化风险说明。
 
-未配置 Gitee 仓库和 Token 时保持 `COMIC_ENHANCER_GITEE_ENABLED=false`，基础上色和本地 LoRA 仍可使用。填写完整 Gitee 配置后再改为 `true` 并重建 API 容器。
-
 插件配置：
 
 ```text
@@ -80,7 +78,7 @@ API Token: 与远端 .env 中 COMIC_ENHANCER_TOKEN 相同
 
 插件只配置漫画增强服务地址，不提供 ComfyUI、FLUX.2 或 Real-CUGAN 地址入口。服务端也只配置一个 `COMIC_ENHANCER_COMFYUI_URL`；Real-CUGAN 配置是 API 本地资源根目录，不是独立推理 URL。
 
-替换其他 ComfyUI 工作流时，导出 API 格式 JSON，并在 `settings.json` 或环境变量中修改对应工作流路径。单输入工作流必须只有一个 `LoadImage`；多输入工作流使用 `_meta.title` 声明 `INPUT_IMAGE`、`REFERENCE_IMAGE` 等角色；所有工作流至少有一个 `SaveImage`，其余模型、LoRA 和参数必须全部预设。服务不依赖固定节点编号。
+替换其他 ComfyUI 工作流时，导出 API 格式 JSON，并在 `settings.json` 或环境变量中修改对应工作流路径。单输入工作流必须只有一个 `LoadImage`；多输入工作流使用 `_meta.title` 声明 `INPUT_IMAGE`、`REFERENCE_IMAGE` 等角色；所有工作流至少有一个 `SaveImage`，其余模型和参数必须全部预设。服务不依赖固定节点编号。
 
 独立验证工作流可使用 `scripts/benchmark_comfyui.py`，通过多个 `--input ROLE=PATH` 绑定图片。脚本默认不覆盖工作流内的模型或采样参数，会将每轮结果与耗时报告写到 Git 忽略的 `runtime/benchmarks`；需要绕过 ComfyUI 节点缓存测真实热推理时，显式传入 `--seed-step 1`。
 
@@ -97,7 +95,7 @@ rocminfo
 准备模型目录后运行：
 
 ```bash
-mkdir -p models/{checkpoints,controlnet,upscale_models,loras}
+mkdir -p models/{checkpoints,controlnet,upscale_models}
 cp .env.example .env
 docker compose -f compose.amd.yaml up -d --build
 ```
