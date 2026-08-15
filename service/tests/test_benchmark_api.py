@@ -156,3 +156,29 @@ def test_eligible_dataset_fails_machine_gate_when_color_is_one_note():
     assert admission["status"] == "failed"
     failed = {item["name"] for item in admission["checks"] if not item["passed"]}
     assert failed == {"median_active_hue_bins", "maximum_dominant_hue_ratio"}
+
+
+# 方法说明：验证放大档准入要求 Real-CUGAN 模型返回和精确两倍尺寸。
+def test_upscale_admission_requires_realcugan_profile_and_two_x_output():
+    admission = evaluate_admission(
+        manifest={"admission_eligible": True},
+        mode="upscale",
+        phase="warm",
+        summary={
+            "pages": 100,
+            "failed_pages": 0,
+            "minimum_dark_pixel_retention": 1,
+            "minimum_mid_dark_pixel_retention": 1,
+            "minimum_white_pixel_retention": 1,
+            "luminance_mae_p95": 2,
+            "model_profiles": ["realcugan-se-2x"],
+            "minimum_scale_x": 2,
+            "maximum_scale_x": 2,
+            "minimum_scale_y": 2,
+            "maximum_scale_y": 2,
+        },
+        resource_summary=None,
+    )
+
+    assert admission["status"] == "passed"
+    assert all(item["passed"] for item in admission["checks"])

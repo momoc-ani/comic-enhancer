@@ -24,6 +24,9 @@ class Settings:
     generic_adapter_id: str = "generic-anime-v1"
     prefetch_pages: int = 3
     max_parallel_inference: int = 1
+    realcugan_enabled: bool = False
+    realcugan_resource_root: Path = PROJECT_ROOT / "resource" / "realcugan"
+    realcugan_timeout_seconds: int = 180
     comfyui_url: str = "http://comfyui:8188"
     comfyui_timeout_seconds: int = 180
     comfyui_poll_interval_seconds: float = 0.25
@@ -86,6 +89,7 @@ def load_settings() -> Settings:
         "adapter_index",
         "adapter_weights_root",
         "runtime_dir",
+        "realcugan_resource_root",
         "comfyui_workflow_fast",
         "comfyui_workflow_quality",
         "comfyui_workflow_cobra",
@@ -124,6 +128,18 @@ def load_settings() -> Settings:
         "COMIC_ENHANCER_MANGAUPDATES_API_URL": ("mangaupdates_api_url", str),
         "COMIC_ENHANCER_MANGAUPDATES_API_TOKEN": ("mangaupdates_api_token", str),
         "COMIC_ENHANCER_RUNTIME_DIR": ("runtime_dir", Path),
+        "COMIC_ENHANCER_REALCUGAN_ENABLED": (
+            "realcugan_enabled",
+            lambda value: value.lower() in {"1", "true", "yes", "on"},
+        ),
+        "COMIC_ENHANCER_REALCUGAN_RESOURCE_ROOT": (
+            "realcugan_resource_root",
+            Path,
+        ),
+        "COMIC_ENHANCER_REALCUGAN_TIMEOUT": (
+            "realcugan_timeout_seconds",
+            int,
+        ),
         "COMIC_ENHANCER_COMFYUI_URL": ("comfyui_url", str),
         "COMIC_ENHANCER_COMFYUI_TIMEOUT": ("comfyui_timeout_seconds", int),
         "COMIC_ENHANCER_COMFYUI_COBRA_ENABLED": (

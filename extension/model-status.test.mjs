@@ -113,3 +113,31 @@ test("shows experimental mode availability from backend capabilities", () => {
   assert.equal(flux2Unavailable.title, "最高质量档");
   assert.match(flux2Unavailable.detail, /未启用 最高质量档/);
 });
+
+// 方法说明：验证放大档展示 Real-CUGAN 实际模型和独立超分类型。
+test("shows Real-CUGAN execution for upscale mode", () => {
+  const upscaleSettings = {
+    ...settings,
+    profile: "local-upscale",
+    mode: "upscale",
+  };
+  const unavailable = describeModelTier(upscaleSettings, null, {
+    ready: true,
+    processing_modes: ["fast", "quality"],
+    upscale_available: false,
+  });
+  assert.equal(unavailable.title, "放大档");
+  assert.match(unavailable.detail, /未启用 放大档/);
+
+  const execution = buildModelExecution(
+    { model_profile: "realcugan-se-2x", elapsed_ms: 1500 },
+    upscaleSettings,
+  );
+  const actual = describeModelTier(upscaleSettings, execution, {
+    ready: true,
+    processing_modes: ["fast", "quality", "upscale"],
+    upscale_available: true,
+  });
+  assert.equal(actual.title, "放大档 · 原生超分");
+  assert.match(actual.detail, /Real-CUGAN SE 2x/);
+});

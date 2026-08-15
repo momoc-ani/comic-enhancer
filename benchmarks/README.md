@@ -20,6 +20,12 @@ COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
   --mode quality
 
 COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
+  --base-url http://127.0.0.1:8765 \
+  --manifest benchmarks/works/exiled-reincarnated-heavy-knight.json \
+  --mode upscale --phase warm \
+  --palette-version realcugan-se-2x-smoke-v1
+
+COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
   --base-url http://192.168.38.226:8765 \
   --manifest benchmarks/works/exiled-reincarnated-heavy-knight.json \
   --mode flux2 --phase warm \
@@ -53,3 +59,5 @@ COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py ... \
 - 连续 100 页无显存或进程内存持续增长。
 
 三页冒烟集只证明链路可运行，未达到 100 页授权集前不得把冒烟结果当作质量准入结论。
+
+放大档冒烟还必须确认每页输出宽高精确为原图 2 倍、`model_profile=realcugan-se-2x`，并人工检查小字号文字、气泡边界、规则网点和斜线是否出现粘连或伪纹理。不同操作系统、GPU 和 Vulkan 驱动的数据不得混为同一性能结论。

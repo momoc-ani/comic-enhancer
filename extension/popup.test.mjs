@@ -15,6 +15,7 @@ test("popup renders the installed manifest version", () => {
   assert.match(html, /data-deployment="remote"/);
   assert.match(html, /data-deployment="local"/);
   assert.match(html, /value="cobra"/);
+  assert.match(html, /value="upscale"/);
   assert.match(html, /value="flux2"/);
   assert.match(html, /value="flux2_quant"/);
   assert.match(script, /chrome\.runtime\.getManifest\(\)\.version/);

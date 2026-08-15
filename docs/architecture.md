@@ -7,25 +7,42 @@
   -> 站点适配器提取作品 ID 和漫画图片
   -> 可视区域调度器优先当前页并预取后续页
   -> 插件后台下载原图
-  -> 唯一漫画增强 API 选择快速/质量/Cobra/FLUX.2 工作流及作品 LoRA / 通用 LoRA / 无 LoRA
-  -> API 向唯一 ComfyUI 容器提交对应工作流的单并发 GPU 任务
-  -> ComfyUI 结果返回 API 做必要的尺寸恢复、缓存和鉴权
+  -> 唯一漫画增强 API 选择上色工作流或 Real-CUGAN 放大处理器
+  -> 上色档向唯一 ComfyUI 容器提交对应工作流；放大档调用当前平台原生资源
+  -> 执行结果返回 API 做必要的尺寸恢复、缓存和鉴权
   -> 缓存不可变的 WebP 结果和推理元数据
   -> 插件后台鉴权取图并覆盖显示
   -> 任一步失败都保留原图
 ```
 
-浏览器插件只访问漫画增强 API。快速、质量、Cobra 和 FLUX.2 都是同一个 ComfyUI 容器中的预设工作流；后端只配置一个 `comfyui_url`，不能按档位配置第二个推理地址。
+浏览器插件只访问漫画增强 API。快速、质量、Cobra 和 FLUX.2 都是同一个 ComfyUI 容器中的预设工作流；放大档由 API 进程调用当前平台的 Real-CUGAN 可执行程序。后端只配置一个 `comfyui_url`，Real-CUGAN 使用本地资源目录而不是第二个推理地址。
 
 ## 档位策略边界
 
-ComfyUI 后端通过 `ComfyUIModeStrategy` 公共接口注册每个处理档位。每个策略独立实现 `available`、`cache_revision`、`adapter_policy` 和 `process`：
+API 先通过 `RoutedInferenceBackend` 区分平台原生档位与主推理后端；ComfyUI 后端再通过 `ComfyUIModeStrategy` 注册上色档位。每个档位独立实现可用性、缓存版本、适配器策略和处理逻辑：
 
 - 快速档和质量档复用同一个预设策略实现，只替换完整工作流；
+- 放大档只在显式启用且当前平台的 Real-CUGAN 可执行文件、`models-se/up2x-no-denoise.param` 和 `.bin` 齐全时可用，不选择 LoRA 或角色参考图；
 - Cobra 独立管理最多 12 张参考图、worker 卸载和 Cobra 结构保护；
 - FLUX.2 独立管理最多 3 张参考图、切换时释放 Cobra，并使用旧基准的四步空 latent 工作流直接输出上色结果；API 不复用 SD1.5 的后端业务后处理。
 
-策略之间不共享业务后处理函数。上传、ComfyUI 队列提交、轮询、结果下载、缓存和鉴权属于后端基础设施，可以复用。实验档失败时只能显式回退到质量策略，并由返回的 `model_profile` 标明实际执行模型。
+策略之间不共享业务后处理函数。上传、ComfyUI 队列提交、轮询、结果下载、缓存和鉴权属于后端基础设施，可以复用。实验上色档失败时只能显式回退到质量策略，并由返回的 `model_profile` 标明实际执行模型；放大档失败直接保留原图，不进入任何上色工作流。
+
+## Real-CUGAN 放大档
+
+放大档固定执行以下链路：
+
+```text
+原始漫画页
+  -> EXIF 方向规范化并转换为临时 PNG
+  -> 当前平台 resource/realcugan/<platform>/
+  -> Real-CUGAN models-se，scale=2，noise=-1
+  -> 校验输出宽高均为原图 2 倍
+  -> 原子编码为 WebP 并写入统一结果缓存
+  -> 返回 model_profile=realcugan-se-2x
+```
+
+缓存版本覆盖处理参数、可执行文件、`up2x-no-denoise.param` 和模型权重内容。平台资源目录支持 `windows-x64`、`windows-arm64`、`linux-x64`、`linux-arm64`、`macos-x64` 和 `macos-arm64`；仓库不提交任何平台包、动态库或模型权重。
 
 当前 FLUX.2 最高质量档固定按以下顺序执行：
 

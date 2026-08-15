@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class ProcessingMode(StrEnum):
     FAST = "fast"
     QUALITY = "quality"
+    UPSCALE = "upscale"
     COBRA = "cobra"
     FLUX2 = "flux2"
     FLUX2_QUANT = "flux2_quant"
@@ -131,6 +132,7 @@ class Capabilities(BaseModel):
     model_profiles: list[str] = Field(default_factory=list)
     processing_modes: list[ProcessingMode] = Field(default_factory=list)
     mode_options: list[ProcessingModeOption] = Field(default_factory=list)
+    upscale_available: bool = False
     cobra_available: bool = False
     flux2_available: bool = False
     flux2_quant_available: bool = False

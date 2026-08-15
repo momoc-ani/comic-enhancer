@@ -4,6 +4,7 @@ export const LOCAL_API_URL = "http://127.0.0.1:8765";
 export const MODE_OPTIONS = Object.freeze([
   { value: "fast", label: "快速模式", prefetchPages: 3 },
   { value: "quality", label: "质量模式", prefetchPages: 2 },
+  { value: "upscale", label: "放大模式（Real-CUGAN 2x）", prefetchPages: 1 },
   { value: "cobra", label: "Cobra 实验档", prefetchPages: 1 },
   { value: "flux2", label: "最高质量模式（FLUX.2）", prefetchPages: 1 },
   { value: "flux2_quant", label: "质量模式（FLUX.2 量化实验）", prefetchPages: 1 },

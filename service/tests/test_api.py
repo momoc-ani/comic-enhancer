@@ -222,6 +222,7 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     config.write_text(
         '{"runtime_dir":"runtime","adapter_index":"index.json",'
         '"adapter_weights_root":"weights",'
+        '"realcugan_resource_root":"resource/realcugan",'
         '"cobra_url":"http://127.0.0.1:8780",'
         '"comfyui_cobra_url":"http://127.0.0.1:8192",'
         '"comfyui_workflow_fast":"fast.json",'
@@ -239,6 +240,8 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     assert settings.adapter_index == Path("index.json")
     assert settings.comfyui_workflow_fast == Path("fast.json")
     assert settings.comfyui_workflow_flux2 == Path("flux2.json")
+    assert settings.realcugan_resource_root == Path("resource/realcugan")
+    assert settings.realcugan_enabled is False
     assert settings.comfyui_cobra_enabled is False
     assert settings.cobra_reference_limit == 12
     assert settings.flux2_reference_limit == 3

@@ -172,6 +172,16 @@ def summarize(
         for result in results
         if float(result["metrics"].get("saturated_pixel_ratio", 0)) >= 0.005
     ]
+    scale_x = [
+        float(result["metrics"]["scale_x"])
+        for result in results
+        if "scale_x" in result["metrics"]
+    ]
+    scale_y = [
+        float(result["metrics"]["scale_y"])
+        for result in results
+        if "scale_y" in result["metrics"]
+    ]
     total_pages = len(results) + len(failures)
     return {
         "pages": total_pages,
@@ -202,6 +212,10 @@ def summarize(
             else 0
         ),
         "maximum_dominant_hue_ratio": max(dominant_hue_ratios, default=0),
+        "minimum_scale_x": min(scale_x, default=0),
+        "maximum_scale_x": max(scale_x, default=0),
+        "minimum_scale_y": min(scale_y, default=0),
+        "maximum_scale_y": max(scale_y, default=0),
         "model_profiles": sorted({str(result["model_profile"]) for result in results}),
         "adapter_sources": sorted({str(result["adapter_source"]) for result in results}),
         "reference_pages": sum(bool(result["reference_applied"]) for result in results),
@@ -390,6 +404,21 @@ def evaluate_admission(
                 ),
             ]
         )
+    if mode == "upscale":
+        checks.extend(
+            [
+                _admission_check(
+                    "model_profiles",
+                    summary["model_profiles"],
+                    "eq",
+                    ["realcugan-se-2x"],
+                ),
+                _admission_check("minimum_scale_x", summary["minimum_scale_x"], "eq", 2),
+                _admission_check("maximum_scale_x", summary["maximum_scale_x"], "eq", 2),
+                _admission_check("minimum_scale_y", summary["minimum_scale_y"], "eq", 2),
+                _admission_check("maximum_scale_y", summary["maximum_scale_y"], "eq", 2),
+            ]
+        )
     if phase == "warm" and mode == "fast":
         checks.extend(
             [
@@ -439,9 +468,9 @@ def evaluate_admission(
 # 方法说明：生成单项准入检查结果。
 def _admission_check(
     name: str,
-    actual: float | int,
+    actual: object,
     operator: str,
-    expected: float | int,
+    expected: object,
 ) -> dict[str, object]:
     passed = {
         "eq": actual == expected,
@@ -548,7 +577,7 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument(
         "--mode",
-        choices=("fast", "quality", "cobra", "flux2"),
+        choices=("fast", "quality", "upscale", "cobra", "flux2"),
         required=True,
     )
     parser.add_argument(

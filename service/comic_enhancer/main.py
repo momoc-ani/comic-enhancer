@@ -66,7 +66,11 @@ def prioritized_metadata_candidates(
 # 方法说明：创建并配置 Comic Enhancer FastAPI 应用。
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings()
-    backend_options = {}
+    backend_options = {
+        "realcugan_enabled": settings.realcugan_enabled,
+        "realcugan_resource_root": settings.realcugan_resource_root,
+        "realcugan_timeout_seconds": settings.realcugan_timeout_seconds,
+    }
     if settings.backend == "comfyui":
         workflow_loader = PresetWorkflowLoader(
             fast_workflow=settings.comfyui_workflow_fast,
@@ -76,20 +80,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             flux2_workflow=settings.comfyui_workflow_flux2,
             flux2_quant_workflow=settings.comfyui_workflow_flux2_quant,
         )
-        backend_options = {
-            "base_url": settings.comfyui_url,
-            "cobra_enabled": settings.comfyui_cobra_enabled,
-            "cobra_workflow": settings.comfyui_workflow_cobra,
-            "cobra_reference_limit": settings.cobra_reference_limit,
-            "flux2_enabled": settings.comfyui_flux2_enabled,
-            "flux2_workflow": settings.comfyui_workflow_flux2,
-            "flux2_reference_limit": settings.flux2_reference_limit,
-            "flux2_quant_enabled": settings.comfyui_flux2_quant_enabled,
-            "flux2_quant_workflow": settings.comfyui_workflow_flux2_quant,
-            "timeout_seconds": settings.comfyui_timeout_seconds,
-            "poll_interval_seconds": settings.comfyui_poll_interval_seconds,
-            "workflow_loader": workflow_loader,
-        }
+        backend_options.update(
+            {
+                "base_url": settings.comfyui_url,
+                "cobra_enabled": settings.comfyui_cobra_enabled,
+                "cobra_workflow": settings.comfyui_workflow_cobra,
+                "cobra_reference_limit": settings.cobra_reference_limit,
+                "flux2_enabled": settings.comfyui_flux2_enabled,
+                "flux2_workflow": settings.comfyui_workflow_flux2,
+                "flux2_reference_limit": settings.flux2_reference_limit,
+                "flux2_quant_enabled": settings.comfyui_flux2_quant_enabled,
+                "flux2_quant_workflow": settings.comfyui_workflow_flux2_quant,
+                "timeout_seconds": settings.comfyui_timeout_seconds,
+                "poll_interval_seconds": settings.comfyui_poll_interval_seconds,
+                "workflow_loader": workflow_loader,
+            }
+        )
     backend = create_backend(settings.backend, **backend_options)
     registry = AdapterRegistry(
         settings.adapter_index,
@@ -183,11 +189,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # 方法说明：返回后端能力、档位和预取配置。
     @app.get("/v1/capabilities", response_model=Capabilities)
     async def capabilities(_: None = Depends(authorize)) -> Capabilities:
+        upscale_available = backend.upscale_profile_ready()
         cobra_available = backend.cobra_profile_ready()
         flux2_available = backend.flux2_profile_ready()
         flux2_quant_available = backend.flux2_quant_profile_ready()
         processing_modes = [
             mode for mode in ProcessingMode
+            if mode != ProcessingMode.UPSCALE or upscale_available
             if mode != ProcessingMode.COBRA or cobra_available
             if mode != ProcessingMode.FLUX2 or flux2_available
             if mode != ProcessingMode.FLUX2_QUANT or flux2_quant_available
@@ -195,6 +203,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         mode_labels = {
             ProcessingMode.FAST: ("快速模式", 3),
             ProcessingMode.QUALITY: ("质量模式", 2),
+            ProcessingMode.UPSCALE: ("放大模式（Real-CUGAN 2x）", 1),
             ProcessingMode.COBRA: ("Cobra 实验档", 1),
             ProcessingMode.FLUX2: ("最高质量模式（FLUX.2）", 1),
             ProcessingMode.FLUX2_QUANT: ("质量模式（FLUX.2 量化实验）", 1),
@@ -214,6 +223,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 for mode in processing_modes
             ],
+            upscale_available=upscale_available,
             cobra_available=cobra_available,
             flux2_available=flux2_available,
             flux2_quant_available=flux2_quant_available,
@@ -236,6 +246,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             options = ProcessOptions.model_validate(json.loads(options_json))
         except (json.JSONDecodeError, ValueError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
+
+        if (
+            options.mode == ProcessingMode.UPSCALE
+            and not backend.upscale_profile_ready()
+        ):
+            raise HTTPException(status_code=409, detail="Real-CUGAN 放大档未启用")
 
         image_bytes = await image.read()
         if not image_bytes:
@@ -419,6 +435,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # 方法说明：按需同步当前作品的远端适配器。
     async def _ensure_remote_adapter(work: WorkIdentity, options: ProcessOptions) -> None:
+        if options.mode == ProcessingMode.UPSCALE:
+            return
         required_workflow = (
             "quality"
             if str(options.mode) in {"cobra", "flux2", "flux2_quant"}

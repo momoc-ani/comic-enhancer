@@ -14,3 +14,4 @@ adapters/cache/
 extension/*.zip
 .env
 config/settings.json
+/resource/realcugan/*/

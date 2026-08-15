@@ -6,8 +6,12 @@ import hashlib
 from io import BytesIO
 import json
 import logging
+import os
+import platform
 from pathlib import Path
 import re
+import subprocess
+import tempfile
 import time
 import uuid
 
@@ -25,6 +29,8 @@ from .workflows import WorkflowLoader
 logger = logging.getLogger(__name__)
 FLUX2_PROCESSING_REVISION = "flux2-baseline-direct-prompt-v12"
 FLUX2_OUTPUT_SCALE = 2
+REALCUGAN_MODEL_PROFILE = "realcugan-se-2x"
+REALCUGAN_PROCESSING_REVISION = "realcugan-se-2x-no-denoise-v1"
 
 
 class InferenceBackend(ABC):
@@ -43,6 +49,14 @@ class InferenceBackend(ABC):
 
     # 方法说明：检查 FLUX.2 模型档位是否可用。
     def flux2_profile_ready(self) -> bool:
+        return False
+
+    # 方法说明：检查 FLUX.2 量化模型档位是否可用。
+    def flux2_quant_profile_ready(self) -> bool:
+        return False
+
+    # 方法说明：检查 Real-CUGAN 放大档位是否可用。
+    def upscale_profile_ready(self) -> bool:
         return False
 
     # 方法说明：生成影响推理缓存的版本标识。
@@ -100,6 +114,280 @@ class AdapterPolicy:
     enabled: bool
     compatible_base_models: frozenset[str]
     required_workflow: str | None
+
+
+class RealCuganUpscaler:
+    """通过当前平台的 Real-CUGAN 原生程序执行固定两倍放大。"""
+
+    model_profile = REALCUGAN_MODEL_PROFILE
+    model_stem = "up2x-no-denoise"
+
+    # 方法说明：初始化平台资源目录、开关和超时配置。
+    def __init__(
+        self,
+        *,
+        enabled: bool,
+        resource_root: Path,
+        timeout_seconds: int,
+    ):
+        self.enabled = enabled
+        self.resource_root = resource_root.resolve()
+        self.timeout_seconds = max(1, timeout_seconds)
+        self._revision_signature: tuple[tuple[str, int, int], ...] | None = None
+        self._revision_value = ""
+
+    # 方法说明：返回当前操作系统与架构对应的资源目录名。
+    @staticmethod
+    def platform_key() -> str | None:
+        system = platform.system().lower()
+        machine = platform.machine().lower()
+        architecture = {
+            "amd64": "x64",
+            "x86_64": "x64",
+            "arm64": "arm64",
+            "aarch64": "arm64",
+        }.get(machine)
+        system_name = {
+            "windows": "windows",
+            "linux": "linux",
+            "darwin": "macos",
+        }.get(system)
+        if not architecture or not system_name:
+            return None
+        return f"{system_name}-{architecture}"
+
+    # 方法说明：返回当前平台的 Real-CUGAN 资源目录。
+    def platform_dir(self) -> Path | None:
+        key = self.platform_key()
+        return self.resource_root / key if key else None
+
+    # 方法说明：返回当前平台的 Real-CUGAN 可执行文件路径。
+    def executable_path(self) -> Path | None:
+        directory = self.platform_dir()
+        if directory is None:
+            return None
+        filename = (
+            "realcugan-ncnn-vulkan.exe"
+            if platform.system().lower() == "windows"
+            else "realcugan-ncnn-vulkan"
+        )
+        return directory / filename
+
+    # 方法说明：返回固定 models-se 模型目录。
+    def model_dir(self) -> Path | None:
+        directory = self.platform_dir()
+        return directory / "models-se" if directory else None
+
+    # 方法说明：返回执行两倍无降噪放大所需的全部文件。
+    def required_files(self) -> tuple[Path, ...]:
+        executable = self.executable_path()
+        model_dir = self.model_dir()
+        if executable is None or model_dir is None:
+            return ()
+        return (
+            executable,
+            model_dir / f"{self.model_stem}.param",
+            model_dir / f"{self.model_stem}.bin",
+        )
+
+    # 方法说明：检查开关、可执行文件和两倍模型权重是否齐全。
+    def available(self) -> bool:
+        files = self.required_files()
+        if not self.enabled or not files or not all(path.is_file() for path in files):
+            return False
+        executable = self.executable_path()
+        return bool(
+            executable
+            and (
+                platform.system().lower() == "windows"
+                or os.access(executable, os.X_OK)
+            )
+        )
+
+    # 方法说明：计算可执行文件和模型权重共同决定的缓存版本。
+    def cache_revision(self) -> str:
+        if not self.available():
+            return f"{REALCUGAN_PROCESSING_REVISION}:unavailable"
+        files = self.required_files()
+        signature = tuple(
+            (str(path), path.stat().st_size, path.stat().st_mtime_ns)
+            for path in files
+        )
+        if signature != self._revision_signature:
+            digest = hashlib.sha256()
+            for path in files:
+                digest.update(path.name.encode("utf-8"))
+                with path.open("rb") as stream:
+                    while chunk := stream.read(1024 * 1024):
+                        digest.update(chunk)
+            self._revision_signature = signature
+            self._revision_value = digest.hexdigest()
+        return f"{REALCUGAN_PROCESSING_REVISION}:{self._revision_value}"
+
+    # 方法说明：调用 Real-CUGAN 并将结果原子保存为缓存 WebP。
+    def process(
+        self,
+        assets: InferenceAssets,
+        output_path: Path,
+    ) -> InferenceOutcome:
+        if not self.available():
+            raise RuntimeError("Real-CUGAN 放大资源未启用或文件不完整")
+        executable = self.executable_path()
+        model_dir = self.model_dir()
+        platform_dir = self.platform_dir()
+        if executable is None or model_dir is None or platform_dir is None:
+            raise RuntimeError("当前平台不支持 Real-CUGAN 放大资源")
+
+        started = time.perf_counter()
+        logger.info("Real-CUGAN 两倍放大开始")
+        with tempfile.TemporaryDirectory(prefix="comic-enhancer-realcugan-") as temp:
+            temp_dir = Path(temp)
+            input_path = temp_dir / "input.png"
+            native_output_path = temp_dir / "output.png"
+            with Image.open(BytesIO(assets.image_bytes)) as source_file:
+                source = ImageOps.exif_transpose(source_file).convert("RGB")
+                source_size = source.size
+                source.save(input_path, format="PNG")
+
+            command = [
+                str(executable),
+                "-i",
+                str(input_path),
+                "-o",
+                str(native_output_path),
+                "-s",
+                "2",
+                "-n",
+                "-1",
+                "-m",
+                str(model_dir),
+                "-f",
+                "png",
+            ]
+            completed = subprocess.run(
+                command,
+                cwd=platform_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=self.timeout_seconds,
+                check=False,
+                creationflags=(
+                    subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                ),
+            )
+            if completed.returncode != 0:
+                detail = (completed.stderr or completed.stdout).strip()[-1000:]
+                raise RuntimeError(
+                    f"Real-CUGAN 执行失败（退出码 {completed.returncode}）: {detail}"
+                )
+            if not native_output_path.is_file():
+                raise RuntimeError("Real-CUGAN 未生成输出图片")
+            with Image.open(native_output_path) as result_file:
+                result = ImageOps.exif_transpose(result_file).convert("RGB").copy()
+
+        expected_size = (source_size[0] * 2, source_size[1] * 2)
+        if result.size != expected_size:
+            raise RuntimeError(
+                "Real-CUGAN 输出尺寸不符合两倍放大契约: "
+                f"expected={expected_size} actual={result.size}"
+            )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = output_path.with_suffix(".tmp.webp")
+        result.save(temporary, format="WEBP", quality=93, method=4)
+        temporary.replace(output_path)
+        logger.info(
+            "Real-CUGAN 两倍放大完成，耗时 %.3f 秒",
+            time.perf_counter() - started,
+        )
+        return InferenceOutcome(
+            adapter_applied=False,
+            model_profile=self.model_profile,
+        )
+
+
+class RoutedInferenceBackend(InferenceBackend):
+    """在主推理后端之外路由不依赖 ComfyUI 的独立处理档位。"""
+
+    # 方法说明：组合主推理后端与平台原生放大处理器。
+    def __init__(
+        self,
+        backend: InferenceBackend,
+        upscaler: RealCuganUpscaler,
+    ):
+        self.backend = backend
+        self.upscaler = upscaler
+        self.name = backend.name
+        self.applies_adapters = backend.applies_adapters
+        self.supported_base_models = backend.supported_base_models
+
+    # 方法说明：返回当前实际可声明的模型档位。
+    @property
+    def model_profiles(self) -> tuple[str, ...]:
+        profiles = list(self.backend.model_profiles)
+        if self.upscale_profile_ready():
+            profiles.append(self.upscaler.model_profile)
+        return tuple(dict.fromkeys(profiles))
+
+    # 方法说明：检查主推理后端是否已准备就绪。
+    def ready(self) -> bool:
+        return self.backend.ready()
+
+    # 方法说明：检查 Cobra 模型档位是否可用。
+    def cobra_profile_ready(self) -> bool:
+        return self.backend.cobra_profile_ready()
+
+    # 方法说明：检查 FLUX.2 模型档位是否可用。
+    def flux2_profile_ready(self) -> bool:
+        return self.backend.flux2_profile_ready()
+
+    # 方法说明：检查 FLUX.2 量化模型档位是否可用。
+    def flux2_quant_profile_ready(self) -> bool:
+        return self.backend.flux2_quant_profile_ready()
+
+    # 方法说明：检查 Real-CUGAN 放大档位是否可用。
+    def upscale_profile_ready(self) -> bool:
+        return self.upscaler.available()
+
+    # 方法说明：生成所选档位影响推理缓存的版本标识。
+    def cache_revision(
+        self,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+        assets: InferenceAssets | None = None,
+    ) -> str:
+        if options.mode == ProcessingMode.UPSCALE:
+            return self.upscaler.cache_revision()
+        revision = self.backend.cache_revision(options, resolved, assets)
+        return revision if self.name == self.backend.name else f"{self.name}:{revision}"
+
+    # 方法说明：返回独立放大档或主推理档对应的适配器策略。
+    def adapter_policy(
+        self,
+        assets: InferenceAssets,
+        options: ProcessOptions,
+    ) -> AdapterPolicy:
+        if options.mode == ProcessingMode.UPSCALE:
+            return AdapterPolicy(
+                enabled=False,
+                compatible_base_models=frozenset(),
+                required_workflow=None,
+            )
+        return self.backend.adapter_policy(assets, options)
+
+    # 方法说明：将请求路由到 Real-CUGAN 或现有主推理后端。
+    def process(
+        self,
+        assets: InferenceAssets,
+        output_path: Path,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> InferenceOutcome:
+        if options.mode == ProcessingMode.UPSCALE:
+            return self.upscaler.process(assets, output_path)
+        return self.backend.process(assets, output_path, options, resolved)
 
 
 class ComfyUIModeStrategy(ABC):
@@ -1054,8 +1342,20 @@ class ComfyUIBackend(InferenceBackend):
 
 # 方法说明：根据配置创建对应的推理后端。
 def create_backend(name: str, **options) -> InferenceBackend:
+    upscaler = RealCuganUpscaler(
+        enabled=bool(options.pop("realcugan_enabled", False)),
+        resource_root=Path(
+            options.pop(
+                "realcugan_resource_root",
+                Path(__file__).resolve().parents[2] / "resource" / "realcugan",
+            )
+        ),
+        timeout_seconds=int(options.pop("realcugan_timeout_seconds", 180)),
+    )
     if name == PassthroughBackend.name:
-        return PassthroughBackend()
-    if name == ComfyUIBackend.name:
-        return ComfyUIBackend(**options)
-    raise ValueError(f"unsupported backend: {name}")
+        backend: InferenceBackend = PassthroughBackend()
+    elif name == ComfyUIBackend.name:
+        backend = ComfyUIBackend(**options)
+    else:
+        raise ValueError(f"unsupported backend: {name}")
+    return RoutedInferenceBackend(backend, upscaler)

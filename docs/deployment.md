@@ -21,7 +21,31 @@ docker compose -f compose.nvidia-remote.yaml up -d --build
 curl http://127.0.0.1:8765/v1/health
 ```
 
-API 容器只配置 `COMIC_ENHANCER_COMFYUI_URL=http://comfyui:8188`。4090 主机统一使用 `/data1/models/ComfyUI/models` 作为模型根目录：统一 ComfyUI 挂载为 `/root/sd/ComfyUI/models`，增强 API 挂载为 `/models`，并只在 `/models/loras` 中自动下载和校验 LoRA。API 自身不加载生成模型；checkpoint、ControlNet、放大模型、Cobra 和 LoRA 权重都不打进镜像。
+API 容器只配置 `COMIC_ENHANCER_COMFYUI_URL=http://comfyui:8188`。4090 主机统一使用 `/data1/models/ComfyUI/models` 作为模型根目录：统一 ComfyUI 挂载为 `/root/sd/ComfyUI/models`，增强 API 挂载为 `/models`，并只在 `/models/loras` 中自动下载和校验 LoRA。ComfyUI 的 checkpoint、ControlNet、放大模型、Cobra 和 LoRA 权重都不打进 API 镜像；Real-CUGAN 平台包也不打进镜像，只能从显式挂载的资源目录读取。
+
+### Real-CUGAN 放大档
+
+平台资源统一放在 `resource/realcugan/<platform>/`。Windows x64 本地服务使用：
+
+```text
+resource/realcugan/windows-x64/
+  realcugan-ncnn-vulkan.exe
+  vcomp140.dll
+  models-se/up2x-no-denoise.param
+  models-se/up2x-no-denoise.bin
+```
+
+在 `config/settings.json` 中显式开启：
+
+```json
+{
+  "realcugan_enabled": true,
+  "realcugan_resource_root": "resource/realcugan",
+  "realcugan_timeout_seconds": 180
+}
+```
+
+Docker API 容器运行 Linux，因此不能使用 `windows-x64` 包。远端必须另外准备 `linux-x64` 包，为 `realcugan-ncnn-vulkan` 添加执行权限，并通过 `.env` 的 `REALCUGAN_RESOURCE_ROOT` 挂载到容器；同时设置 `COMIC_ENHANCER_REALCUGAN_ENABLED=true`。能力接口只在当前平台的可执行文件和两倍无降噪模型齐全时返回 `upscale`。平台包、权重和样例输出不会提交到仓库，部署前必须独立审核其许可证。
 
 ### Cobra 候选与 FLUX.2 Klein 最高质量模型
 
@@ -53,11 +77,11 @@ FLUX.2 最高质量档恢复旧基准的 `0.85MP` 四步空 latent 直出，以�
 插件配置：
 
 ```text
-运行方案: 快速模式/质量模式/Cobra/最高质量模式（FLUX.2）
+运行方案: 快速模式/质量模式/放大模式（Real-CUGAN 2x）/Cobra/最高质量模式（FLUX.2）
 API Token: 与远端 .env 中 COMIC_ENHANCER_TOKEN 相同
 ```
 
-插件只配置漫画增强服务地址，不提供 ComfyUI、Cobra 或 FLUX.2 地址入口。服务端也只配置一个 `COMIC_ENHANCER_COMFYUI_URL`，不同档位通过工作流路由，不允许再配置独立推理 URL。
+插件只配置漫画增强服务地址，不提供 ComfyUI、Cobra、FLUX.2 或 Real-CUGAN 地址入口。服务端也只配置一个 `COMIC_ENHANCER_COMFYUI_URL`；Real-CUGAN 配置是 API 本地资源根目录，不是独立推理 URL。
 
 替换其他 ComfyUI 工作流时，导出 API 格式 JSON，并在 `settings.json` 或环境变量中修改对应工作流路径。单输入工作流必须只有一个 `LoadImage`；多输入工作流使用 `_meta.title` 声明 `INPUT_IMAGE`、`REFERENCE_IMAGE` 等角色；所有工作流至少有一个 `SaveImage`，其余模型、LoRA 和参数必须全部预设。服务不依赖固定节点编号。
 
