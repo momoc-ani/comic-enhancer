@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..character_library import CharacterReferenceAsset
 from ..domain import ProcessOptions, ProcessResult, WorkIdentity
 from ..inference import InferenceAssets, InferenceBackend
+from ..logging_utils import log_operation
 from ..storage import ResultCache
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -24,22 +30,49 @@ class ProcessingService:
         work: WorkIdentity,
         options: ProcessOptions,
         character_references: dict[str, bytes] | None = None,
+        character_reference_assets: tuple[CharacterReferenceAsset, ...] = (),
     ) -> ProcessResult:
         """按当前策略处理输入并返回推理结果。"""
+        started = time.perf_counter()
         assets = InferenceAssets(
             image_bytes=image_bytes,
+            work_key=work.key,
             reference_bytes=reference_bytes,
             character_references=character_references,
+            character_reference_assets=character_reference_assets,
         )
+        try:
+            backend_revision = await asyncio.to_thread(
+                self.backend.cache_revision,
+                options,
+                assets,
+            )
+        except Exception as error:
+            log_operation(
+                logger,
+                logging.ERROR,
+                feature="页面处理",
+                parameters={
+                    "work_key": work.key,
+                    "mode": str(options.mode),
+                    "page_index": options.page_index,
+                },
+                result={
+                    "status": "failed",
+                    "stage": "cache_revision",
+                    "error": type(error).__name__,
+                },
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+            )
+            raise
         cache_key = self.cache.key(
             image_bytes,
             reference_bytes,
             work,
             options,
-            self.backend.cache_revision(options, assets),
+            backend_revision,
         )
         output_path = self.cache.result_path(cache_key)
-        started = time.perf_counter()
 
         if output_path.exists():
             metadata = self.cache.load_metadata(cache_key)
@@ -58,12 +91,32 @@ class ProcessingService:
         async with self.semaphore:
             outcome = None
             if not output_path.exists():
-                outcome = await asyncio.to_thread(
-                    self.backend.process,
-                    assets,
-                    output_path,
-                    options,
-                )
+                try:
+                    outcome = await asyncio.to_thread(
+                        self.backend.process,
+                        assets,
+                        output_path,
+                        options,
+                    )
+                except Exception as error:
+                    log_operation(
+                        logger,
+                        logging.ERROR,
+                        feature="页面处理",
+                        parameters={
+                            "work_key": work.key,
+                            "mode": str(options.mode),
+                            "page_index": options.page_index,
+                            "cache_key": cache_key[:12],
+                        },
+                        result={
+                            "status": "failed",
+                            "stage": "inference",
+                            "error": type(error).__name__,
+                        },
+                        elapsed_ms=(time.perf_counter() - started) * 1000,
+                    )
+                    raise
                 self.cache.save_metadata(
                     cache_key,
                     {
@@ -113,7 +166,8 @@ class ProcessingService:
         model_profile: str = "",
     ) -> ProcessResult:
         """组装统一的页面处理结果。"""
-        return ProcessResult(
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        result = ProcessResult(
             job_id=uuid.uuid4().hex,
             cache_key=cache_key,
             work_key=work.key,
@@ -122,6 +176,26 @@ class ProcessingService:
             processed_panels=processed_panels,
             model_profile=model_profile,
             result_url=f"/v1/results/{output_path.name}",
-            elapsed_ms=round((time.perf_counter() - started) * 1000),
+            elapsed_ms=elapsed_ms,
             cached=cached,
         )
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="页面处理",
+            parameters={
+                "work_key": work.key,
+                "mode": str(options.mode),
+                "page_index": options.page_index,
+                "cache_key": cache_key[:12],
+            },
+            result={
+                "status": "success",
+                "cached": cached,
+                "reference_applied": reference_applied,
+                "processed_panels": processed_panels,
+                "model_profile": model_profile,
+            },
+            elapsed_ms=elapsed_ms,
+        )
+        return result

@@ -7,6 +7,11 @@ export const MODE_OPTIONS = Object.freeze([
   { value: "upscale", label: "放大模式（Real-CUGAN 2x）", prefetchPages: 1 },
   { value: "flux2", label: "最高质量模式（FLUX.2）", prefetchPages: 1 },
   { value: "flux2_quant", label: "质量模式（FLUX.2 量化实验）", prefetchPages: 1 },
+  {
+    value: "flux2_character",
+    label: "角色稳定模式（Qwen3-VL + FLUX.2）",
+    prefetchPages: 1,
+  },
 ]);
 
 const MODE_VALUES = new Set(MODE_OPTIONS.map((option) => option.value));

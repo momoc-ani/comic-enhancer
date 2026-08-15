@@ -15,6 +15,7 @@ from comic_enhancer.inference.comfyui.strategies import (
     FLUX2_PROCESSING_REVISION,
     FastModeStrategy,
     Flux2ModeStrategy,
+    Flux2CharacterModeStrategy,
     Flux2QuantModeStrategy,
     QualityModeStrategy,
 )
@@ -71,6 +72,7 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
         "quality": QualityModeStrategy,
         "flux2": Flux2ModeStrategy,
         "flux2_quant": Flux2QuantModeStrategy,
+        "flux2_character": Flux2CharacterModeStrategy,
     }
     for mode, strategy_type in expected.items():
         strategy = backend.mode_strategy(mode)

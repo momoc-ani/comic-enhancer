@@ -30,6 +30,10 @@ class WorkflowLoader(ABC):
     def supports_flux2_quant(self) -> bool:
         return False
 
+    # 方法说明：判断工作流加载器是否支持 Qwen3-VL 角色稳定档。
+    def supports_flux2_character(self) -> bool:
+        return False
+
     # 方法说明：加载指定档位对应的完整工作流。
     @abstractmethod
     def load(self, options: ProcessOptions) -> LoadedWorkflow:
@@ -52,6 +56,7 @@ class PresetWorkflowLoader(WorkflowLoader):
         quality_workflow: Path,
         flux2_workflow: Path | None = None,
         flux2_quant_workflow: Path | None = None,
+        flux2_character_workflow: Path | None = None,
     ):
         self.fast_workflow = fast_workflow.resolve()
         self.quality_workflow = quality_workflow.resolve()
@@ -63,6 +68,11 @@ class PresetWorkflowLoader(WorkflowLoader):
             if flux2_quant_workflow is not None
             else None
         )
+        self.flux2_character_workflow = (
+            flux2_character_workflow.resolve()
+            if flux2_character_workflow is not None
+            else None
+        )
 
     # 方法说明：判断工作流加载器是否支持 FLUX.2 档位。
     def supports_flux2(self) -> bool:
@@ -72,6 +82,13 @@ class PresetWorkflowLoader(WorkflowLoader):
     def supports_flux2_quant(self) -> bool:
         return bool(
             self.flux2_quant_workflow and self.flux2_quant_workflow.is_file()
+        )
+
+    # 方法说明：判断角色稳定档完整工作流文件是否存在。
+    def supports_flux2_character(self) -> bool:
+        return bool(
+            self.flux2_character_workflow
+            and self.flux2_character_workflow.is_file()
         )
 
     # 方法说明：加载指定处理档位对应的完整工作流。
@@ -111,6 +128,13 @@ class PresetWorkflowLoader(WorkflowLoader):
             return (
                 self.flux2_quant_workflow,
                 "flux2-klein-4b-qwen3-fp8",
+            )
+        if mode == "flux2_character":
+            if self.flux2_character_workflow is None:
+                raise RuntimeError("Qwen3-VL 角色稳定工作流未配置")
+            return (
+                self.flux2_character_workflow,
+                "flux2-klein-4b-qwen3-vl-character",
             )
         path = self.quality_workflow if mode == "quality" else self.fast_workflow
         return path, "sd15-colorize"

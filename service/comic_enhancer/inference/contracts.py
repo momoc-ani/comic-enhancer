@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..character_library import CharacterReferenceAsset
 from ..domain import ProcessOptions
 
 
@@ -23,6 +24,10 @@ class InferenceBackend(ABC):
 
     # 方法说明：检查 FLUX.2 量化模型档位是否可用。
     def flux2_quant_profile_ready(self) -> bool:
+        return False
+
+    # 方法说明：检查 Qwen3-VL 角色稳定档位是否可用。
+    def flux2_character_profile_ready(self) -> bool:
         return False
 
     # 方法说明：检查 Real-CUGAN 放大档位是否可用。
@@ -62,5 +67,7 @@ class InferenceAssets:
     """汇总页面原图及可选参考图字节。"""
 
     image_bytes: bytes
+    work_key: str = ""
     reference_bytes: bytes | None = None
     character_references: dict[str, bytes] | None = None
+    character_reference_assets: tuple[CharacterReferenceAsset, ...] = ()

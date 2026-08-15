@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from dataclasses import dataclass
+import time
 
 from ..domain import (
     CharacterBankEntry,
@@ -12,6 +12,7 @@ from ..domain import (
     WorkMetadata,
 )
 from ..identities import WorkIdentityRegistry
+from ..logging_utils import log_operation
 from ..references import (
     ReferenceImageQuality,
     ReferenceImageStore,
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class _ReferenceCandidate:
     name: str
+    summary: str
     image_url: str
     provider: str
     image_bytes: bytes
@@ -62,6 +64,7 @@ class ReferenceBankService:
         work: WorkIdentity,
     ) -> list[tuple[CharacterBankEntry, bytes]]:
         """从缓存元数据构建角色参考图库。"""
+        started = time.perf_counter()
         grouped: dict[str, list[_ReferenceCandidate]] = {}
         seen: set[str] = set()
         for candidate in prioritized_metadata_candidates(resolution, work):
@@ -84,6 +87,7 @@ class ReferenceBankService:
                 grouped.setdefault(character_id, []).append(
                     _ReferenceCandidate(
                         name=character_name,
+                        summary=character.summary,
                         image_url=character.image_url,
                         provider=character.provider,
                         image_bytes=image_bytes,
@@ -97,30 +101,39 @@ class ReferenceBankService:
                 seen.add(key)
 
         entry_groups: list[list[tuple[CharacterBankEntry, bytes]]] = []
-        decisions: list[dict[str, object]] = []
         for character_id, candidates in grouped.items():
             selected = self._select_character(character_id, candidates, work)
             if selected is None:
                 continue
-            entries, decision = selected
+            entries, _ = selected
             entry_groups.append(entries)
-            decisions.append(decision)
 
-        logger.info(
-            "角色参考图择优完成 work=%s selections=%s",
-            work.key,
-            json.dumps(decisions[:16], ensure_ascii=False),
-        )
         entries = [
             group[view_index]
             for view_index in range(max((len(group) for group in entry_groups), default=0))
             for group in entry_groups
             if view_index < len(group)
         ]
-        if len(entries) > 16:
-            logger.warning("角色匹配视图超过 16 个，仅保留前 16 个: work=%s", work.key)
-            return entries[:16]
-        return entries
+        truncated = len(entries) > 16
+        selected_entries = entries[:16]
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="角色参考图库构建",
+            parameters={
+                "work_key": work.key,
+                "metadata_candidates": len(resolution.candidates),
+            },
+            result={
+                "status": "success",
+                "candidate_characters": len(grouped),
+                "selected_characters": len(entry_groups),
+                "reference_views": len(selected_entries),
+                "truncated": truncated,
+            },
+            elapsed_ms=(time.perf_counter() - started) * 1000,
+        )
+        return selected_entries
 
     def _select_character(
         self,
@@ -133,10 +146,16 @@ class ReferenceBankService:
             item for item in candidates if item.quality.usable and item.quality.colorful
         ]
         if not eligible:
-            logger.info(
-                "角色参考图均不满足彩色质量门槛，跳过: work=%s character=%s",
-                work.key,
-                character_id,
+            log_operation(
+                logger,
+                logging.INFO,
+                feature="角色参考图质量筛选",
+                parameters={
+                    "work_key": work.key,
+                    "character_id": character_id,
+                    "candidates": len(candidates),
+                },
+                result={"eligible": False, "usable_color_views": 0},
             )
             return None
         best = max(eligible, key=self._rank)
@@ -159,6 +178,7 @@ class ReferenceBankService:
                     name=best.name,
                     image_url=best.image_url,
                     provider=view.provider,
+                    summary=best.summary,
                     portrait_reference_url=portrait.image_url if portrait else None,
                     full_body_reference_url=full_body.image_url if full_body else None,
                 ),

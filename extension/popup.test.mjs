@@ -18,6 +18,7 @@ test("popup renders the installed manifest version", () => {
   assert.match(html, /value="upscale"/);
   assert.match(html, /value="flux2"/);
   assert.match(html, /value="flux2_quant"/);
+  assert.match(html, /value="flux2_character"/);
   assert.match(script, /chrome\.runtime\.getManifest\(\)\.version/);
   assert.match(script, /capabilities\.processing_modes/);
 });

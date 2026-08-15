@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .. import __version__
+from ..character_library import CharacterLibraryBuilder, CharacterLibraryRepository
+from ..character_vision import LlamaCppCharacterVisionAnalyzer
 from ..application import (
     ProcessingService,
     ReferenceBankService,
@@ -34,6 +37,16 @@ from .routes import (
     system_router,
 )
 
+
+# 方法说明：让业务 INFO 日志复用 Uvicorn 的终端处理器和格式。
+def _configure_application_logging() -> None:
+    application_logger = logging.getLogger("comic_enhancer")
+    application_logger.setLevel(logging.INFO)
+    uvicorn_logger = logging.getLogger("uvicorn.error")
+    if uvicorn_logger.handlers:
+        application_logger.handlers = list(uvicorn_logger.handlers)
+        application_logger.propagate = False
+
 def _create_backend(settings: Settings) -> InferenceBackend:
     """按配置创建统一推理后端。"""
     backend_options: dict[str, object] = {
@@ -42,11 +55,31 @@ def _create_backend(settings: Settings) -> InferenceBackend:
         "realcugan_timeout_seconds": settings.realcugan_timeout_seconds,
     }
     if settings.backend == "comfyui":
+        character_library = None
+        if settings.comfyui_flux2_character_enabled:
+            character_library_root = (
+                settings.character_library_root
+                or settings.runtime_dir / "character-library"
+            )
+            character_analyzer = LlamaCppCharacterVisionAnalyzer(
+                base_url=settings.qwen_vl_base_url,
+                api_key=settings.qwen_vl_api_key,
+                model_id=settings.qwen_vl_model_id,
+                deployment_revision=settings.qwen_vl_deployment_revision,
+                timeout_seconds=settings.qwen_vl_timeout_seconds,
+                max_image_edge=settings.qwen_vl_max_image_edge,
+            )
+            character_library = CharacterLibraryBuilder(
+                repository=CharacterLibraryRepository(character_library_root),
+                analyzer=character_analyzer,
+                min_confidence=settings.character_min_confidence,
+            )
         workflow_loader = PresetWorkflowLoader(
             fast_workflow=settings.comfyui_workflow_fast,
             quality_workflow=settings.comfyui_workflow_quality,
             flux2_workflow=settings.comfyui_workflow_flux2,
             flux2_quant_workflow=settings.comfyui_workflow_flux2_quant,
+            flux2_character_workflow=settings.comfyui_workflow_flux2_character,
         )
         backend_options.update(
             {
@@ -56,6 +89,9 @@ def _create_backend(settings: Settings) -> InferenceBackend:
                 "flux2_reference_limit": settings.flux2_reference_limit,
                 "flux2_quant_enabled": settings.comfyui_flux2_quant_enabled,
                 "flux2_quant_workflow": settings.comfyui_workflow_flux2_quant,
+                "flux2_character_enabled": settings.comfyui_flux2_character_enabled,
+                "flux2_character_workflow": settings.comfyui_workflow_flux2_character,
+                "character_library": character_library,
                 "timeout_seconds": settings.comfyui_timeout_seconds,
                 "poll_interval_seconds": settings.comfyui_poll_interval_seconds,
                 "workflow_loader": workflow_loader,
@@ -111,6 +147,7 @@ def _create_context(settings: Settings) -> ApplicationContext:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """创建并配置 Comic Enhancer FastAPI 应用。"""
+    _configure_application_logging()
     context = _create_context(settings or load_settings())
 
     @asynccontextmanager

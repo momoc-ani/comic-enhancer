@@ -4,6 +4,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from ...character_library import CharacterLibraryBuilder
 from ...domain import ProcessingMode, ProcessOptions
 from ..contracts import (
     InferenceAssets,
@@ -19,6 +20,7 @@ from .strategies import (
     ComfyUIModeStrategy,
     FastModeStrategy,
     Flux2ModeStrategy,
+    Flux2CharacterModeStrategy,
     Flux2QuantModeStrategy,
     QualityModeStrategy,
 )
@@ -34,6 +36,7 @@ class ComfyUIBackend(InferenceBackend):
         "sd15-colorize",
         "flux2-klein-4b",
         "flux2-klein-4b-qwen3-fp8",
+        "flux2-klein-4b-qwen3-vl-character",
     )
 
     # 方法说明：初始化传输层并注册每个处理档位的独立策略实现。
@@ -49,6 +52,9 @@ class ComfyUIBackend(InferenceBackend):
         flux2_reference_limit: int = 3,
         flux2_quant_enabled: bool = False,
         flux2_quant_workflow: Path | None = None,
+        flux2_character_enabled: bool = False,
+        flux2_character_workflow: Path | None = None,
+        character_library: CharacterLibraryBuilder | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
@@ -79,6 +85,12 @@ class ComfyUIBackend(InferenceBackend):
                 reference_limit=flux2_reference_limit,
                 **shared_options,
             ),
+            Flux2CharacterModeStrategy(
+                enabled=flux2_character_enabled,
+                workflow_path=flux2_character_workflow,
+                character_library=character_library,
+                **shared_options,
+            ),
         )
         self._mode_strategies = {strategy.mode: strategy for strategy in strategies}
 
@@ -93,6 +105,10 @@ class ComfyUIBackend(InferenceBackend):
     # 方法说明：检查 FLUX.2 量化模型档位是否可用。
     def flux2_quant_profile_ready(self) -> bool:
         return self.mode_available(ProcessingMode.FLUX2_QUANT)
+
+    # 方法说明：检查 Qwen3-VL 角色稳定档是否可用。
+    def flux2_character_profile_ready(self) -> bool:
+        return self.mode_available(ProcessingMode.FLUX2_CHARACTER)
 
     # 方法说明：检查指定处理档位是否可用。
     def mode_available(self, mode: ProcessingMode | str) -> bool:

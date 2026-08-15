@@ -78,6 +78,33 @@ API Token: 与远端 .env 中 COMIC_ENHANCER_TOKEN 相同
 
 插件只配置漫画增强服务地址，不提供 ComfyUI、FLUX.2 或 Real-CUGAN 地址入口。服务端也只配置一个 `COMIC_ENHANCER_COMFYUI_URL`；Real-CUGAN 配置是 API 本地资源根目录，不是独立推理 URL。
 
+### Qwen3-VL 角色稳定档
+
+角色稳定档使用独立 AMD Windows 主机常驻 `llama-server`，Comic Enhancer API 通过内网 OpenAI 兼容接口访问。插件仍只连接 Comic Enhancer API，不能直接连接 Qwen3-VL。当前已验证组合为 RX 7700 XT 12GB、`llamacpp-rocm b1311 gfx110X`、Qwen3-VL-4B-Instruct Q8_0 和 F16 mmproj。
+
+在 AMD 主机创建仅运行账户可读的 `runtime/qwen3-vl-sidecar/api-key.txt`，写入至少 32 字节随机值，然后以前台服务方式启动：
+
+```powershell
+pwsh -File scripts/start_qwen3_vl_sidecar.ps1 `
+  -HostAddress 0.0.0.0 `
+  -Port 8080
+```
+
+脚本固定使用 `-ngl 99`、`-c 8192`、`--parallel 1`、`--image-min-tokens 1024`、`--jinja`、`--offline`、`--no-slots` 和 `--api-key-file`。Windows 防火墙只允许 Comic Enhancer API 主机访问 TCP 8080，不应把 sidecar 暴露到公网。
+
+API 主机 `.env` 使用与 key 文件相同的值，并显式启用新档位：
+
+```text
+COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_ENABLED=true
+COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER=/app/workflows/flux2-klein-4b-qwen3-vl-character-colorize.json
+COMIC_ENHANCER_QWEN_VL_URL=http://<AMD主机内网IP>:8080
+COMIC_ENHANCER_QWEN_VL_API_KEY=<sidecar key>
+COMIC_ENHANCER_QWEN_VL_MODEL_ID=qwen3-vl-4b-instruct-q8_0
+COMIC_ENHANCER_QWEN_VL_DEPLOYMENT_REVISION=q8_0-054721f4-mmproj-f16-256f3a43
+```
+
+能力接口只有在独立工作流存在、ComfyUI 可达、Qwen sidecar 健康、模型 ID 匹配且 Real-CUGAN 二阶段就绪时才返回 `flux2_character_available=true`。任何分析、JSON 校验、角色计划、FLUX.2 或放大阶段失败都直接让本档位失败，插件继续显示原图；不会回退到 `flux2`、`quality` 或其他档位。
+
 替换其他 ComfyUI 工作流时，导出 API 格式 JSON，并在 `settings.json` 或环境变量中修改对应工作流路径。单输入工作流必须只有一个 `LoadImage`；多输入工作流使用 `_meta.title` 声明 `INPUT_IMAGE`、`REFERENCE_IMAGE` 等角色；所有工作流至少有一个 `SaveImage`，其余模型和参数必须全部预设。服务不依赖固定节点编号。
 
 独立验证工作流可使用 `scripts/benchmark_comfyui.py`，通过多个 `--input ROLE=PATH` 绑定图片。脚本默认不覆盖工作流内的模型或采样参数，会将每轮结果与耗时报告写到 Git 忽略的 `runtime/benchmarks`；需要绕过 ComfyUI 节点缓存测真实热推理时，显式传入 `--seed-step 1`。

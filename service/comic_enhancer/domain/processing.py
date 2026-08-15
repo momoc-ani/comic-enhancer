@@ -10,6 +10,7 @@ class ProcessingMode(StrEnum):
     UPSCALE = "upscale"
     FLUX2 = "flux2"
     FLUX2_QUANT = "flux2_quant"
+    FLUX2_CHARACTER = "flux2_character"
 
 
 class ProcessOptions(BaseModel):
@@ -47,5 +48,6 @@ class Capabilities(BaseModel):
     upscale_available: bool = False
     flux2_available: bool = False
     flux2_quant_available: bool = False
+    flux2_character_available: bool = False
     prefetch_pages: int
     max_parallel_inference: int

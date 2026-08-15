@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+import time
 
 from ..domain import ProcessingMode, ProcessOptions
+from ..logging_utils import log_operation
 from .contracts import (
     InferenceAssets,
     InferenceBackend,
     InferenceOutcome,
 )
 from .realcugan import RealCuganUpscaler
+
+
+logger = logging.getLogger(__name__)
 
 
 class RoutedInferenceBackend(InferenceBackend):
@@ -44,6 +50,10 @@ class RoutedInferenceBackend(InferenceBackend):
     def flux2_quant_profile_ready(self) -> bool:
         return self.backend.flux2_quant_profile_ready() and self.upscale_profile_ready()
 
+    # 方法说明：检查角色稳定档及其 Real-CUGAN 二阶段是否可用。
+    def flux2_character_profile_ready(self) -> bool:
+        return self.backend.flux2_character_profile_ready() and self.upscale_profile_ready()
+
     # 方法说明：检查 Real-CUGAN 放大档位是否可用。
     def upscale_profile_ready(self) -> bool:
         return self.upscaler.available()
@@ -57,7 +67,11 @@ class RoutedInferenceBackend(InferenceBackend):
         if options.mode == ProcessingMode.UPSCALE:
             return self.upscaler.cache_revision()
         revision = self.backend.cache_revision(options, assets)
-        if options.mode in {ProcessingMode.FLUX2, ProcessingMode.FLUX2_QUANT}:
+        if options.mode in {
+            ProcessingMode.FLUX2,
+            ProcessingMode.FLUX2_QUANT,
+            ProcessingMode.FLUX2_CHARACTER,
+        }:
             return f"{revision}:post-upscale:{self.upscaler.cache_revision()}"
         return revision if self.name == self.backend.name else f"{self.name}:{revision}"
 
@@ -70,7 +84,11 @@ class RoutedInferenceBackend(InferenceBackend):
     ) -> InferenceOutcome:
         if options.mode == ProcessingMode.UPSCALE:
             return self.upscaler.process(assets, output_path)
-        if options.mode in {ProcessingMode.FLUX2, ProcessingMode.FLUX2_QUANT}:
+        if options.mode in {
+            ProcessingMode.FLUX2,
+            ProcessingMode.FLUX2_QUANT,
+            ProcessingMode.FLUX2_CHARACTER,
+        }:
             return self._process_flux2_pipeline(assets, output_path, options)
         return self.backend.process(assets, output_path, options)
 
@@ -81,22 +99,76 @@ class RoutedInferenceBackend(InferenceBackend):
         output_path: Path,
         options: ProcessOptions,
     ) -> InferenceOutcome:
+        started = time.perf_counter()
         if not self.upscale_profile_ready():
             raise RuntimeError("FLUX.2 二阶段放大资源未就绪")
         stage_path = output_path.with_name(f"{output_path.stem}.flux2-stage.webp")
+        stage = "flux2"
+        primary_elapsed_ms = 0
+        secondary_elapsed_ms = 0
         try:
+            primary_started = time.perf_counter()
             primary = self.backend.process(assets, stage_path, options)
+            primary_elapsed_ms = round(
+                (time.perf_counter() - primary_started) * 1000
+            )
             stage_bytes = stage_path.read_bytes()
+            stage = "realcugan"
+            secondary_started = time.perf_counter()
             secondary = self.upscaler.process(
                 InferenceAssets(image_bytes=stage_bytes),
                 output_path,
             )
-            return InferenceOutcome(
+            secondary_elapsed_ms = round(
+                (time.perf_counter() - secondary_started) * 1000
+            )
+            model_profile = (
+                primary.model_profile
+                if options.mode == ProcessingMode.FLUX2_CHARACTER
+                else f"{primary.model_profile}+{secondary.model_profile}"
+            )
+            outcome = InferenceOutcome(
                 reference_applied=primary.reference_applied,
                 processed_panels=primary.processed_panels,
-                model_profile=(
-                    f"{primary.model_profile}+{secondary.model_profile}"
-                ),
+                model_profile=model_profile,
             )
+            log_operation(
+                logger,
+                logging.INFO,
+                feature="FLUX.2二阶段处理",
+                parameters={
+                    "work_key": assets.work_key,
+                    "mode": str(options.mode),
+                },
+                result={
+                    "status": "success",
+                    "primary_model": primary.model_profile,
+                    "secondary_model": secondary.model_profile,
+                    "model_profile": outcome.model_profile,
+                    "primary_elapsed_ms": primary_elapsed_ms,
+                    "secondary_elapsed_ms": secondary_elapsed_ms,
+                },
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+            )
+            return outcome
+        except Exception as error:
+            log_operation(
+                logger,
+                logging.ERROR,
+                feature="FLUX.2二阶段处理",
+                parameters={
+                    "work_key": assets.work_key,
+                    "mode": str(options.mode),
+                },
+                result={
+                    "status": "failed",
+                    "stage": stage,
+                    "error": type(error).__name__,
+                    "primary_elapsed_ms": primary_elapsed_ms,
+                    "secondary_elapsed_ms": secondary_elapsed_ms,
+                },
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+            )
+            raise
         finally:
             stage_path.unlink(missing_ok=True)

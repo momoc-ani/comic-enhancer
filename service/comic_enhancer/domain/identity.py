@@ -37,5 +37,6 @@ class CharacterBankEntry(BaseModel):
     name: str
     image_url: str
     provider: str = ""
+    summary: str = ""
     portrait_reference_url: str | None = None
     full_body_reference_url: str | None = None
