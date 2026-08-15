@@ -21,7 +21,11 @@ from PIL import Image, ImageOps
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "service"))
 
-from comic_enhancer.backends import ComfyUIBackend
+from comic_enhancer.inference.comfyui.image_ops import (
+    protect_cobra_structure,
+    restore_geometry,
+)
+from comic_enhancer.inference.comfyui.transport import bind_io
 
 from benchmark_api import (
     RemoteResourceMonitor,
@@ -88,7 +92,7 @@ def run_cobra(
             for index in range(1, 13)
         },
     }
-    output_nodes = ComfyUIBackend._bind_io(
+    output_nodes = bind_io(
         prompt,
         input_images=inputs,
         output_prefix=f"comic-enhancer/candidate-cobra-{uuid.uuid4().hex}",
@@ -129,7 +133,7 @@ def run_flux2(
         "INPUT_IMAGE": upload(client, page, "INPUT_IMAGE"),
         **reference_inputs,
     }
-    output_nodes = ComfyUIBackend._bind_io(
+    output_nodes = bind_io(
         prompt,
         input_images=inputs,
         output_prefix=f"comic-enhancer/candidate-{uuid.uuid4().hex}",
@@ -306,20 +310,21 @@ def main() -> None:
                 source_bytes = page.read_bytes()
                 raw_image = load_rgb(raw_bytes)
                 if args.candidate == "cobra":
-                    geometry_image = ComfyUIBackend._restore_geometry(
+                    geometry_image = restore_geometry(
                         source_bytes,
                         raw_image,
                     )
-                    protected_image = ComfyUIBackend._protect_cobra_structure(
+                    protected_image = protect_cobra_structure(
                         source_bytes,
                         geometry_image,
                     )
                 else:
-                    geometry_image = raw_image
-                    protected_image = ComfyUIBackend._protect_flux2_structure(
+                    geometry_image = restore_geometry(
                         source_bytes,
-                        geometry_image,
+                        raw_image,
+                        output_scale=2,
                     )
+                    protected_image = geometry_image
                 raw_path = output_dir / f"page-{index:02d}-raw.png"
                 geometry_path = output_dir / f"page-{index:02d}-geometry.png"
                 protected_path = output_dir / f"page-{index:02d}-protected.png"

@@ -15,7 +15,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "service"))
 
-from comic_enhancer.backends import ComfyUIBackend
+from comic_enhancer.inference.comfyui.transport import bind_io, comfy_path
 
 
 # 方法说明：上传文件并返回服务端文件名。
@@ -27,7 +27,7 @@ def upload(client: httpx.Client, path: Path, role: str) -> str:
             data={"type": "input", "overwrite": "true"},
         )
     response.raise_for_status()
-    return ComfyUIBackend._comfy_path(response.json())
+    return comfy_path(response.json())
 
 
 # 方法说明：轮询 ComfyUI 任务直到获得输出。
@@ -107,7 +107,7 @@ def main() -> None:
                     if isinstance(seed, int):
                         node_inputs["seed"] = seed + (run - 1) * args.seed_step
             prefix = f"comic-enhancer/benchmark-{uuid.uuid4().hex}"
-            output_nodes = ComfyUIBackend._bind_io(
+            output_nodes = bind_io(
                 prompt,
                 input_images=uploaded,
                 output_prefix=prefix,

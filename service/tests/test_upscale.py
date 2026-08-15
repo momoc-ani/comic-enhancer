@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from comic_enhancer.backends import (
+from comic_enhancer.inference.realcugan import (
     REALCUGAN_MODEL_PROFILE,
     REALCUGAN_PROCESSING_REVISION,
     RealCuganUpscaler,
@@ -102,7 +102,10 @@ def test_upscale_process_returns_realcugan_model_and_two_x_image(
             ).save(output_path, format="PNG")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("comic_enhancer.backends.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "comic_enhancer.inference.realcugan.subprocess.run",
+        fake_run,
+    )
     settings = Settings(
         api_token="test-token",
         runtime_dir=tmp_path / "runtime",

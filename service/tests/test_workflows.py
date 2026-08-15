@@ -6,10 +6,19 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from comic_enhancer.backends import (
-    FLUX2_PROCESSING_REVISION,
+from comic_enhancer.inference import InferenceAssets, InferenceOutcome
+from comic_enhancer.inference.comfyui import (
     ComfyUIBackend,
-    InferenceAssets,
+    PresetWorkflowLoader,
+    bind_io,
+)
+from comic_enhancer.inference.comfyui.strategies import (
+    CobraModeStrategy,
+    FLUX2_PROCESSING_REVISION,
+    FastModeStrategy,
+    Flux2ModeStrategy,
+    Flux2QuantModeStrategy,
+    QualityModeStrategy,
 )
 from comic_enhancer.models import (
     AdapterManifest,
@@ -17,7 +26,6 @@ from comic_enhancer.models import (
     ProcessOptions,
     ResolvedAdapter,
 )
-from comic_enhancer.workflows import PresetWorkflowLoader
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -56,6 +64,98 @@ def png_bytes(image: Image.Image) -> bytes:
     stream = BytesIO()
     image.save(stream, format="PNG")
     return stream.getvalue()
+
+
+# 方法说明：验证每个 ComfyUI 处理档位注册独立的策略实现。
+def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=PresetWorkflowLoader(
+            fast_workflow=fast,
+            quality_workflow=quality,
+            workflow_root=tmp_path,
+        ),
+    )
+
+    expected = {
+        "fast": FastModeStrategy,
+        "quality": QualityModeStrategy,
+        "cobra": CobraModeStrategy,
+        "flux2": Flux2ModeStrategy,
+        "flux2_quant": Flux2QuantModeStrategy,
+    }
+    for mode, strategy_type in expected.items():
+        strategy = backend.mode_strategy(mode)
+        assert isinstance(strategy, strategy_type)
+        expected_workflow = mode if mode in {"fast", "quality"} else "quality"
+        assert strategy.adapter_policy().required_workflow == expected_workflow
+    assert len({type(backend.mode_strategy(mode)) for mode in expected}) == len(expected)
+
+
+@pytest.mark.parametrize(
+    ("mode", "method_name"),
+    [
+        ("cobra", "_process_cobra"),
+        ("flux2", "_process_flux2"),
+        ("flux2_quant", "_process_flux2"),
+    ],
+)
+# 方法说明：验证每个实验档失败后显式返回质量档的真实模型信息。
+def test_experimental_strategies_fallback_to_quality(
+    tmp_path,
+    monkeypatch,
+    mode,
+    method_name,
+):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=PresetWorkflowLoader(
+            fast_workflow=fast,
+            quality_workflow=quality,
+            workflow_root=tmp_path,
+        ),
+    )
+    strategy = backend.mode_strategy(mode)
+    quality_strategy = backend.mode_strategy("quality")
+    captured = {}
+
+    # 方法说明：模拟实验档执行失败。
+    def fail_experimental(*_args, **_kwargs):
+        raise RuntimeError("test failure")
+
+    # 方法说明：模拟质量档处理并记录收到的回退选项。
+    def process_quality(assets, output_path, options, resolved_adapter):
+        captured["mode"] = str(options.mode)
+        return InferenceOutcome(
+            adapter_applied=False,
+            model_profile="sd15-colorize",
+        )
+
+    monkeypatch.setattr(strategy, method_name, fail_experimental)
+    monkeypatch.setattr(quality_strategy, "process", process_quality)
+    monkeypatch.setattr(backend.transport, "unload_cobra_worker", lambda: None)
+
+    outcome = backend.process(
+        InferenceAssets(image_bytes=png_bytes(Image.new("RGB", (8, 12), "white"))),
+        tmp_path / f"{mode}.webp",
+        ProcessOptions(mode=mode),
+        resolved(),
+    )
+
+    assert captured["mode"] == "quality"
+    assert outcome.model_profile == "sd15-colorize"
 
 
 # 方法说明：验证 Cobra 会提交多张参考图并恢复原始尺寸。
@@ -110,7 +210,7 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
         cobra_workflow=cobra,
         cobra_reference_limit=12,
     )
-    monkeypatch.setattr(backend, "cobra_profile_ready", lambda: True)
+    monkeypatch.setattr(backend.mode_strategy("cobra"), "available", lambda: True)
     generated = png_bytes(Image.new("RGB", (16, 24), (230, 70, 120)))
     captured = {}
 
@@ -171,7 +271,10 @@ def test_cobra_backend_posts_multiple_references_and_restores_geometry(
                 content=generated,
             )
 
-    monkeypatch.setattr("comic_enhancer.backends.httpx.Client", FakeClient)
+    monkeypatch.setattr(
+        "comic_enhancer.inference.comfyui.transport.httpx.Client",
+        FakeClient,
+    )
     source = Image.new("RGB", (8, 12), "white")
     assets = InferenceAssets(
         image_bytes=png_bytes(source),
@@ -224,28 +327,25 @@ def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
         flux2_workflow=flux2,
         flux2_reference_limit=3,
     )
-    monkeypatch.setattr(backend, "flux2_profile_ready", lambda: True)
-    monkeypatch.setattr(backend, "_unload_cobra_worker", lambda: None)
-
-    # 方法说明：确保 FLUX.2 流程不会调用预设结构保护。
-    def reject_preset_structure(*_args):
-        raise AssertionError("FLUX.2 must not use the preset structure policy")
-
-    monkeypatch.setattr(
-        backend,
-        "_protect_source_structure",
-        reject_preset_structure,
-    )
+    monkeypatch.setattr(backend.mode_strategy("flux2"), "available", lambda: True)
+    monkeypatch.setattr(backend.transport, "unload_cobra_worker", lambda: None)
     captured = {}
 
-    # 方法说明：执行 FLUX.2 工作流并返回或记录结果。
-    def run_flux2(image_bytes, references, workflow):
-        captured["image_bytes"] = image_bytes
-        captured["references"] = references
+    # 方法说明：模拟传输层执行 FLUX.2 工作流并记录档位输入。
+    def run_flux2(
+        workflow,
+        *,
+        input_images,
+        output_prefix,
+        prepare_workflow=None,
+    ):
+        captured["input_images"] = input_images
         captured["workflow"] = workflow
+        captured["output_prefix"] = output_prefix
+        captured["prepare_workflow"] = prepare_workflow
         return Image.new("RGB", (16, 24), (220, 80, 130))
 
-    monkeypatch.setattr(backend, "_run_flux2_prompt", run_flux2)
+    monkeypatch.setattr(backend.transport, "run", run_flux2)
     source = Image.new("RGB", (8, 12), "white")
     assets = InferenceAssets(
         image_bytes=png_bytes(source),
@@ -267,7 +367,11 @@ def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
 
     assert outcome.model_profile == "flux2-klein-4b"
     assert outcome.reference_applied is True
-    assert len(captured["references"]) == 3
+    reference_values = {
+        captured["input_images"][f"REFERENCE_IMAGE_{index}"]
+        for index in range(1, 4)
+    }
+    assert len(reference_values) == 3
     assert captured["workflow"]["marker"]["inputs"]["value"] == "flux2"
     assert FLUX2_PROCESSING_REVISION in backend.cache_revision(
         ProcessOptions(mode="flux2"),
@@ -326,7 +430,7 @@ def test_bind_io_discovers_nodes_and_rejects_placeholders():
         },
     }
 
-    output_nodes = ComfyUIBackend._bind_io(
+    output_nodes = bind_io(
         workflow,
         input_images={"INPUT_IMAGE": "uploaded/input.png"},
         output_prefix="comic-enhancer/job",
@@ -338,7 +442,7 @@ def test_bind_io_discovers_nodes_and_rejects_placeholders():
 
     workflow["5"]["inputs"]["model"] = "${MODEL_NAME}"
     with pytest.raises(RuntimeError, match="MODEL_NAME"):
-        ComfyUIBackend._bind_io(
+        bind_io(
             workflow,
             input_images={"INPUT_IMAGE": "uploaded/input.png"},
             output_prefix="comic-enhancer/job",
@@ -355,7 +459,7 @@ def test_bind_io_discovers_nodes_and_rejects_placeholders():
 # 方法说明：验证工作流绑定要求存在加载和保存节点。
 def test_bind_io_requires_load_and_save_nodes(workflow, message):
     with pytest.raises(RuntimeError, match=message):
-        ComfyUIBackend._bind_io(
+        bind_io(
             workflow,
             input_images={"INPUT_IMAGE": "input.png"},
             output_prefix="output",
@@ -381,7 +485,7 @@ def test_bind_io_uses_titles_for_reference_workflow():
         },
     }
 
-    ComfyUIBackend._bind_io(
+    bind_io(
         workflow,
         input_images={
             "INPUT_IMAGE": "uploaded/page.png",
@@ -399,7 +503,7 @@ def test_flux2_candidate_workflow_has_baseline_direct_output_contract():
     path = PROJECT_ROOT / "workflows" / "flux2-klein-4b-reference-colorize.json"
     workflow = json.loads(path.read_text(encoding="utf-8"))
 
-    outputs = ComfyUIBackend._bind_io(
+    outputs = bind_io(
         workflow,
         input_images={
             "INPUT_IMAGE": "uploaded/page.png",
@@ -506,7 +610,7 @@ def test_shipped_cobra_workflow_declares_twelve_reference_inputs_and_fixed_value
             encoding="utf-8"
         )
     )
-    outputs = ComfyUIBackend._bind_io(
+    outputs = bind_io(
         workflow,
         input_images={
             "INPUT_IMAGE": "uploaded/page.png",

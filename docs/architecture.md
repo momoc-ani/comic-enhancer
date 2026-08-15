@@ -28,6 +28,30 @@ API 先通过 `RoutedInferenceBackend` 区分平台原生档位与主推理后�
 
 策略之间不共享业务后处理函数。上传、ComfyUI 队列提交、轮询、结果下载、缓存和鉴权属于后端基础设施，可以复用。实验上色档失败时只能显式回退到质量策略，并由返回的 `model_profile` 标明实际执行模型；放大档失败直接保留原图，不进入任何上色工作流。
 
+推理代码按以下边界组织：
+
+```text
+service/comic_enhancer/inference/
+  contracts.py                 # 稳定推理契约
+  factory.py                   # 后端组装
+  routing.py                   # 原生档与主后端路由
+  passthrough.py               # 开发后端
+  realcugan.py                 # Real-CUGAN 放大实现
+  comfyui/
+    backend.py                 # 档位注册与分派
+    transport.py               # 上传、队列、轮询与下载
+    image_ops.py               # 几何恢复和结构保护
+    workflows.py               # 完整工作流加载与版本计算
+    strategies/
+      fast.py
+      quality.py
+      cobra.py
+      flux2.py
+      flux2_quant.py
+```
+
+五个 ComfyUI 档位各自实现可用性、缓存版本、适配器策略和处理逻辑。共享基类只定义窄契约，共享辅助只处理传输或无档位含义的算法；`ComfyUIBackend` 不再包含任何档位私有处理流程。旧的 `backends.py`、`workflows.py` 和 `realcugan.py` 仅保留兼容导出，不承载业务实现。
+
 ## Real-CUGAN 放大档
 
 放大档固定执行以下链路：

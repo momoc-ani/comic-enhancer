@@ -6,7 +6,7 @@ import uuid
 from dataclasses import dataclass
 
 from .adapters import AdapterRegistry
-from .backends import InferenceAssets, InferenceBackend
+from .inference import InferenceAssets, InferenceBackend
 from .cache import ResultCache
 from .models import ProcessOptions, ProcessResult, WorkIdentity
 
