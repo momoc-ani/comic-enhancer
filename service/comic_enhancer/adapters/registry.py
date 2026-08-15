@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from .models import (
+from ..models import (
     AdapterManifest,
     AdapterSource,
     ResolvedAdapter,
@@ -13,7 +13,9 @@ from .models import (
 
 
 class AdapterRegistry:
-    # 方法说明：初始化当前对象及其运行状态。
+    """按作品、基模和工作流解析可用 LoRA 适配器。"""
+
+    # 方法说明：初始化适配器索引、通用适配器和权重根目录。
     def __init__(
         self,
         index_path: Path,
@@ -57,7 +59,6 @@ class AdapterRegistry:
                         else "work adapter unavailable; using generic adapter"
                     ),
                 )
-
         return ResolvedAdapter(
             source=AdapterSource.NONE,
             adapter=None,
@@ -76,10 +77,14 @@ class AdapterRegistry:
     ) -> list[tuple[AdapterSource, AdapterManifest]]:
         index = self._read()
         candidates: list[tuple[AdapterSource, AdapterManifest]] = []
-        if prefer_work_adapter and (work_data := index.get("works", {}).get(work.key)):
+        if prefer_work_adapter and (
+            work_data := index.get("works", {}).get(work.key)
+        ):
             adapter = AdapterManifest.model_validate(work_data)
             if adapter.enabled and self._is_compatible(
-                adapter, compatible_base_models, required_workflow
+                adapter,
+                compatible_base_models,
+                required_workflow,
             ):
                 candidates.append((AdapterSource.WORK, adapter))
         if allow_generic_adapter and (generic_data := index.get("generic")):
@@ -88,7 +93,9 @@ class AdapterRegistry:
                 adapter.adapter_id == self.generic_adapter_id
                 and adapter.enabled
                 and self._is_compatible(
-                    adapter, compatible_base_models, required_workflow
+                    adapter,
+                    compatible_base_models,
+                    required_workflow,
                 )
             ):
                 candidates.append((AdapterSource.GENERIC, adapter))
@@ -117,7 +124,6 @@ class AdapterRegistry:
     def _is_available(self, adapter: AdapterManifest) -> bool:
         if adapter.file is None:
             return False
-
         adapter_path = (self.weights_root / adapter.file).resolve()
         try:
             adapter_path.relative_to(self.weights_root.resolve())

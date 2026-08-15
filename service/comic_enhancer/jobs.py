@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 from .adapters import AdapterRegistry
 from .inference import InferenceAssets, InferenceBackend
-from .cache import ResultCache
 from .models import ProcessOptions, ProcessResult, WorkIdentity
+from .storage import ResultCache
 
 
 @dataclass

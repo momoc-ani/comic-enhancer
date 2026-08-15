@@ -52,6 +52,22 @@ service/comic_enhancer/inference/
 
 五个 ComfyUI 档位各自实现可用性、缓存版本、适配器策略和处理逻辑。共享基类只定义窄契约，共享辅助只处理传输或无档位含义的算法；`ComfyUIBackend` 不再包含任何档位私有处理流程。旧的 `backends.py`、`workflows.py` 和 `realcugan.py` 仅保留兼容导出，不承载业务实现。
 
+外部数据与本地存储能力也按职责分包：
+
+```text
+service/comic_enhancer/
+  metadata/
+    aggregator.py
+    base.py
+    providers/{bangumi,anilist,kitsu,shikimori,jikan,mangaupdates}.py
+  adapters/{registry,gitee}.py
+  identities/{models,matching,registry}.py
+  references/{quality,store}.py
+  storage/result_cache.py
+```
+
+元数据提供方之间不直接依赖，聚合器只面向 `MetadataProvider` 契约；Gitee 分发与本地适配器解析属于同一适配器能力，但保持独立实现；参考图质量判断不执行网络请求，下载存储也不参与候选排序。原有包级导入继续由各目录的 `__init__.py` 提供，`cache.py` 和 `gitee.py` 只保留兼容导出。
+
 ## Real-CUGAN 放大档
 
 放大档固定执行以下链路：

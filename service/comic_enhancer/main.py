@@ -13,12 +13,11 @@ from fastapi.responses import FileResponse
 
 from . import __version__
 from .adapters import AdapterRegistry
-from .cache import ResultCache
 from .config import Settings, load_settings
 from .inference import create_backend
 from .inference.comfyui import PresetWorkflowLoader
 from .jobs import ProcessingService
-from .gitee import GiteeAdapterStore, GiteeError
+from .adapters.gitee import GiteeAdapterStore, GiteeError
 from .identities import WorkIdentityRegistry
 from .metadata import (
     AniListProvider,
@@ -41,6 +40,7 @@ from .models import (
     WorkIdentity,
 )
 from .references import ReferenceImageStore, assess_reference_image, reference_quality_rank
+from .storage import ResultCache
 
 logger = logging.getLogger(__name__)
 # 方法说明：优先返回外部 ID 精确匹配的元数据候选。

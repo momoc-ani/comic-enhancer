@@ -1,30 +1,21 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
-from pydantic import BaseModel, Field
-
-from .models import CharacterReference, WorkIdentity
-
-
-class CharacterIdentityEntry(BaseModel):
-    identity_id: str
-    name: str
-    aliases: list[str] = Field(default_factory=list)
-    external_ids: dict[str, str] = Field(default_factory=dict)
-
-
-class WorkIdentityEntry(BaseModel):
-    identity_id: str
-    title_aliases: list[str] = Field(default_factory=list)
-    external_ids: dict[str, str] = Field(default_factory=dict)
-    characters: list[CharacterIdentityEntry] = Field(default_factory=list)
+from ..models import CharacterReference, WorkIdentity
+from .matching import (
+    alias_title_matches,
+    normalize_character_name,
+    normalize_title,
+)
+from .models import WorkIdentityEntry
 
 
 class WorkIdentityRegistry:
-    # 方法说明：初始化当前对象及其运行状态。
+    """读取已确认作品映射并合并跨提供方身份。"""
+
+    # 方法说明：读取并校验本地作品身份配置。
     def __init__(self, path: Path | None):
         self.entries: list[WorkIdentityEntry] = []
         if path is None or not path.is_file():
@@ -84,20 +75,3 @@ class WorkIdentityRegistry:
                         configured.name,
                     )
         return f"{character.provider}:{character.provider_id}", character.name
-
-
-# 方法说明：规范化作品标题以便稳定匹配。
-def normalize_title(value: str) -> str:
-    return re.sub(r"[^\w\u3040-\u30ff\u3400-\u9fff]+", "", value.casefold())
-
-
-# 方法说明：规范化角色名称以便别名匹配。
-def normalize_character_name(value: str) -> str:
-    return normalize_title(value)
-
-
-# 方法说明：判断作品标题是否完整匹配登记别名。
-def alias_title_matches(title: str, alias: str) -> bool:
-    if len(alias) < 8:
-        return title == alias
-    return title == alias or title.startswith(alias) or title.endswith(alias)

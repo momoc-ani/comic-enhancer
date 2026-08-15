@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from comic_enhancer.gitee import GiteeAdapterStore, GiteeError
+from comic_enhancer.adapters.gitee import GiteeAdapterStore, GiteeError
 from comic_enhancer.models import AdapterManifest
 
 
