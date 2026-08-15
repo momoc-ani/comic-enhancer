@@ -46,7 +46,7 @@ CANDIDATE_DOWNLOAD_CONNECTIONS=4 \
 
 Cobra 节点安装在统一 ComfyUI 镜像中，调试地址为 `http://192.168.38.226:8192/`，API 内部地址始终是 `http://comfyui:8188`。API 不调用 Cobra Python HTTP 服务，也不存在 `cobra_url:8780`。Cobra 的旧 Diffusers 运行时隔离在同容器的 `/opt/cobra-venv`，ComfyUI 节点通过 Unix Socket 调用常驻 worker，因此不会覆盖主环境中 FLUX.2 所需的新版本依赖，也不会新增网络端口。要启用 Cobra，设置 `COMIC_ENHANCER_COMFYUI_COBRA_ENABLED=true`；要启用当前最高质量档 FLUX.2 Klein 4B，设置 `COMIC_ENHANCER_COMFYUI_FLUX2_ENABLED=true`。两个档位都由增强 API 处理参考图和质量回退。ComfyUI 调试界面没有业务鉴权，只应在可信局域网使用；插件仍必须走 `8765` API。
 
-FLUX.2 最高质量档把原图 VAE latent 直接接入八步采样，以 `0.85` 去噪强度限制整页重画，再用窄深色像素蒙版恢复原图文字核心和关键墨线。最终只使用 Lanczos 输出原图宽高各 2 倍，比例不变；Anime 6B 和通用 Real-ESRGAN 会放大漫画网点并制造伪纹理，已从该档位移除。API 不再执行会改变颜色或结构的二次处理，只兜底校正输出尺寸。
+FLUX.2 最高质量档恢复旧基准的 `0.85MP` 四步空 latent 直出，以强化提示词锁定气泡、文字、标点、页面结构和网点。工作流不执行全页深色像素回注、颜色混合或神经超分；API 只将未后处理结果按原图比例输出为宽高各 2 倍。三页冒烟中该方案恢复了旧版平滑动漫平涂效果，并完整保留测试页文字；至少 100 页准入完成前仍需保留文字变化风险说明。
 
 未配置 Gitee 仓库和 Token 时保持 `COMIC_ENHANCER_GITEE_ENABLED=false`，基础上色和本地 LoRA 仍可使用。填写完整 Gitee 配置后再改为 `true` 并重建 API 容器。
 

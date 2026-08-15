@@ -23,7 +23,7 @@ from .workflows import WorkflowLoader
 
 
 logger = logging.getLogger(__name__)
-FLUX2_PROCESSING_REVISION = "flux2-source-latent-8step-denoise85-lanczos-v11"
+FLUX2_PROCESSING_REVISION = "flux2-baseline-direct-prompt-v12"
 FLUX2_OUTPUT_SCALE = 2
 
 
@@ -625,7 +625,7 @@ class ComfyUIBackend(InferenceBackend):
             generated,
             output_scale=FLUX2_OUTPUT_SCALE,
         )
-        # 工作流负责源图 latent 结构约束、窄文字墨线保护和无生成式 2 倍缩放；API 只兜底统一尺寸。
+        # 工作流直接输出四步 FLUX 上色结果；API 只按原图比例统一为精确 2 倍尺寸。
         self._save_output(generated, output_path)
         return InferenceOutcome(
             adapter_applied=False,

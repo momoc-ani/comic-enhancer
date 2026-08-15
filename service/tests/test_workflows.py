@@ -394,8 +394,8 @@ def test_bind_io_uses_titles_for_reference_workflow():
     assert workflow["2"]["inputs"]["image"] == "uploaded/cover.png"
 
 
-# 方法说明：验证 FLUX.2 候选工作流声明完整的源图 latent 八步参考契约。
-def test_flux2_candidate_workflow_has_source_preserving_reference_contract():
+# 方法说明：验证 FLUX.2 工作流恢复旧基准的四步空 latent 直出契约。
+def test_flux2_candidate_workflow_has_baseline_direct_output_contract():
     path = PROJECT_ROOT / "workflows" / "flux2-klein-4b-reference-colorize.json"
     workflow = json.loads(path.read_text(encoding="utf-8"))
 
@@ -412,15 +412,10 @@ def test_flux2_candidate_workflow_has_source_preserving_reference_contract():
 
     assert workflow["5"]["inputs"]["unet_name"] == "flux-2-klein-4b-fp8.safetensors"
     assert workflow["6"]["inputs"]["clip_name"] == "qwen_3_4b.safetensors"
-    assert workflow["28"]["inputs"]["steps"] == 8
-    assert workflow["46"]["class_type"] == "SplitSigmasDenoise"
-    assert workflow["46"]["inputs"] == {"sigmas": ["28", 0], "denoise": 0.85}
-    assert workflow["32"]["inputs"]["sigmas"] == ["46", 1]
-    assert workflow["32"]["inputs"]["latent_image"] == ["11", 0]
-    assert not any(
-        node["class_type"] == "EmptyFlux2LatentImage"
-        for node in workflow.values()
-    )
+    assert workflow["28"]["inputs"]["steps"] == 4
+    assert workflow["27"]["class_type"] == "EmptyFlux2LatentImage"
+    assert workflow["32"]["inputs"]["sigmas"] == ["28", 0]
+    assert workflow["32"]["inputs"]["latent_image"] == ["27", 0]
     assert workflow["29"]["inputs"]["cfg"] == 1.0
     assert outputs == ("34",)
 
@@ -432,8 +427,8 @@ def test_flux2_candidate_workflow_has_source_preserving_reference_contract():
         "flux2-klein-4b-reference-colorize-qwen3-fp8.json",
     ],
 )
-# 方法说明：验证两个 FLUX.2 工作流保护文字和结构，并仅执行无生成式 2 倍缩放。
-def test_shipped_flux2_workflows_protect_text_and_structure(name):
+# 方法说明：验证两个 FLUX.2 工作流以提示词保护文字，并直接保存未后处理结果。
+def test_shipped_flux2_workflows_use_prompt_protection_and_direct_output(name):
     workflow = json.loads(
         (PROJECT_ROOT / "workflows" / name).read_text(encoding="utf-8")
     )
@@ -442,24 +437,20 @@ def test_shipped_flux2_workflows_protect_text_and_structure(name):
         node["class_type"] == "Image Blending Mode"
         for node in workflow.values()
     )
-    assert "immutable source pixels" in workflow["8"]["inputs"]["text"]
+    assert "locked source regions" in workflow["8"]["inputs"]["text"]
+    assert "clean professional anime cel colors" in workflow["8"]["inputs"]["text"]
     assert "changed punctuation" in workflow["9"]["inputs"]["text"]
-    assert workflow["38"]["class_type"] == "ThresholdMask"
-    assert workflow["38"]["inputs"]["value"] == 0.18
-    assert workflow["39"]["inputs"]["expand"] == 0
-    assert workflow["40"]["class_type"] == "ImageCompositeMasked"
-    assert workflow["40"]["inputs"]["destination"] == ["33", 0]
-    assert workflow["44"]["class_type"] == "ImageScaleBy"
-    assert workflow["44"]["inputs"] == {
-        "image": ["40", 0],
-        "upscale_method": "lanczos",
-        "scale_by": 2.0,
-    }
     assert not any(
-        node["class_type"] in {"UpscaleModelLoader", "ImageUpscaleWithModel"}
+        node["class_type"]
+        in {
+            "ImageCompositeMasked",
+            "UpscaleModelLoader",
+            "ImageUpscaleWithModel",
+            "ImageScaleBy",
+        }
         for node in workflow.values()
     )
-    assert workflow["34"]["inputs"]["images"] == ["44", 0]
+    assert workflow["34"]["inputs"]["images"] == ["33", 0]
 
 
 # 方法说明：验证适配器工作流路径不能逃逸配置根目录。
