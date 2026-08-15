@@ -20,8 +20,8 @@
 - 工作流自包含全部模型和采样参数；服务自动发现 `LoadImage` / `SaveImage` 节点。
 - 作品元数据聚合：支持 Bangumi、AniList、Kitsu、Shikimori、Jikan/MAL，MangaUpdates 保留可配置适配器；Bangumi 角色简介可通过 `/v1/metadata/resolve` 获取。
 - 可配置作品长标题别名映射，为不提供外部 ID 的漫画站补全已确认 AniList/Bangumi 身份。
-- 六个独立处理档位：快速、质量、Real-CUGAN 放大、Cobra、FLUX.2 和 FLUX.2 量化实验档；普通质量档不会隐式进入其他档位。
-- 独立放大档使用当前平台的 Real-CUGAN SE 执行两倍无降噪超分；上色档继续使用 SD1.5、Cobra 或 FLUX.2。
+- 五个独立处理档位：快速、质量、Real-CUGAN 放大、FLUX.2 和 FLUX.2 量化实验档；普通质量档不会隐式进入其他档位。
+- 独立放大档使用当前平台的 Real-CUGAN SE 执行两倍无降噪超分；上色档使用 SD1.5 或 FLUX.2。
 - 插件显示当前选择档位及最近一次真实执行模型，明确作品 LoRA、通用 LoRA、基础回退和角色参考是否实际生效。
 - 扩展安装、更新、浏览器启动和漫画页加载完成时都会检查内容脚本注入；页面重复占位图按 URL 去重并优先真实可见图片。
 
@@ -37,7 +37,7 @@ Mac / Chrome 插件
         | 按处理档位选择执行器
         +----> 平台 Real-CUGAN（放大）
         |
-        +----> 统一 ComfyUI 容器 8192（快速/质量/Cobra/FLUX.2）
+        +----> 统一 ComfyUI 容器 8192（快速/质量/FLUX.2）
         |
         v
 漫画增强 API：必要的尺寸恢复、缓存和鉴权返回
@@ -45,7 +45,7 @@ Mac / Chrome 插件
 
 插件只连接 `8765`。上色档只维护一个 ComfyUI 地址；放大档调用 API 所在平台的本地 Real-CUGAN 资源，不增加对外推理地址。
 
-统一 ComfyUI 调试界面提供在 `http://192.168.38.226:8192/`，仅用于检查快速、质量、Cobra 和 FLUX.2 工作流；正式插件请求仍然必须走 `8765` API。
+统一 ComfyUI 调试界面提供在 `http://192.168.38.226:8192/`，仅用于检查快速、质量和 FLUX.2 工作流；正式插件请求仍然必须走 `8765` API。
 
 本次不使用 Mac 的 RX 6750 XT 推理。macOS 原生程序可以尝试 PyTorch MPS/Metal，但 Docker Desktop 运行的是 Linux 虚拟机，无法直通 macOS AMD 显卡，也不能提供 ROCm 所需的 `/dev/kfd`。
 
@@ -81,7 +81,7 @@ node --check extension/popup.js
 5. 输入部署 Token，保存并连接，然后授予漫画图片域名读取权限。
 6. 打开拷贝漫画章节页面。
 
-插件的唯一入口是本项目漫画增强服务，不直接连接 ComfyUI、Cobra、FLUX.2 或 Real-CUGAN。增强服务按档位选择完整处理链；`upscale` 调用平台原生 Real-CUGAN，其他档位提交内部 ComfyUI 工作流。作品 LoRA、通用 LoRA 和无 LoRA 的回退也由增强服务完成。Cobra 最多使用 12 张参考图；FLUX.2 Klein 4B 当前工作流最多使用 3 张参考图，并作为当前最高质量档。放大档不使用 LoRA 或角色参考图，失败时保留原图且不回退上色档。漫画增强服务地址可编辑，默认是 `http://192.168.38.226:8765`；内部推理后端迁移时只修改服务端部署配置，插件配置保持不变。
+插件的唯一入口是本项目漫画增强服务，不直接连接 ComfyUI、FLUX.2 或 Real-CUGAN。增强服务按档位选择完整处理链；`upscale` 调用平台原生 Real-CUGAN，其他档位提交内部 ComfyUI 工作流。作品 LoRA、通用 LoRA 和无 LoRA 的回退也由增强服务完成。FLUX.2 Klein 4B 当前工作流最多使用 3 张参考图，并作为当前最高质量档；其结果随后进入 Real-CUGAN 二阶段放大。`flux2` 和 `flux2_quant` 任一阶段失败都直接保留原图，不回退到质量档；独立放大档同样不进入任何上色回退。漫画增强服务地址可编辑，默认是 `http://192.168.38.226:8765`；内部推理后端迁移时只修改服务端部署配置，插件配置保持不变。
 
 外部元数据层可提供作品和角色参考候选；显式 `external_ids` 精确命中的数据源优先。角色图片只缓存于运行目录，不会自动进入 Git/Gitee 或被重新发布。
 

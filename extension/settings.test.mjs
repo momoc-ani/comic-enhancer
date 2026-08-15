@@ -33,14 +33,14 @@ test("keeps separate local and remote service configurations", () => {
     remoteMode: "flux2",
     localApiBaseUrl: "http://127.0.0.1:9876",
     localApiToken: "local-token",
-    localMode: "cobra",
+    localMode: "quality",
   });
 
   const local = activateDeployment(stored, "local");
   const remote = activateDeployment(local, "remote");
   assert.deepEqual(
     [local.apiBaseUrl, local.apiToken, local.mode, local.profile],
-    ["http://127.0.0.1:9876", "local-token", "cobra", "local-cobra"],
+    ["http://127.0.0.1:9876", "local-token", "quality", "local-quality"],
   );
   assert.deepEqual(
     [remote.apiBaseUrl, remote.apiToken, remote.mode, remote.profile],
@@ -50,11 +50,11 @@ test("keeps separate local and remote service configurations", () => {
 
 // 方法说明：验证实验档位使用保守的页面预取数量。
 test("accepts experimental modes with conservative prefetch", () => {
-  assert.equal(normalizeMode("cobra"), "cobra");
+  assert.equal(normalizeMode("cobra"), "quality");
   assert.equal(normalizeMode("upscale"), "upscale");
   assert.equal(normalizeMode("flux2"), "flux2");
   assert.equal(normalizeMode("flux2_quant"), "flux2_quant");
-  assert.equal(prefetchPagesForMode("cobra"), 1);
+  assert.equal(prefetchPagesForMode("cobra"), 2);
   assert.equal(prefetchPagesForMode("upscale"), 1);
   assert.equal(prefetchPagesForMode("flux2"), 1);
 });

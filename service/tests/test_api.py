@@ -105,34 +105,6 @@ def test_flux2_mode_is_valid():
     assert options.mode == ProcessingMode.FLUX2
 
 
-# 方法说明：验证 Cobra 仅在候选工作流就绪时对外声明。
-def test_capabilities_advertise_cobra_only_when_candidate_is_ready(tmp_path, monkeypatch):
-    cobra_workflow = tmp_path / "cobra.json"
-    cobra_workflow.write_text("{}", encoding="utf-8")
-    settings = Settings(
-        api_token="test-token",
-        runtime_dir=tmp_path / "runtime",
-        adapter_index=tmp_path / "missing.json",
-        backend="comfyui",
-        comfyui_cobra_enabled=True,
-        comfyui_workflow_cobra=cobra_workflow,
-    )
-    app = create_app(settings)
-    monkeypatch.setattr(app.state.processor.backend, "ready", lambda: True)
-    monkeypatch.setattr(app.state.processor.backend, "cobra_profile_ready", lambda: True)
-    client = TestClient(app)
-
-    response = client.get(
-        "/v1/capabilities",
-        headers={"Authorization": "Bearer test-token"},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert "cobra" in payload["processing_modes"]
-    assert payload["cobra_available"] is True
-
-
 # 方法说明：验证 FLUX.2 仅在候选工作流就绪时对外声明。
 def test_capabilities_advertise_flux2_only_when_candidate_is_ready(tmp_path, monkeypatch):
     flux2_workflow = tmp_path / "flux2.json"
@@ -242,8 +214,6 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     assert settings.comfyui_workflow_flux2 == Path("flux2.json")
     assert settings.realcugan_resource_root == Path("resource/realcugan")
     assert settings.realcugan_enabled is False
-    assert settings.comfyui_cobra_enabled is False
-    assert settings.cobra_reference_limit == 12
     assert settings.flux2_reference_limit == 3
     assert settings.work_identity_index == Path("identities.json")
     assert settings.comfyui_workflow_root == Path("workflows")

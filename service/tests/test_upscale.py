@@ -11,9 +11,16 @@ from comic_enhancer.inference.realcugan import (
     REALCUGAN_PROCESSING_REVISION,
     RealCuganUpscaler,
 )
+from comic_enhancer.inference import InferenceAssets, InferenceOutcome, PassthroughBackend
+from comic_enhancer.inference.routing import RoutedInferenceBackend
 from comic_enhancer.config import Settings
 from comic_enhancer.main import create_app
-from comic_enhancer.models import ProcessOptions, ProcessingMode
+from comic_enhancer.models import (
+    AdapterSource,
+    ProcessOptions,
+    ProcessingMode,
+    ResolvedAdapter,
+)
 
 
 # 方法说明：生成测试使用的 PNG 图片字节。
@@ -162,6 +169,92 @@ def test_upscale_cache_revision_covers_executable_and_model_files(tmp_path):
     assert first.startswith(REALCUGAN_PROCESSING_REVISION)
     assert second.startswith(REALCUGAN_PROCESSING_REVISION)
     assert first != second
+
+
+# 方法说明：验证 FLUX.2 输出会进入 UPSCALE 二阶段并返回组合模型标识。
+def test_flux2_pipeline_uses_upscale_as_second_stage(tmp_path, monkeypatch):
+    backend = PassthroughBackend()
+    upscaler = create_realcugan_resources(tmp_path / "resource" / "realcugan")
+    routed = RoutedInferenceBackend(backend, upscaler)
+    captured = {}
+
+    monkeypatch.setattr(backend, "flux2_profile_ready", lambda: True)
+
+    # 方法说明：模拟 FLUX.2 首阶段写入原图两倍结果。
+    def process_flux2(assets, output_path, options, resolved):
+        with Image.open(BytesIO(assets.image_bytes)) as source:
+            generated = source.resize((source.width * 2, source.height * 2))
+            generated.save(output_path, format="WEBP")
+        return InferenceOutcome(
+            adapter_applied=False,
+            reference_applied=True,
+            model_profile="flux2-klein-4b",
+        )
+
+    # 方法说明：模拟 UPSCALE 二阶段读取首阶段结果并再次放大两倍。
+    def process_upscale(assets, output_path):
+        with Image.open(BytesIO(assets.image_bytes)) as source:
+            captured["stage_size"] = source.size
+            generated = source.resize((source.width * 2, source.height * 2))
+            generated.save(output_path, format="WEBP")
+        return InferenceOutcome(
+            adapter_applied=False,
+            model_profile=REALCUGAN_MODEL_PROFILE,
+        )
+
+    monkeypatch.setattr(backend, "process", process_flux2)
+    monkeypatch.setattr(upscaler, "process", process_upscale)
+    output_path = tmp_path / "flux2-upscaled.webp"
+    outcome = routed.process(
+        InferenceAssets(image_bytes=png_bytes((8, 12))),
+        output_path,
+        ProcessOptions(mode="flux2"),
+        ResolvedAdapter(source=AdapterSource.NONE, adapter=None, reason="test"),
+    )
+
+    assert captured["stage_size"] == (16, 24)
+    with Image.open(output_path) as result:
+        assert result.size == (32, 48)
+    assert outcome.reference_applied is True
+    assert outcome.model_profile == "flux2-klein-4b+realcugan-se-2x"
+    assert "post-upscale" in routed.cache_revision(
+        ProcessOptions(mode="flux2"),
+        ResolvedAdapter(source=AdapterSource.NONE, adapter=None, reason="test"),
+    )
+
+
+# 方法说明：验证 UPSCALE 二阶段失败时不回退到质量档。
+def test_flux2_upscale_failure_does_not_fallback(tmp_path, monkeypatch):
+    backend = PassthroughBackend()
+    upscaler = create_realcugan_resources(tmp_path / "resource" / "realcugan")
+    routed = RoutedInferenceBackend(backend, upscaler)
+    calls = []
+
+    # 方法说明：模拟首阶段成功并记录实际执行档位。
+    def process_flux2(assets, output_path, options, resolved):
+        calls.append(str(options.mode))
+        Image.new("RGB", (16, 24), "white").save(output_path, format="WEBP")
+        return InferenceOutcome(
+            adapter_applied=False,
+            reference_applied=True,
+            model_profile="flux2-klein-4b",
+        )
+
+    # 方法说明：模拟 UPSCALE 二阶段执行失败。
+    def fail_upscale(*_args, **_kwargs):
+        raise RuntimeError("upscale failed")
+
+    monkeypatch.setattr(backend, "process", process_flux2)
+    monkeypatch.setattr(upscaler, "process", fail_upscale)
+
+    with pytest.raises(RuntimeError, match="upscale failed"):
+        routed.process(
+            InferenceAssets(image_bytes=png_bytes((8, 12))),
+            tmp_path / "failed.webp",
+            ProcessOptions(mode="flux2"),
+            ResolvedAdapter(source=AdapterSource.NONE, adapter=None, reason="test"),
+        )
+    assert calls == ["flux2"]
 
 
 # 方法说明：验证未启用放大资源时处理接口明确拒绝请求。

@@ -62,17 +62,6 @@ class ComfyUITransport:
         self._profile_ready_cache[cache_key] = (now + (5 if ready else 1), ready)
         return ready
 
-    # 方法说明：请求 ComfyUI 卸载 Cobra 隔离工作进程并释放显存。
-    def unload_cobra_worker(self) -> None:
-        try:
-            response = httpx.post(
-                f"{self.base_url}/comic-enhancer/cobra/unload",
-                timeout=15,
-            )
-            response.raise_for_status()
-        except httpx.HTTPError as error:
-            logger.warning("Cobra 显存释放请求失败: %s", error)
-
     # 方法说明：绑定输入后提交完整工作流并下载最后一个结果图。
     def run(
         self,

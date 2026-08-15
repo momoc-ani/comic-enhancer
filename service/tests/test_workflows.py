@@ -13,7 +13,6 @@ from comic_enhancer.inference.comfyui import (
     bind_io,
 )
 from comic_enhancer.inference.comfyui.strategies import (
-    CobraModeStrategy,
     FLUX2_PROCESSING_REVISION,
     FastModeStrategy,
     Flux2ModeStrategy,
@@ -86,7 +85,6 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
     expected = {
         "fast": FastModeStrategy,
         "quality": QualityModeStrategy,
-        "cobra": CobraModeStrategy,
         "flux2": Flux2ModeStrategy,
         "flux2_quant": Flux2QuantModeStrategy,
     }
@@ -98,25 +96,20 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
     assert len({type(backend.mode_strategy(mode)) for mode in expected}) == len(expected)
 
 
-@pytest.mark.parametrize(
-    ("mode", "method_name"),
-    [
-        ("cobra", "_process_cobra"),
-        ("flux2", "_process_flux2"),
-        ("flux2_quant", "_process_flux2"),
-    ],
-)
-# 方法说明：验证每个实验档失败后显式返回质量档的真实模型信息。
-def test_experimental_strategies_fallback_to_quality(
-    tmp_path,
-    monkeypatch,
-    mode,
-    method_name,
-):
+@pytest.mark.parametrize("mode", ["flux2", "flux2_quant"])
+# 方法说明：验证 FLUX.2 档位失败时直接报错且不执行质量档回退。
+def test_flux2_strategies_do_not_fallback_to_quality(tmp_path, monkeypatch, mode):
     fast = tmp_path / "fast.json"
     quality = tmp_path / "quality.json"
-    write_workflow(fast, marker="fast")
-    write_workflow(quality, marker="quality")
+    flux2 = tmp_path / "flux2.json"
+    flux2_quant = tmp_path / "flux2-quant.json"
+    for path, marker in (
+        (fast, "fast"),
+        (quality, "quality"),
+        (flux2, "flux2"),
+        (flux2_quant, "flux2-quant"),
+    ):
+        write_workflow(path, marker=marker, load_nodes=4 if "flux2" in marker else 1)
     backend = ComfyUIBackend(
         base_url="http://comfy",
         timeout_seconds=10,
@@ -125,182 +118,35 @@ def test_experimental_strategies_fallback_to_quality(
             fast_workflow=fast,
             quality_workflow=quality,
             workflow_root=tmp_path,
+            flux2_workflow=flux2,
+            flux2_quant_workflow=flux2_quant,
         ),
+        flux2_enabled=True,
+        flux2_workflow=flux2,
+        flux2_quant_enabled=True,
+        flux2_quant_workflow=flux2_quant,
     )
-    strategy = backend.mode_strategy(mode)
-    quality_strategy = backend.mode_strategy("quality")
-    captured = {}
+    monkeypatch.setattr(backend.mode_strategy(mode), "available", lambda: True)
 
-    # 方法说明：模拟实验档执行失败。
-    def fail_experimental(*_args, **_kwargs):
-        raise RuntimeError("test failure")
+    # 方法说明：模拟 FLUX.2 传输失败。
+    def fail_transport(*_args, **_kwargs):
+        raise RuntimeError("flux2 failed")
 
-    # 方法说明：模拟质量档处理并记录收到的回退选项。
-    def process_quality(assets, output_path, options, resolved_adapter):
-        captured["mode"] = str(options.mode)
-        return InferenceOutcome(
-            adapter_applied=False,
-            model_profile="sd15-colorize",
-        )
-
-    monkeypatch.setattr(strategy, method_name, fail_experimental)
-    monkeypatch.setattr(quality_strategy, "process", process_quality)
-    monkeypatch.setattr(backend.transport, "unload_cobra_worker", lambda: None)
-
-    outcome = backend.process(
-        InferenceAssets(image_bytes=png_bytes(Image.new("RGB", (8, 12), "white"))),
-        tmp_path / f"{mode}.webp",
-        ProcessOptions(mode=mode),
-        resolved(),
-    )
-
-    assert captured["mode"] == "quality"
-    assert outcome.model_profile == "sd15-colorize"
-
-
-# 方法说明：验证 Cobra 会提交多张参考图并恢复原始尺寸。
-def test_cobra_backend_posts_multiple_references_and_restores_geometry(
-    tmp_path, monkeypatch
-):
-    fast = tmp_path / "fast.json"
-    quality = tmp_path / "quality.json"
-    cobra = tmp_path / "cobra.json"
-    write_workflow(fast, marker="fast")
-    write_workflow(quality, marker="quality")
-    cobra_prompt = {
-        "1": {
-            "class_type": "LoadImage",
-            "inputs": {"image": "page.png"},
-            "_meta": {"title": "INPUT_IMAGE"},
-        }
-    }
-    for index in range(1, 13):
-        cobra_prompt[str(index + 1)] = {
-            "class_type": "LoadImage",
-            "inputs": {"image": f"ref-{index}.png"},
-            "_meta": {"title": f"REFERENCE_IMAGE_{index}"},
-        }
-    cobra_prompt["14"] = {
-        "class_type": "CobraColorize",
-        "inputs": {
-            "image": ["1", 0],
-            **{
-                f"reference_{index}": [str(index + 1), 0]
-                for index in range(1, 13)
-            },
-            "reference_count": 3,
-        },
-    }
-    cobra_prompt["15"] = {
-        "class_type": "SaveImage",
-        "inputs": {"images": ["14", 0]},
-    }
-    cobra.write_text(json.dumps(cobra_prompt), encoding="utf-8")
-    backend = ComfyUIBackend(
-        base_url="http://comfy",
-        timeout_seconds=10,
-        poll_interval_seconds=0.01,
-        workflow_loader=PresetWorkflowLoader(
-            fast_workflow=fast,
-            quality_workflow=quality,
-            workflow_root=tmp_path,
-            cobra_workflow=cobra,
-        ),
-        cobra_enabled=True,
-        cobra_workflow=cobra,
-        cobra_reference_limit=12,
-    )
-    monkeypatch.setattr(backend.mode_strategy("cobra"), "available", lambda: True)
-    generated = png_bytes(Image.new("RGB", (16, 24), (230, 70, 120)))
-    captured = {}
-
-    class FakeResponse:
-        content = generated
-
-        # 方法说明：模拟成功响应的状态检查。
-        def raise_for_status(self):
-            return None
-
-    class FakeClient:
-        # 方法说明：初始化当前对象及其运行状态。
-        def __init__(self, *, base_url, timeout):
-            captured["base_url"] = base_url
-            captured["timeout"] = timeout
-
-        # 方法说明：进入测试上下文并返回当前对象。
-        def __enter__(self):
-            return self
-
-        # 方法说明：退出测试上下文并完成清理。
-        def __exit__(self, *_):
-            return None
-
-        # 方法说明：模拟测试中的 HTTP POST 请求。
-        def post(self, path, **kwargs):
-            captured["path"] = path
-            if path == "/upload/image":
-                return SimpleNamespace(
-                    raise_for_status=lambda: None,
-                    json=lambda: {"name": "uploaded.png", "subfolder": ""},
-                )
-            captured["files"] = kwargs.get("files")
-            captured["prompt"] = kwargs["json"]["prompt"]
-            return SimpleNamespace(
-                raise_for_status=lambda: None,
-                json=lambda: {"prompt_id": "cobra-prompt"},
-            )
-
-        # 方法说明：读取指定数据或模拟测试中的 GET 请求。
-        def get(self, path, **kwargs):
-            if path.startswith("/history/"):
-                return SimpleNamespace(
-                    raise_for_status=lambda: None,
-                    json=lambda: {
-                        "cobra-prompt": {
-                            "status": {"status_str": "success"},
-                            "outputs": {
-                                    "15": {
-                                    "images": [{"filename": "cobra.png", "subfolder": "", "type": "output"}]
-                                }
-                            },
-                        }
-                    },
-                )
-            return SimpleNamespace(
-                raise_for_status=lambda: None,
-                content=generated,
-            )
-
-    monkeypatch.setattr(
-        "comic_enhancer.inference.comfyui.transport.httpx.Client",
-        FakeClient,
-    )
-    source = Image.new("RGB", (8, 12), "white")
+    monkeypatch.setattr(backend.transport, "run", fail_transport)
     assets = InferenceAssets(
-        image_bytes=png_bytes(source),
+        image_bytes=png_bytes(Image.new("RGB", (8, 12), "white")),
         character_references={
-            "character-a": png_bytes(Image.new("RGB", (4, 6), "red")),
-            "character-b": png_bytes(Image.new("RGB", (4, 6), "blue")),
+            "character": png_bytes(Image.new("RGB", (4, 6), "red"))
         },
     )
-    output_path = tmp_path / "cobra.webp"
 
-    outcome = backend.process(
-        assets,
-        output_path,
-        ProcessOptions(mode="cobra"),
-        resolved(),
-    )
-
-    assert outcome.model_profile == "cobra"
-    assert outcome.reference_applied is True
-    assert captured["base_url"] == "http://comfy"
-    assert captured["path"] == "/prompt"
-    assert captured["prompt"]["14"]["inputs"]["reference_1"] == ["2", 0]
-    assert captured["prompt"]["14"]["inputs"]["reference_12"] == ["13", 0]
-    assert captured["prompt"]["14"]["inputs"]["reference_count"] == 2
-    with Image.open(output_path) as result:
-        assert result.size == source.size
+    with pytest.raises(RuntimeError, match="flux2 failed"):
+        backend.process(
+            assets,
+            tmp_path / f"{mode}.webp",
+            ProcessOptions(mode=mode),
+            resolved(),
+        )
 
 
 # 方法说明：验证 FLUX.2 使用三张参考图并精确恢复为原图两倍尺寸。
@@ -328,7 +174,6 @@ def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
         flux2_reference_limit=3,
     )
     monkeypatch.setattr(backend.mode_strategy("flux2"), "available", lambda: True)
-    monkeypatch.setattr(backend.transport, "unload_cobra_worker", lambda: None)
     captured = {}
 
     # 方法说明：模拟传输层执行 FLUX.2 工作流并记录档位输入。
@@ -541,8 +386,11 @@ def test_shipped_flux2_workflows_use_prompt_protection_and_direct_output(name):
         node["class_type"] == "Image Blending Mode"
         for node in workflow.values()
     )
-    assert "locked source regions" in workflow["8"]["inputs"]["text"]
-    assert "clean professional anime cel colors" in workflow["8"]["inputs"]["text"]
+    prompt = workflow["8"]["inputs"]["text"]
+    assert "TEXT AND GRAPHICS LOCK" in prompt
+    assert "immutable source regions" in prompt
+    assert "Copy every glyph" in prompt
+    assert "professional anime-style cel coloring" in prompt
     assert "changed punctuation" in workflow["9"]["inputs"]["text"]
     assert not any(
         node["class_type"]
@@ -601,29 +449,3 @@ def test_shipped_workflows_are_self_contained_and_restore_dark_pixels(name):
     )
     assert any(node["class_type"] == "ThresholdMask" for node in workflow.values())
     assert any(node["class_type"] == "ImageCompositeMasked" for node in workflow.values())
-
-
-# 方法说明：验证 Cobra 工作流声明十二个参考输入和固定参数。
-def test_shipped_cobra_workflow_declares_twelve_reference_inputs_and_fixed_values():
-    workflow = json.loads(
-        (PROJECT_ROOT / "workflows" / "cobra-colorize.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    outputs = bind_io(
-        workflow,
-        input_images={
-            "INPUT_IMAGE": "uploaded/page.png",
-            **{
-                f"REFERENCE_IMAGE_{index}": f"uploaded/ref-{index}.png"
-                for index in range(1, 13)
-            },
-        },
-        output_prefix="comic-enhancer/cobra-test",
-    )
-
-    assert outputs == ("15",)
-    assert workflow["14"]["inputs"]["reference_count"] == 3
-    assert workflow["14"]["inputs"]["steps"] == 10
-    assert workflow["14"]["inputs"]["top_k"] == 3
-    assert workflow["14"]["inputs"]["style"] == "line + shadow"

@@ -39,17 +39,13 @@ class RoutedInferenceBackend(InferenceBackend):
     def ready(self) -> bool:
         return self.backend.ready()
 
-    # 方法说明：检查 Cobra 模型档位是否可用。
-    def cobra_profile_ready(self) -> bool:
-        return self.backend.cobra_profile_ready()
-
     # 方法说明：检查 FLUX.2 模型档位是否可用。
     def flux2_profile_ready(self) -> bool:
-        return self.backend.flux2_profile_ready()
+        return self.backend.flux2_profile_ready() and self.upscale_profile_ready()
 
     # 方法说明：检查 FLUX.2 量化模型档位是否可用。
     def flux2_quant_profile_ready(self) -> bool:
-        return self.backend.flux2_quant_profile_ready()
+        return self.backend.flux2_quant_profile_ready() and self.upscale_profile_ready()
 
     # 方法说明：检查 Real-CUGAN 放大档位是否可用。
     def upscale_profile_ready(self) -> bool:
@@ -65,6 +61,8 @@ class RoutedInferenceBackend(InferenceBackend):
         if options.mode == ProcessingMode.UPSCALE:
             return self.upscaler.cache_revision()
         revision = self.backend.cache_revision(options, resolved, assets)
+        if options.mode in {ProcessingMode.FLUX2, ProcessingMode.FLUX2_QUANT}:
+            return f"{revision}:post-upscale:{self.upscaler.cache_revision()}"
         return revision if self.name == self.backend.name else f"{self.name}:{revision}"
 
     # 方法说明：返回独立放大档或主推理档对应的适配器策略。
@@ -91,4 +89,35 @@ class RoutedInferenceBackend(InferenceBackend):
     ) -> InferenceOutcome:
         if options.mode == ProcessingMode.UPSCALE:
             return self.upscaler.process(assets, output_path)
+        if options.mode in {ProcessingMode.FLUX2, ProcessingMode.FLUX2_QUANT}:
+            return self._process_flux2_pipeline(assets, output_path, options, resolved)
         return self.backend.process(assets, output_path, options, resolved)
+
+    # 方法说明：串联 FLUX.2 首阶段和 Real-CUGAN 二阶段放大策略。
+    def _process_flux2_pipeline(
+        self,
+        assets: InferenceAssets,
+        output_path: Path,
+        options: ProcessOptions,
+        resolved: ResolvedAdapter,
+    ) -> InferenceOutcome:
+        if not self.upscale_profile_ready():
+            raise RuntimeError("FLUX.2 二阶段放大资源未就绪")
+        stage_path = output_path.with_name(f"{output_path.stem}.flux2-stage.webp")
+        try:
+            primary = self.backend.process(assets, stage_path, options, resolved)
+            stage_bytes = stage_path.read_bytes()
+            secondary = self.upscaler.process(
+                InferenceAssets(image_bytes=stage_bytes),
+                output_path,
+            )
+            return InferenceOutcome(
+                adapter_applied=primary.adapter_applied,
+                reference_applied=primary.reference_applied,
+                processed_panels=primary.processed_panels,
+                model_profile=(
+                    f"{primary.model_profile}+{secondary.model_profile}"
+                ),
+            )
+        finally:
+            stage_path.unlink(missing_ok=True)

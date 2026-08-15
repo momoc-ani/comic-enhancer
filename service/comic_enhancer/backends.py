@@ -15,7 +15,6 @@ from .inference import (
 from .inference.comfyui import ComfyUIBackend
 from .inference.comfyui.strategies import (
     ComfyUIModeStrategy,
-    CobraModeStrategy,
     FLUX2_OUTPUT_SCALE,
     FLUX2_PROCESSING_REVISION,
     FastModeStrategy,
@@ -30,7 +29,6 @@ __all__ = [
     "AdapterPolicy",
     "ComfyUIBackend",
     "ComfyUIModeStrategy",
-    "CobraModeStrategy",
     "FLUX2_OUTPUT_SCALE",
     "FLUX2_PROCESSING_REVISION",
     "FastModeStrategy",

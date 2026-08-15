@@ -5,7 +5,6 @@ export const MODE_OPTIONS = Object.freeze([
   { value: "fast", label: "快速模式", prefetchPages: 3 },
   { value: "quality", label: "质量模式", prefetchPages: 2 },
   { value: "upscale", label: "放大模式（Real-CUGAN 2x）", prefetchPages: 1 },
-  { value: "cobra", label: "Cobra 实验档", prefetchPages: 1 },
   { value: "flux2", label: "最高质量模式（FLUX.2）", prefetchPages: 1 },
   { value: "flux2_quant", label: "质量模式（FLUX.2 量化实验）", prefetchPages: 1 },
 ]);
@@ -38,6 +37,7 @@ export function normalizeUrl(value) {
 // 方法说明：规范化处理档位并回退到安全默认值。
 export function normalizeMode(value) {
   const normalized = String(value || "").trim();
+  if (normalized === "cobra") return "quality";
   if (MODE_VALUES.has(normalized)) return normalized;
   return /^[a-z0-9_:-]+$/.test(normalized) ? normalized : "fast";
 }

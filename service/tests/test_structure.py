@@ -4,7 +4,6 @@ from PIL import Image
 
 from comic_enhancer.inference.comfyui.image_ops import (
     pad_square,
-    protect_cobra_structure,
     protect_source_structure,
     restore_geometry,
 )
@@ -33,67 +32,6 @@ def test_structure_protection_restores_black_text_and_source_luminance():
     white_pixel = result.getpixel((0, 0))
     assert max(text_pixel) <= 16
     assert min(white_pixel) >= 245
-
-
-# 方法说明：验证 Cobra 结构保护保留暗色文字且不压平色彩。
-def test_cobra_structure_preserves_dark_text_without_flattening_color():
-    source = Image.new("RGB", (8, 8), (210, 210, 210))
-    for y in range(2, 6):
-        source.putpixel((3, y), (0, 0, 0))
-    generated = Image.new("RGB", (16, 16), (230, 70, 120))
-
-    result = protect_cobra_structure(
-        image_bytes(source),
-        generated,
-    )
-
-    text_pixel = result.getpixel((6, 6))
-    colored = result.getpixel((0, 0))
-    assert max(text_pixel) <= 16
-    assert colored[0] > colored[2] - 80
-    assert max(colored) - min(colored) > 50
-
-
-# 方法说明：验证 Cobra 不会把彩色浅色区域误判为白纸。
-def test_cobra_structure_does_not_treat_colored_white_regions_as_paper():
-    source = Image.new("RGB", (8, 8), "white")
-    generated = Image.new("RGB", (8, 8), (80, 150, 240))
-
-    result = protect_cobra_structure(
-        image_bytes(source),
-        generated,
-    )
-
-    colored = result.getpixel((4, 4))
-    assert colored[2] > 220
-    assert colored[2] > colored[0] + 60
-
-
-# 方法说明：验证 Cobra 会恢复中性白色纸张区域。
-def test_cobra_structure_restores_neutral_white_paper():
-    source = Image.new("RGB", (8, 8), "white")
-    generated = Image.new("RGB", (8, 8), (242, 240, 238))
-
-    result = protect_cobra_structure(
-        image_bytes(source),
-        generated,
-    )
-
-    assert min(result.getpixel((4, 4))) >= 250
-
-
-# 方法说明：验证 Cobra 会移除生成图中的中性文字残影。
-def test_cobra_structure_removes_generated_neutral_text_ghosts():
-    source = Image.new("RGB", (8, 8), "white")
-    generated = Image.new("RGB", (8, 8), "white")
-    generated.putpixel((4, 4), (0, 0, 0))
-
-    result = protect_cobra_structure(
-        image_bytes(source),
-        generated,
-    )
-
-    assert min(result.getpixel((4, 4))) >= 250
 
 
 # 方法说明：验证竖图几何恢复后保持原始比例。

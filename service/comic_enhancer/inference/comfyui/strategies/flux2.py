@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from ....domain import ProcessingMode, ProcessOptions, ResolvedAdapter
@@ -8,11 +7,8 @@ from ...contracts import AdapterPolicy, InferenceAssets, InferenceOutcome
 from .flux2_base import FLUX2_PROCESSING_REVISION, Flux2StrategyBase
 
 
-logger = logging.getLogger(__name__)
-
-
 class Flux2ModeStrategy(Flux2StrategyBase):
-    """独立实现 FLUX.2 最高质量档及质量档回退。"""
+    """独立实现 FLUX.2 最高质量档。"""
 
     mode = ProcessingMode.FLUX2
     output_prefix = "flux2"
@@ -47,7 +43,7 @@ class Flux2ModeStrategy(Flux2StrategyBase):
             required_workflow=self.adapter_workflow,
         )
 
-    # 方法说明：执行 FLUX.2，失败时显式回退质量档。
+    # 方法说明：执行 FLUX.2 并将结果交给外层 UPSCALE 二阶段。
     def process(
         self,
         assets: InferenceAssets,
@@ -55,12 +51,7 @@ class Flux2ModeStrategy(Flux2StrategyBase):
         options: ProcessOptions,
         resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
-        try:
-            self.transport.unload_cobra_worker()
-            return self._process_flux2(assets, output_path, options, resolved)
-        except Exception:
-            logger.exception("FLUX.2 最高质量档失败，回退到质量工作流")
-            return self._fallback_to_quality(assets, output_path, options, resolved)
+        return self._process_flux2(assets, output_path, options, resolved)
 
 
 __all__ = ["FLUX2_PROCESSING_REVISION", "Flux2ModeStrategy"]

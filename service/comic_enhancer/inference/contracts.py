@@ -19,10 +19,6 @@ class InferenceBackend(ABC):
     def ready(self) -> bool:
         return True
 
-    # 方法说明：检查 Cobra 模型档位是否可用。
-    def cobra_profile_ready(self) -> bool:
-        return False
-
     # 方法说明：检查 FLUX.2 模型档位是否可用。
     def flux2_profile_ready(self) -> bool:
         return False

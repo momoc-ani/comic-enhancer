@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 from ....domain import ProcessingMode, ProcessOptions, ResolvedAdapter
@@ -8,11 +7,8 @@ from ...contracts import AdapterPolicy, InferenceAssets, InferenceOutcome
 from .flux2_base import Flux2StrategyBase
 
 
-logger = logging.getLogger(__name__)
-
-
 class Flux2QuantModeStrategy(Flux2StrategyBase):
-    """独立实现 FLUX.2 Qwen3 量化实验档及质量档回退。"""
+    """独立实现 FLUX.2 Qwen3 量化实验档。"""
 
     mode = ProcessingMode.FLUX2_QUANT
     output_prefix = "flux2-quant"
@@ -47,7 +43,7 @@ class Flux2QuantModeStrategy(Flux2StrategyBase):
             required_workflow=self.adapter_workflow,
         )
 
-    # 方法说明：执行量化 FLUX.2，失败时显式回退质量档。
+    # 方法说明：执行量化 FLUX.2 并将结果交给外层 UPSCALE 二阶段。
     def process(
         self,
         assets: InferenceAssets,
@@ -55,9 +51,4 @@ class Flux2QuantModeStrategy(Flux2StrategyBase):
         options: ProcessOptions,
         resolved: ResolvedAdapter,
     ) -> InferenceOutcome:
-        try:
-            self.transport.unload_cobra_worker()
-            return self._process_flux2(assets, output_path, options, resolved)
-        except Exception:
-            logger.exception("FLUX.2 Qwen3 4B 量化实验档失败，回退到质量工作流")
-            return self._fallback_to_quality(assets, output_path, options, resolved)
+        return self._process_flux2(assets, output_path, options, resolved)

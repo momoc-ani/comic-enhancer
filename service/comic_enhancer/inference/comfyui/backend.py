@@ -13,13 +13,11 @@ from ..contracts import (
 )
 from .image_ops import (
     pad_square,
-    protect_cobra_structure,
     protect_source_structure,
     restore_geometry,
 )
 from .strategies import (
     ComfyUIModeStrategy,
-    CobraModeStrategy,
     FastModeStrategy,
     Flux2ModeStrategy,
     Flux2QuantModeStrategy,
@@ -37,7 +35,6 @@ class ComfyUIBackend(InferenceBackend):
     supported_base_models = frozenset({"sd15-anime"})
     model_profiles = (
         "sd15-colorize",
-        "cobra",
         "flux2-klein-4b",
         "flux2-klein-4b-qwen3-fp8",
     )
@@ -50,9 +47,6 @@ class ComfyUIBackend(InferenceBackend):
         timeout_seconds: int,
         poll_interval_seconds: float,
         workflow_loader: WorkflowLoader,
-        cobra_enabled: bool = False,
-        cobra_workflow: Path | None = None,
-        cobra_reference_limit: int = 12,
         flux2_enabled: bool = False,
         flux2_workflow: Path | None = None,
         flux2_reference_limit: int = 3,
@@ -77,25 +71,16 @@ class ComfyUIBackend(InferenceBackend):
         strategies: tuple[ComfyUIModeStrategy, ...] = (
             FastModeStrategy(**shared_options),
             quality_strategy,
-            CobraModeStrategy(
-                enabled=cobra_enabled,
-                workflow_path=cobra_workflow,
-                reference_limit=cobra_reference_limit,
-                quality_strategy=quality_strategy,
-                **shared_options,
-            ),
             Flux2ModeStrategy(
                 enabled=flux2_enabled,
                 workflow_path=flux2_workflow,
                 reference_limit=flux2_reference_limit,
-                quality_strategy=quality_strategy,
                 **shared_options,
             ),
             Flux2QuantModeStrategy(
                 enabled=flux2_quant_enabled,
                 workflow_path=flux2_quant_workflow,
                 reference_limit=flux2_reference_limit,
-                quality_strategy=quality_strategy,
                 **shared_options,
             ),
         )
@@ -104,10 +89,6 @@ class ComfyUIBackend(InferenceBackend):
     # 方法说明：检查 ComfyUI 基础服务是否已准备就绪。
     def ready(self) -> bool:
         return self.transport.ready()
-
-    # 方法说明：检查 Cobra 模型档位是否可用。
-    def cobra_profile_ready(self) -> bool:
-        return self.mode_available(ProcessingMode.COBRA)
 
     # 方法说明：检查 FLUX.2 模型档位是否可用。
     def flux2_profile_ready(self) -> bool:
@@ -212,11 +193,3 @@ class ComfyUIBackend(InferenceBackend):
         generated: Image.Image,
     ) -> Image.Image:
         return protect_source_structure(source_bytes, generated)
-
-    # 方法说明：兼容旧调用并应用 Cobra 结构保护。
-    @staticmethod
-    def _protect_cobra_structure(
-        source_bytes: bytes,
-        generated: Image.Image,
-    ) -> Image.Image:
-        return protect_cobra_structure(source_bytes, generated)

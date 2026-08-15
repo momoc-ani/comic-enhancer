@@ -53,16 +53,12 @@ def _create_backend(settings: Settings) -> InferenceBackend:
             fast_workflow=settings.comfyui_workflow_fast,
             quality_workflow=settings.comfyui_workflow_quality,
             workflow_root=settings.comfyui_workflow_root,
-            cobra_workflow=settings.comfyui_workflow_cobra,
             flux2_workflow=settings.comfyui_workflow_flux2,
             flux2_quant_workflow=settings.comfyui_workflow_flux2_quant,
         )
         backend_options.update(
             {
                 "base_url": settings.comfyui_url,
-                "cobra_enabled": settings.comfyui_cobra_enabled,
-                "cobra_workflow": settings.comfyui_workflow_cobra,
-                "cobra_reference_limit": settings.cobra_reference_limit,
                 "flux2_enabled": settings.comfyui_flux2_enabled,
                 "flux2_workflow": settings.comfyui_workflow_flux2,
                 "flux2_reference_limit": settings.flux2_reference_limit,

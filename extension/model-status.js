@@ -1,7 +1,6 @@
 const PROFILE_LABELS = Object.freeze({
   "sd15-colorize": "SD1.5 Anime + Lineart",
   "realcugan-se-2x": "Real-CUGAN SE 2x",
-  cobra: "Cobra 多参考上色",
   "flux2-klein-4b": "FLUX.2 Klein 4B",
   "flux2-klein-4b-qwen3-fp8": "FLUX.2 Klein 4B · Qwen3 FP8 mixed",
   passthrough: "开发透传后端",
@@ -11,7 +10,6 @@ const MODE_TITLES = Object.freeze({
   fast: "快速档",
   quality: "质量档",
   upscale: "放大档",
-  cobra: "Cobra 档",
   flux2: "最高质量档",
   flux2_quant: "质量档（FLUX.2 量化实验）",
 });
@@ -44,7 +42,6 @@ export function describeModelTier(settings, execution, capabilities = null) {
       capabilities &&
         ((Array.isArray(advertisedModes) && !advertisedModes.includes(mode)) ||
           (mode === "upscale" && capabilities.upscale_available === false) ||
-          (mode === "cobra" && capabilities.cobra_available === false) ||
           (mode === "flux2" && capabilities.flux2_available === false) ||
           (mode === "flux2_quant" && capabilities.flux2_quant_available === false)),
     );
@@ -108,7 +105,8 @@ function normalizeUrl(value) {
 
 // 方法说明：规范化处理档位并回退到安全默认值。
 function normalizeMode(value) {
-  return ["fast", "quality", "upscale", "cobra", "flux2", "flux2_quant"].includes(value)
+  if (value === "cobra") return "quality";
+  return ["fast", "quality", "upscale", "flux2", "flux2_quant"].includes(value)
     ? value
     : "fast";
 }

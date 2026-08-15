@@ -12,7 +12,6 @@ MODE_LABELS = {
     ProcessingMode.FAST: ("快速模式", 3),
     ProcessingMode.QUALITY: ("质量模式", 2),
     ProcessingMode.UPSCALE: ("放大模式（Real-CUGAN 2x）", 1),
-    ProcessingMode.COBRA: ("Cobra 实验档", 1),
     ProcessingMode.FLUX2: ("最高质量模式（FLUX.2）", 1),
     ProcessingMode.FLUX2_QUANT: ("质量模式（FLUX.2 量化实验）", 1),
 }
@@ -40,7 +39,6 @@ async def capabilities(
     settings = context.settings
     availability = {
         ProcessingMode.UPSCALE: backend.upscale_profile_ready(),
-        ProcessingMode.COBRA: backend.cobra_profile_ready(),
         ProcessingMode.FLUX2: backend.flux2_profile_ready(),
         ProcessingMode.FLUX2_QUANT: backend.flux2_quant_profile_ready(),
     }
@@ -65,7 +63,6 @@ async def capabilities(
             for mode in processing_modes
         ],
         upscale_available=availability[ProcessingMode.UPSCALE],
-        cobra_available=availability[ProcessingMode.COBRA],
         flux2_available=availability[ProcessingMode.FLUX2],
         flux2_quant_available=availability[ProcessingMode.FLUX2_QUANT],
         prefetch_pages=settings.prefetch_pages,

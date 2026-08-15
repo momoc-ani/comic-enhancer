@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import uuid
 
-from ....domain import ProcessingMode, ProcessOptions, ResolvedAdapter
+from ....domain import ProcessOptions, ResolvedAdapter
 from ...contracts import InferenceAssets, InferenceOutcome
 from ..image_ops import restore_geometry, save_output
 from .base import (
@@ -11,7 +11,6 @@ from .base import (
     reference_cache_revision,
     select_reference_images,
 )
-from .quality import QualityModeStrategy
 
 
 FLUX2_PROCESSING_REVISION = "flux2-baseline-direct-prompt-v12"
@@ -24,21 +23,19 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
     adapter_workflow = "quality"
     output_prefix = "flux2"
 
-    # 方法说明：初始化 FLUX.2 开关、工作流、参考图限制和质量回退策略。
+    # 方法说明：初始化 FLUX.2 开关、工作流和参考图限制。
     def __init__(
         self,
         *,
         enabled: bool,
         workflow_path: Path | None,
         reference_limit: int,
-        quality_strategy: QualityModeStrategy,
         **options,
     ):
         super().__init__(**options)
         self.enabled = enabled
         self.workflow_path = workflow_path
         self.reference_limit = max(1, min(3, reference_limit))
-        self.quality_strategy = quality_strategy
 
     # 方法说明：生成包含工作流、参考图和 FLUX.2 处理版本的缓存标识。
     def _flux2_cache_revision(
@@ -100,20 +97,4 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
             adapter_applied=False,
             reference_applied=True,
             model_profile=loaded_workflow.model_profile,
-        )
-
-    # 方法说明：使用质量档处理实验档失败的输入。
-    def _fallback_to_quality(
-        self,
-        assets: InferenceAssets,
-        output_path: Path,
-        options: ProcessOptions,
-        resolved: ResolvedAdapter,
-    ) -> InferenceOutcome:
-        quality_options = options.model_copy(update={"mode": ProcessingMode.QUALITY})
-        return self.quality_strategy.process(
-            assets,
-            output_path,
-            quality_options,
-            resolved,
         )

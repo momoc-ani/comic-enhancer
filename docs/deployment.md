@@ -2,7 +2,7 @@
 
 ## 本次 RTX 4090 部署
 
-目标主机为 `holopix@192.168.38.226`。对外业务只提供漫画增强 API `8765`。项目统一 ComfyUI 容器在 Docker 网络中使用 `comfyui:8188`，宿主机 `192.168.38.226:8192` 仅提供工作流调试界面；快速、质量、Cobra 和 FLUX.2 都提交到该容器。主机已有的其他 ComfyUI 不会被替换。
+目标主机为 `holopix@192.168.38.226`。对外业务只提供漫画增强 API `8765`。项目统一 ComfyUI 容器在 Docker 网络中使用 `comfyui:8188`，宿主机 `192.168.38.226:8192` 仅提供工作流调试界面；快速、质量和 FLUX.2 都提交到该容器。主机已有的其他 ComfyUI 不会被替换。
 
 远端需要确认：
 
@@ -21,7 +21,7 @@ docker compose -f compose.nvidia-remote.yaml up -d --build
 curl http://127.0.0.1:8765/v1/health
 ```
 
-API 容器只配置 `COMIC_ENHANCER_COMFYUI_URL=http://comfyui:8188`。4090 主机统一使用 `/data1/models/ComfyUI/models` 作为模型根目录：统一 ComfyUI 挂载为 `/root/sd/ComfyUI/models`，增强 API 挂载为 `/models`，并只在 `/models/loras` 中自动下载和校验 LoRA。ComfyUI 的 checkpoint、ControlNet、放大模型、Cobra 和 LoRA 权重都不打进 API 镜像；Real-CUGAN 平台包也不打进镜像，只能从显式挂载的资源目录读取。
+API 容器只配置 `COMIC_ENHANCER_COMFYUI_URL=http://comfyui:8188`。4090 主机统一使用 `/data1/models/ComfyUI/models` 作为模型根目录：统一 ComfyUI 挂载为 `/root/sd/ComfyUI/models`，增强 API 挂载为 `/models`。ComfyUI 的 checkpoint、ControlNet 和放大模型都不打进 API 镜像；Real-CUGAN 平台包也不打进镜像，只能从显式挂载的资源目录读取。
 
 ### Real-CUGAN 放大档
 
@@ -47,9 +47,9 @@ resource/realcugan/windows-x64/
 
 Docker API 容器运行 Linux，因此不能使用 `windows-x64` 包。远端必须另外准备 `linux-x64` 包，为 `realcugan-ncnn-vulkan` 添加执行权限，并通过 `.env` 的 `REALCUGAN_RESOURCE_ROOT` 挂载到容器；同时设置 `COMIC_ENHANCER_REALCUGAN_ENABLED=true`。能力接口只在当前平台的可执行文件和两倍无降噪模型齐全时返回 `upscale`。平台包、权重和样例输出不会提交到仓库，部署前必须独立审核其许可证。
 
-### Cobra 候选与 FLUX.2 Klein 最高质量模型
+### FLUX.2 Klein 最高质量模型
 
-候选模型先在本机通过国内镜像断点下载，再上传到 4090 主机。本次新增下载约 19.7GB；Cobra 需要的 PixArt T5-XXL 直接复用 4090 主机已有的 `clip/t5xxl_fp16.safetensors`，避免重复下载约 19.05GB 的 FP32 分片。该文件与 PixArt 官方权重转为 FP16 后的代表性张量哈希一致，且 Cobra 上游固定以 FP16 加载 Pipeline。下载脚本固定 Cobra 与 PixArt 提交，并对 12 个新增大权重使用 Hugging Face LFS/Xet 公布的 SHA-256 校验：
+候选模型先在本机通过国内镜像断点下载，再上传到 4090 主机。下载脚本对新增大权重使用 Hugging Face LFS/Xet 公布的 SHA-256 校验：
 
 ```bash
 CANDIDATE_DOWNLOAD_CONNECTIONS=4 \
@@ -58,30 +58,27 @@ CANDIDATE_DOWNLOAD_CONNECTIONS=4 \
 ./scripts/upload_candidate_models.sh
 ```
 
-默认镜像为 `https://hf-mirror.com`，可通过 `CANDIDATE_HF_BASE_URL` 覆盖。只有全部新增权重和配置完成后才生成本机 `runtime/model-downloads/CandidateModels.ready`。上传脚本逐项比较远端哈希，一致文件直接跳过，不一致文件先续传到 `.uploading`，复验成功后原子改名；全部通过后还会严格校验远端 FP16 T5 的大小和 SHA-256，并在 PixArt `text_encoder` 目录建立容器内可解析的相对软链接。远端已有 `vae/flux2-vae.safetensors` 且所有检查通过后，才生成 `/data1/models/ComfyUI/models/candidate-models.ready`。
+默认镜像为 `https://hf-mirror.com`，可通过 `CANDIDATE_HF_BASE_URL` 覆盖。只有全部新增权重和配置完成后才生成本机 `runtime/model-downloads/CandidateModels.ready`。上传脚本逐项比较远端哈希，一致文件直接跳过，不一致文件先续传到 `.uploading`，复验成功后原子改名。远端已有 `vae/flux2-vae.safetensors` 且所有检查通过后，才生成 `/data1/models/ComfyUI/models/candidate-models.ready`。
 
 远端目录映射如下：
 
 - FLUX.2 Klein 4B FP8：`diffusion_models/flux-2-klein-4b-fp8.safetensors`
 - Qwen3 4B 编码器：`text_encoders/qwen_3_4b.safetensors`
-- Cobra 项目权重：`cobra/JunhaoZhuang-Cobra`
-- Cobra PixArt 基座：`cobra/PixArt-XL-2-1024-MS`
-- Cobra 复用 T5：`cobra/PixArt-XL-2-1024-MS/text_encoder/model.safetensors -> ../../../clip/t5xxl_fp16.safetensors`
 
-Cobra 节点安装在统一 ComfyUI 镜像中，调试地址为 `http://192.168.38.226:8192/`，API 内部地址始终是 `http://comfyui:8188`。API 不调用 Cobra Python HTTP 服务，也不存在 `cobra_url:8780`。Cobra 的旧 Diffusers 运行时隔离在同容器的 `/opt/cobra-venv`，ComfyUI 节点通过 Unix Socket 调用常驻 worker，因此不会覆盖主环境中 FLUX.2 所需的新版本依赖，也不会新增网络端口。要启用 Cobra，设置 `COMIC_ENHANCER_COMFYUI_COBRA_ENABLED=true`；要启用当前最高质量档 FLUX.2 Klein 4B，设置 `COMIC_ENHANCER_COMFYUI_FLUX2_ENABLED=true`。两个档位都由增强 API 处理参考图和质量回退。ComfyUI 调试界面没有业务鉴权，只应在可信局域网使用；插件仍必须走 `8765` API。
+ComfyUI 调试地址为 `http://192.168.38.226:8192/`，API 内部地址始终是 `http://comfyui:8188`。要启用最高质量档 FLUX.2 Klein 4B，设置 `COMIC_ENHANCER_COMFYUI_FLUX2_ENABLED=true`；要启用量化实验档，同时设置 `COMIC_ENHANCER_COMFYUI_FLUX2_QUANT_ENABLED=true`。两个档位都由增强 API 处理参考图，任一 FLUX.2 或 Real-CUGAN 阶段失败都会直接返回失败，不回退质量档。ComfyUI 调试界面没有业务鉴权，只应在可信局域网使用；插件仍必须走 `8765` API。
 
-FLUX.2 最高质量档恢复旧基准的 `0.85MP` 四步空 latent 直出，以强化提示词锁定气泡、文字、标点、页面结构和网点。工作流不执行全页深色像素回注、颜色混合或神经超分；API 只将未后处理结果按原图比例输出为宽高各 2 倍。三页冒烟中该方案恢复了旧版平滑动漫平涂效果，并完整保留测试页文字；至少 100 页准入完成前仍需保留文字变化风险说明。
+FLUX.2 最高质量档恢复旧基准的 `0.85MP` 四步空 latent 直出，以强化提示词锁定气泡、文字、标点、页面结构和网点。工作流不执行全页深色像素回注或颜色混合；API 先将未后处理结果按原图比例恢复为宽高各 2 倍，再交给 UPSCALE 策略使用 Real-CUGAN 放大 2 倍，最终输出原图宽高各 4 倍。三页冒烟中该方案恢复了旧版平滑动漫平涂效果，并完整保留测试页文字；至少 100 页准入完成前仍需保留文字变化风险说明。
 
 未配置 Gitee 仓库和 Token 时保持 `COMIC_ENHANCER_GITEE_ENABLED=false`，基础上色和本地 LoRA 仍可使用。填写完整 Gitee 配置后再改为 `true` 并重建 API 容器。
 
 插件配置：
 
 ```text
-运行方案: 快速模式/质量模式/放大模式（Real-CUGAN 2x）/Cobra/最高质量模式（FLUX.2）
+运行方案: 快速模式/质量模式/放大模式（Real-CUGAN 2x）/最高质量模式（FLUX.2）/质量模式（FLUX.2 量化实验）
 API Token: 与远端 .env 中 COMIC_ENHANCER_TOKEN 相同
 ```
 
-插件只配置漫画增强服务地址，不提供 ComfyUI、Cobra、FLUX.2 或 Real-CUGAN 地址入口。服务端也只配置一个 `COMIC_ENHANCER_COMFYUI_URL`；Real-CUGAN 配置是 API 本地资源根目录，不是独立推理 URL。
+插件只配置漫画增强服务地址，不提供 ComfyUI、FLUX.2 或 Real-CUGAN 地址入口。服务端也只配置一个 `COMIC_ENHANCER_COMFYUI_URL`；Real-CUGAN 配置是 API 本地资源根目录，不是独立推理 URL。
 
 替换其他 ComfyUI 工作流时，导出 API 格式 JSON，并在 `settings.json` 或环境变量中修改对应工作流路径。单输入工作流必须只有一个 `LoadImage`；多输入工作流使用 `_meta.title` 声明 `INPUT_IMAGE`、`REFERENCE_IMAGE` 等角色；所有工作流至少有一个 `SaveImage`，其余模型、LoRA 和参数必须全部预设。服务不依赖固定节点编号。
 

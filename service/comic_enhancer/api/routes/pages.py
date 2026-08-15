@@ -11,7 +11,6 @@ from ..dependencies import authorize, get_context
 router = APIRouter()
 
 REFERENCE_MODES = {
-    ProcessingMode.COBRA,
     ProcessingMode.FLUX2,
     ProcessingMode.FLUX2_QUANT,
 }
@@ -40,6 +39,16 @@ async def process_page(
         and not context.backend.upscale_profile_ready()
     ):
         raise HTTPException(status_code=409, detail="Real-CUGAN 放大档未启用")
+    if (
+        options.mode == ProcessingMode.FLUX2
+        and not context.backend.flux2_profile_ready()
+    ):
+        raise HTTPException(status_code=409, detail="FLUX.2 二阶段放大档未启用")
+    if (
+        options.mode == ProcessingMode.FLUX2_QUANT
+        and not context.backend.flux2_quant_profile_ready()
+    ):
+        raise HTTPException(status_code=409, detail="FLUX.2 量化二阶段放大档未启用")
 
     image_bytes = await image.read()
     if not image_bytes:
@@ -53,11 +62,7 @@ async def process_page(
     character_references: dict[str, bytes] = {}
     if options.mode in REFERENCE_MODES:
         resolution = await asyncio.to_thread(context.metadata.resolve, work)
-        reference_limit = (
-            context.settings.cobra_reference_limit
-            if options.mode == ProcessingMode.COBRA
-            else context.settings.flux2_reference_limit
-        )
+        reference_limit = context.settings.flux2_reference_limit
         entries = await context.reference_bank.build(resolution, work)
         for entry, reference in entries[:reference_limit]:
             character_references.setdefault(entry.character_id, reference)

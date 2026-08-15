@@ -77,30 +77,6 @@ test("ignores execution state from another endpoint or mode", () => {
 
 // 方法说明：验证实验档位可用性会按后端能力展示。
 test("shows experimental mode availability from backend capabilities", () => {
-  const cobraSettings = {
-    ...settings,
-    profile: "remote-cobra",
-    mode: "cobra",
-  };
-  const unavailable = describeModelTier(cobraSettings, null, {
-    ready: true,
-    processing_modes: ["fast", "quality"],
-  });
-  assert.equal(unavailable.title, "Cobra 档");
-  assert.match(unavailable.detail, /未启用 Cobra/);
-
-  const execution = buildModelExecution(
-    { model_profile: "cobra", elapsed_ms: 3200 },
-    cobraSettings,
-  );
-  const actual = describeModelTier(cobraSettings, execution, {
-    ready: true,
-    processing_modes: ["fast", "quality", "cobra"],
-    cobra_available: true,
-  });
-  assert.equal(actual.title, "Cobra 档 · 基础模型");
-  assert.match(actual.detail, /Cobra 多参考上色/);
-
   const flux2Settings = {
     ...settings,
     profile: "remote-flux2",

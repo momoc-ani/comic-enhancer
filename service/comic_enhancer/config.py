@@ -30,9 +30,6 @@ class Settings:
     comfyui_url: str = "http://comfyui:8188"
     comfyui_timeout_seconds: int = 180
     comfyui_poll_interval_seconds: float = 0.25
-    comfyui_cobra_enabled: bool = False
-    comfyui_workflow_cobra: Path | None = None
-    cobra_reference_limit: int = 12
     comfyui_flux2_enabled: bool = False
     comfyui_workflow_flux2: Path | None = None
     flux2_reference_limit: int = 3
@@ -92,7 +89,6 @@ def load_settings() -> Settings:
         "realcugan_resource_root",
         "comfyui_workflow_fast",
         "comfyui_workflow_quality",
-        "comfyui_workflow_cobra",
         "comfyui_workflow_flux2",
         "comfyui_workflow_flux2_quant",
         "comfyui_workflow_root",
@@ -142,15 +138,6 @@ def load_settings() -> Settings:
         ),
         "COMIC_ENHANCER_COMFYUI_URL": ("comfyui_url", str),
         "COMIC_ENHANCER_COMFYUI_TIMEOUT": ("comfyui_timeout_seconds", int),
-        "COMIC_ENHANCER_COMFYUI_COBRA_ENABLED": (
-            "comfyui_cobra_enabled",
-            lambda value: value.lower() in {"1", "true", "yes", "on"},
-        ),
-        "COMIC_ENHANCER_WORKFLOW_COBRA": ("comfyui_workflow_cobra", Path),
-        "COMIC_ENHANCER_COBRA_REFERENCE_LIMIT": (
-            "cobra_reference_limit",
-            int,
-        ),
         "COMIC_ENHANCER_COMFYUI_FLUX2_ENABLED": (
             "comfyui_flux2_enabled",
             lambda value: value.lower() in {"1", "true", "yes", "on"},

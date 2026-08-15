@@ -24,11 +24,6 @@ class LoadedWorkflow:
 class WorkflowLoader(ABC):
     """定义完整 ComfyUI 工作流的加载与版本契约。"""
 
-    # 方法说明：判断工作流加载器是否支持 Cobra 档位。
-    @abstractmethod
-    def supports_cobra(self) -> bool:
-        raise NotImplementedError
-
     # 方法说明：判断工作流加载器是否支持 FLUX.2 档位。
     def supports_flux2(self) -> bool:
         return False
@@ -70,16 +65,12 @@ class PresetWorkflowLoader(WorkflowLoader):
         fast_workflow: Path,
         quality_workflow: Path,
         workflow_root: Path,
-        cobra_workflow: Path | None = None,
         flux2_workflow: Path | None = None,
         flux2_quant_workflow: Path | None = None,
     ):
         self.fast_workflow = fast_workflow.resolve()
         self.quality_workflow = quality_workflow.resolve()
         self.workflow_root = workflow_root.resolve()
-        self.cobra_workflow = (
-            cobra_workflow.resolve() if cobra_workflow is not None else None
-        )
         self.flux2_workflow = (
             flux2_workflow.resolve() if flux2_workflow is not None else None
         )
@@ -88,10 +79,6 @@ class PresetWorkflowLoader(WorkflowLoader):
             if flux2_quant_workflow is not None
             else None
         )
-
-    # 方法说明：判断工作流加载器是否支持 Cobra 档位。
-    def supports_cobra(self) -> bool:
-        return bool(self.cobra_workflow and self.cobra_workflow.is_file())
 
     # 方法说明：判断工作流加载器是否支持 FLUX.2 档位。
     def supports_flux2(self) -> bool:
@@ -158,23 +145,22 @@ class PresetWorkflowLoader(WorkflowLoader):
         reference_available: bool,
     ) -> tuple[Path, bool, bool, str]:
         mode = str(options.mode)
-        if mode == "cobra" and self.cobra_workflow is not None:
-            return self.cobra_workflow, False, False, "cobra"
-        if mode == "flux2" and self.flux2_workflow is not None:
+        if mode == "flux2":
+            if self.flux2_workflow is None:
+                raise RuntimeError("FLUX.2 工作流未配置")
             return self.flux2_workflow, False, False, "flux2-klein-4b"
-        if mode == "flux2_quant" and self.flux2_quant_workflow is not None:
+        if mode == "flux2_quant":
+            if self.flux2_quant_workflow is None:
+                raise RuntimeError("FLUX.2 量化工作流未配置")
             return (
                 self.flux2_quant_workflow,
                 False,
                 False,
                 "flux2-klein-4b-qwen3-fp8",
             )
-        fallback_mode = (
-            "quality" if mode in {"cobra", "flux2", "flux2_quant"} else mode
-        )
-        path = self.quality_workflow if fallback_mode == "quality" else self.fast_workflow
+        path = self.quality_workflow if mode == "quality" else self.fast_workflow
         if resolved.adapter is not None:
-            adapter_workflow = resolved.adapter.workflows.get(fallback_mode)
+            adapter_workflow = resolved.adapter.workflows.get(mode)
             if adapter_workflow:
                 return (
                     self._adapter_workflow_path(adapter_workflow),

@@ -15,7 +15,7 @@
   -> 任一步失败都保留原图
 ```
 
-浏览器插件只访问漫画增强 API。快速、质量、Cobra 和 FLUX.2 都是同一个 ComfyUI 容器中的预设工作流；放大档由 API 进程调用当前平台的 Real-CUGAN 可执行程序。后端只配置一个 `comfyui_url`，Real-CUGAN 使用本地资源目录而不是第二个推理地址。
+浏览器插件只访问漫画增强 API。快速、质量和 FLUX.2 都是同一个 ComfyUI 容器中的预设工作流；放大档由 API 进程调用当前平台的 Real-CUGAN 可执行程序。FLUX.2 输出还会进入 UPSCALE 二阶段。后端只配置一个 `comfyui_url`，Real-CUGAN 使用本地资源目录而不是第二个推理地址。
 
 ## 档位策略边界
 
@@ -23,10 +23,9 @@ API 先通过 `RoutedInferenceBackend` 区分平台原生档位与主推理后�
 
 - 快速档和质量档复用同一个预设策略实现，只替换完整工作流；
 - 放大档只在显式启用且当前平台的 Real-CUGAN 可执行文件、`models-se/up2x-no-denoise.param` 和 `.bin` 齐全时可用，不选择 LoRA 或角色参考图；
-- Cobra 独立管理最多 12 张参考图、worker 卸载和 Cobra 结构保护；
-- FLUX.2 独立管理最多 3 张参考图、切换时释放 Cobra，并使用旧基准的四步空 latent 工作流直接输出上色结果；API 不复用 SD1.5 的后端业务后处理。
+- FLUX.2 独立管理最多 3 张参考图，使用旧基准的四步空 latent 工作流输出上色结果，再交给 UPSCALE 策略执行二阶段 Real-CUGAN 放大；API 不复用 SD1.5 的后端业务后处理。
 
-策略之间不共享业务后处理函数。上传、ComfyUI 队列提交、轮询、结果下载、缓存和鉴权属于后端基础设施，可以复用。实验上色档失败时只能显式回退到质量策略，并由返回的 `model_profile` 标明实际执行模型；放大档失败直接保留原图，不进入任何上色工作流。
+策略之间不共享业务后处理函数。上传、ComfyUI 队列提交、轮询、结果下载、缓存和鉴权属于后端基础设施，可以复用。`flux2` 和 `flux2_quant` 在 FLUX.2 第一阶段或 UPSCALE 二阶段失败时都直接返回失败，不回退到质量策略；插件收到失败后继续保留原图。
 
 推理代码按以下边界组织：
 
@@ -45,12 +44,11 @@ service/comic_enhancer/inference/
     strategies/
       fast.py
       quality.py
-      cobra.py
       flux2.py
       flux2_quant.py
 ```
 
-五个 ComfyUI 档位各自实现可用性、缓存版本、适配器策略和处理逻辑。共享基类只定义窄契约，共享辅助只处理传输或无档位含义的算法；`ComfyUIBackend` 不再包含任何档位私有处理流程。旧的 `backends.py`、`workflows.py` 和 `realcugan.py` 仅保留兼容导出，不承载业务实现。
+四个 ComfyUI 档位各自实现可用性、缓存版本、适配器策略和处理逻辑。共享基类只定义窄契约，共享辅助只处理传输或无档位含义的算法；`ComfyUIBackend` 不再包含任何档位私有处理流程。FLUX.2 的二阶段放大由外层路由组合 UPSCALE 策略完成。旧的 `backends.py`、`workflows.py` 和 `realcugan.py` 仅保留兼容导出，不承载业务实现。
 
 外部数据与本地存储能力也按职责分包：
 
@@ -106,8 +104,10 @@ service/comic_enhancer/
   -> 原图与最多 3 张角色参考图进入 FLUX.2 ReferenceLatent 条件
   -> 0.85MP FLUX.2 四步空 latent 上色，直接输出未后处理结果
   -> 正向提示词锁定气泡、文字、标点、线条、网点和页面结构
-  -> 不执行原图深色像素回注、颜色混合或神经超分
-  -> API 按原图比例居中裁剪，并精确输出原图宽高各 2x
+  -> 不执行原图深色像素回注或颜色混合
+  -> API 按原图比例居中裁剪，并恢复为原图宽高各 2x
+  -> UPSCALE 策略使用 Real-CUGAN 再放大 2x
+  -> 最终精确输出原图宽高各 4x
 ```
 
 三页授权基准确认旧四步直出的平滑动漫平涂、人物层次和背景完整性优于源图 latent 方案。全页深色像素回注会把原稿网点和颗粒重新覆盖到上色图，Anime 6B 与通用 Real-ESRGAN 也会把网点强化为伪纹理，因此这些处理都不进入 FLUX.2 正式输出链路。文字保护当前依赖强化提示词，已通过三页冒烟验证，但在完成至少 100 页准入前不能视为绝对像素级保证。

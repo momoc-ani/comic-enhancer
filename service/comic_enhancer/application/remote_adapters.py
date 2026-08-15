@@ -26,11 +26,7 @@ class RemoteAdapterService:
             return
         required_workflow = (
             "quality"
-            if options.mode in {
-                ProcessingMode.COBRA,
-                ProcessingMode.FLUX2,
-                ProcessingMode.FLUX2_QUANT,
-            }
+            if options.mode in {ProcessingMode.FLUX2, ProcessingMode.FLUX2_QUANT}
             else str(options.mode)
         )
         for _, manifest in self.registry.candidates(
