@@ -11,7 +11,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from PIL import Image, ImageOps
 
-from ..networking import external_http_client
+from ..networking import external_http_client, resolve_external_proxy
 
 
 logger = logging.getLogger(__name__)
@@ -50,9 +50,11 @@ class ReferenceImageStore:
     def _download(self, url: str) -> bytes:
         current = url
         for _ in range(4):
-            self._validate_public_url(current)
+            decision = resolve_external_proxy(current)
+            self._validate_public_url(current, proxied=decision.proxied)
             with external_http_client(
                 current,
+                decision=decision,
                 timeout=self.timeout_seconds,
             ) as client:
                 with client.stream(
@@ -78,16 +80,29 @@ class ReferenceImageStore:
                     return bytes(chunks)
         raise ValueError("reference image has too many redirects")
 
-    # 方法说明：拒绝可能访问内网或本机的参考图地址。
+    # 方法说明：按代理路由拒绝可能访问内网或本机的参考图地址。
     @staticmethod
-    def _validate_public_url(url: str) -> None:
+    def _validate_public_url(url: str, *, proxied: bool = False) -> None:
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise ValueError("reference URL must use public HTTP(S)")
+        hostname = parsed.hostname.rstrip(".").casefold()
+        if hostname == "localhost" or hostname.endswith(".localhost"):
+            raise ValueError("reference URL resolves to a non-public address")
+        try:
+            literal_address = ipaddress.ip_address(hostname)
+        except ValueError:
+            literal_address = None
+        if literal_address is not None:
+            if not literal_address.is_global:
+                raise ValueError("reference URL resolves to a non-public address")
+            return
+        if proxied:
+            return
         try:
             addresses = {
                 ipaddress.ip_address(item[4][0])
-                for item in socket.getaddrinfo(parsed.hostname, parsed.port)
+                for item in socket.getaddrinfo(hostname, parsed.port)
             }
         except socket.gaierror as error:
             raise ValueError("reference host cannot be resolved") from error

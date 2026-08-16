@@ -9,6 +9,7 @@ from comic_enhancer.networking import (
     WindowsSystemProxyResolver,
     direct_http_client,
     external_http_client,
+    resolve_external_proxy,
 )
 
 
@@ -117,6 +118,34 @@ def test_windows_enabled_proxy_is_passed_to_httpx(monkeypatch):
     external_http_client(
         "https://api.example.com",
         resolver=resolver(WindowsProxyConfig(proxy="127.0.0.1:7890")),
+    )
+
+    assert captured == [
+        {"trust_env": False, "proxy": "http://127.0.0.1:7890"}
+    ]
+
+
+# 方法说明：验证已解析代理决策可供校验和客户端创建共同复用。
+def test_external_client_reuses_resolved_proxy_decision(monkeypatch):
+    captured = []
+    system = resolver(WindowsProxyConfig(proxy="127.0.0.1:7890"))
+    monkeypatch.setattr(
+        "comic_enhancer.networking.httpx.Client",
+        lambda **kwargs: FakeClient(
+            captured,
+            lambda _url: FakeResponse(),
+            **kwargs,
+        ),
+    )
+    decision = resolve_external_proxy("https://api.example.com", resolver=system)
+    system.config_reader = lambda: (_ for _ in ()).throw(
+        AssertionError("代理决策不应重复解析")
+    )
+
+    external_http_client(
+        "https://api.example.com",
+        resolver=system,
+        decision=decision,
     )
 
     assert captured == [

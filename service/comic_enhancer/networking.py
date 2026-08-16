@@ -181,24 +181,36 @@ class WindowsSystemProxyResolver:
         )
 
 
+# 方法说明：按目标 URL 返回并记录外部请求的系统代理决策。
+def resolve_external_proxy(
+    url: str,
+    *,
+    resolver: WindowsSystemProxyResolver | None = None,
+) -> ProxyDecision:
+    started = time.perf_counter()
+    active_resolver = resolver or _default_system_proxy_resolver
+    decision = active_resolver.resolve(url)
+    _log_proxy_decision(url, decision, started)
+    return decision
+
+
 # 方法说明：创建遵循 Windows 系统策略的外部 HTTP 客户端。
 def external_http_client(
     url: str,
     *,
     resolver: WindowsSystemProxyResolver | None = None,
+    decision: ProxyDecision | None = None,
     **kwargs: object,
 ) -> httpx.Client:
-    started = time.perf_counter()
     active_resolver = resolver or _default_system_proxy_resolver
-    decision = active_resolver.resolve(url)
+    active_decision = decision or resolve_external_proxy(url, resolver=active_resolver)
     options = dict(kwargs)
     if active_resolver.is_windows:
         options["trust_env"] = False
-        if decision.proxy_url:
-            options["proxy"] = decision.proxy_url
+        if active_decision.proxy_url:
+            options["proxy"] = active_decision.proxy_url
     else:
         options.setdefault("trust_env", True)
-    _log_proxy_decision(url, decision, started)
     return httpx.Client(**options)
 
 
