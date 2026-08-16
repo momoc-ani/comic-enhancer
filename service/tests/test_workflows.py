@@ -143,6 +143,38 @@ def test_shipped_character_lineart_workflow_has_source_structure_contract():
     )
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "flux2-klein-4b-character-no-reference-colorize.json",
+        "flux2-klein-4b-character-lineart-no-reference-colorize.json",
+    ],
+)
+# 方法说明：验证无参考工作流只接收原图并保留 FLUX.2 尺寸恢复采样链路。
+def test_shipped_character_no_reference_workflows_are_single_input(name):
+    workflow = json.loads(
+        (PROJECT_ROOT / "workflows" / name).read_text(encoding="utf-8")
+    )
+    titles = {
+        node.get("_meta", {}).get("title")
+        for node in workflow.values()
+        if isinstance(node, dict)
+    }
+
+    assert "INPUT_IMAGE" in titles
+    assert not any(title and title.startswith("REFERENCE_IMAGE_") for title in titles)
+    assert sum(node.get("class_type") == "LoadImage" for node in workflow.values()) == 1
+    assert sum(node.get("class_type") == "ReferenceLatent" for node in workflow.values()) == 2
+    assert workflow["27"]["class_type"] == "EmptyFlux2LatentImage"
+    assert workflow["28"]["class_type"] == "Flux2Scheduler"
+    assert workflow["28"]["inputs"]["steps"] == 4
+    assert workflow["29"]["inputs"]["positive"] == ["12", 0]
+    assert workflow["29"]["inputs"]["negative"] == ["13", 0]
+    assert workflow["35"]["class_type"] == "ImageScale"
+    assert workflow["36"]["inputs"]["image"] == ["1", 0]
+    assert "TEXT AND GRAPHICS LOCK" in workflow["8"]["inputs"]["text"]
+
+
 @pytest.mark.parametrize("mode", ["flux2", "flux2_quant"])
 # 方法说明：验证 FLUX.2 档位失败时直接报错且不执行质量档回退。
 def test_flux2_strategies_do_not_fallback_to_quality(tmp_path, monkeypatch, mode):

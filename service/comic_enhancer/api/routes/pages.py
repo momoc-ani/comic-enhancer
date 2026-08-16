@@ -21,7 +21,7 @@ REFERENCE_MODES = {
     ProcessingMode.FLUX2_CHARACTER,
     ProcessingMode.FLUX2_CHARACTER_LINEART,
 }
-REQUIRED_CHARACTER_REFERENCE_MODES = {
+OPTIONAL_CHARACTER_REFERENCE_MODES = {
     ProcessingMode.FLUX2_CHARACTER,
     ProcessingMode.FLUX2_CHARACTER_LINEART,
 }
@@ -130,40 +130,53 @@ async def process_page(
     if options.mode in REFERENCE_MODES:
         reference_started = time.perf_counter()
         reference_limit = context.settings.flux2_reference_limit
+        metadata_candidates = 0
+        entries = []
+        reference_fallback = False
         try:
             resolution = await asyncio.to_thread(context.metadata.resolve, work)
             entries = await context.reference_bank.build(resolution, work)
+            metadata_candidates = len(resolution.candidates)
         except Exception as error:
+            optional_references = options.mode in OPTIONAL_CHARACTER_REFERENCE_MODES
             log_operation(
                 logger,
-                logging.ERROR,
+                logging.WARNING if optional_references else logging.ERROR,
                 feature="页面角色参考图准备",
                 parameters={
                     "work_key": work.key,
                     "mode": str(options.mode),
                     "reference_limit": reference_limit,
                 },
-                result={"status": "failed", "error": type(error).__name__},
-                elapsed_ms=(time.perf_counter() - reference_started) * 1000,
-            )
-            log_operation(
-                logger,
-                logging.ERROR,
-                feature="页面处理接口返回",
-                parameters={
-                    "work_key": work.key,
-                    "mode": str(options.mode),
-                    "page_index": options.page_index,
-                },
                 result={
-                    "status": "failed",
-                    "status_code": 500,
-                    "stage": "character_references",
+                    "status": "fallback" if optional_references else "failed",
+                    "fallback": "no_reference" if optional_references else "",
                     "error": type(error).__name__,
                 },
-                elapsed_ms=(time.perf_counter() - request_started) * 1000,
+                elapsed_ms=(time.perf_counter() - reference_started) * 1000,
             )
-            raise
+            if optional_references:
+                entries = []
+                reference_fallback = True
+            else:
+                log_operation(
+                    logger,
+                    logging.ERROR,
+                    feature="页面处理接口返回",
+                    parameters={
+                        "work_key": work.key,
+                        "mode": str(options.mode),
+                        "page_index": options.page_index,
+                    },
+                    result={
+                        "status": "failed",
+                        "status_code": 500,
+                        "stage": "character_references",
+                        "error": type(error).__name__,
+                    },
+                    elapsed_ms=(time.perf_counter() - request_started) * 1000,
+                )
+                raise
         for entry, reference in entries[:reference_limit]:
             if entry.character_id in character_references:
                 continue
@@ -187,37 +200,19 @@ async def process_page(
                 "reference_limit": reference_limit,
             },
             result={
-                "status": "success",
-                "metadata_candidates": len(resolution.candidates),
+                "status": "fallback" if reference_fallback else "success",
+                "metadata_candidates": metadata_candidates,
                 "bank_entries": len(entries),
                 "selected_characters": len(character_reference_assets),
+                "fallback": (
+                    "no_reference"
+                    if options.mode in OPTIONAL_CHARACTER_REFERENCE_MODES
+                    and not character_reference_assets
+                    else ""
+                ),
             },
             elapsed_ms=(time.perf_counter() - reference_started) * 1000,
         )
-        if (
-            options.mode in REQUIRED_CHARACTER_REFERENCE_MODES
-            and not character_reference_assets
-        ):
-            detail = "当前作品暂无可用角色参考图"
-            log_operation(
-                logger,
-                logging.WARNING,
-                feature="页面处理接口返回",
-                parameters={
-                    "work_key": work.key,
-                    "mode": str(options.mode),
-                    "page_index": options.page_index,
-                },
-                result={
-                    "status": "rejected",
-                    "status_code": 409,
-                    "stage": "character_references",
-                    "detail": detail,
-                    "metadata_candidates": len(resolution.candidates),
-                },
-                elapsed_ms=(time.perf_counter() - request_started) * 1000,
-            )
-            raise HTTPException(status_code=409, detail=detail)
 
     try:
         result = await context.processor.process(

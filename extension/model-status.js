@@ -4,8 +4,11 @@ const PROFILE_LABELS = Object.freeze({
   "flux2-klein-4b": "FLUX.2 Klein 4B",
   "flux2-klein-4b-qwen3-fp8": "FLUX.2 Klein 4B · Qwen3 FP8 mixed",
   "flux2-klein-4b-qwen3-vl-character": "Qwen3-VL 角色分析 · FLUX.2 Klein 4B",
+  "flux2-klein-4b-character-no-reference": "FLUX.2 Klein 4B · 无参考降级",
   "flux2-klein-4b-qwen3-vl-character-lineart":
     "Qwen3-VL 角色分析 · FLUX.2 线稿保真",
+  "flux2-klein-4b-character-lineart-no-reference":
+    "FLUX.2 线稿保真 · 无参考降级",
   "flux2-klein-4b-qwen3-vl-character-lineart+realcugan-se-2x":
     "Qwen3-VL 角色分析 · FLUX.2 线稿保真 · Real-CUGAN 2x",
   passthrough: "开发透传后端",
@@ -67,6 +70,8 @@ export function describeModelTier(settings, execution, capabilities = null) {
   let actualTier = mode === "upscale" ? "原生超分" : "基础模型";
   if (execution.referenceApplied) {
     actualTier = "角色参考";
+  } else if (execution.modelProfile.includes("no-reference")) {
+    actualTier = "无参考";
   }
 
   const modelLabel =

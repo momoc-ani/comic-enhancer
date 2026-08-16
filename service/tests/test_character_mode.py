@@ -506,6 +506,226 @@ def test_flux2_character_lineart_strategy_uses_color_only_output(
         assert blue > green
 
 
+@pytest.mark.parametrize(
+    ("mode", "strategy_type", "workflow_name", "expected_profile"),
+    [
+        (
+            "flux2_character",
+            Flux2CharacterModeStrategy,
+            "flux2-klein-4b-character-no-reference-colorize.json",
+            "flux2-klein-4b-character-no-reference",
+        ),
+        (
+            "flux2_character_lineart",
+            Flux2CharacterLineartModeStrategy,
+            "flux2-klein-4b-character-lineart-no-reference-colorize.json",
+            "flux2-klein-4b-character-lineart-no-reference",
+        ),
+    ],
+)
+# 方法说明：验证无参考降级只上传原图且不调用角色档案分析。
+def test_character_modes_fallback_without_reference_images(
+    tmp_path,
+    monkeypatch,
+    mode,
+    strategy_type,
+    workflow_name,
+    expected_profile,
+):
+    reference_workflow = (
+        PROJECT_ROOT
+        / (
+            "workflows/flux2-klein-4b-qwen3-vl-character-colorize.json"
+            if mode == "flux2_character"
+            else "workflows/flux2-klein-4b-qwen3-vl-character-lineart-colorize.json"
+        )
+    )
+    no_reference_workflow = PROJECT_ROOT / "workflows" / workflow_name
+    library = StubCharacterLibrary(None)
+    loader = PresetWorkflowLoader(
+        fast_workflow=PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json",
+        quality_workflow=PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json",
+        flux2_character_workflow=(
+            reference_workflow if mode == "flux2_character" else None
+        ),
+        flux2_character_lineart_workflow=(
+            reference_workflow if mode == "flux2_character_lineart" else None
+        ),
+        flux2_character_no_reference_workflow=(
+            no_reference_workflow if mode == "flux2_character" else None
+        ),
+        flux2_character_lineart_no_reference_workflow=(
+            no_reference_workflow if mode == "flux2_character_lineart" else None
+        ),
+    )
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=loader,
+        flux2_character_enabled=mode == "flux2_character",
+        flux2_character_workflow=(
+            reference_workflow if mode == "flux2_character" else None
+        ),
+        flux2_character_no_reference_workflow=(
+            no_reference_workflow if mode == "flux2_character" else None
+        ),
+        flux2_character_lineart_enabled=mode == "flux2_character_lineart",
+        flux2_character_lineart_workflow=(
+            reference_workflow if mode == "flux2_character_lineart" else None
+        ),
+        flux2_character_lineart_no_reference_workflow=(
+            no_reference_workflow if mode == "flux2_character_lineart" else None
+        ),
+        character_library=library,
+    )
+    strategy = backend.mode_strategy(mode)
+    assert isinstance(strategy, strategy_type)
+    monkeypatch.setattr(strategy, "available", lambda: True)
+    captured = {}
+
+    # 方法说明：模拟 ComfyUI 执行并捕获实际输入与动态绑定结果。
+    def run_no_reference(
+        workflow_template,
+        *,
+        input_images,
+        output_prefix,
+        prepare_workflow,
+    ):
+        workflow_copy = json.loads(json.dumps(workflow_template))
+        prepare_workflow(workflow_copy)
+        captured["workflow"] = workflow_copy
+        captured["inputs"] = input_images
+        size = (8, 12) if mode == "flux2_character_lineart" else (20, 20)
+        return Image.new("RGB", size, (80, 120, 200))
+
+    monkeypatch.setattr(backend.transport, "run", run_no_reference)
+    source = png_bytes("white", (8, 12))
+    assets = InferenceAssets(
+        image_bytes=source,
+        work_key="copy_manga:no-reference",
+    )
+    options = ProcessOptions(mode=mode)
+    revision = backend.cache_revision(options, assets)
+    outcome = backend.process(assets, tmp_path / f"{mode}.webp", options)
+
+    assert "no-reference" in revision
+    assert outcome.model_profile == expected_profile
+    assert outcome.reference_applied is False
+    assert captured["inputs"] == {"INPUT_IMAGE": source}
+    assert library.prepare_calls == 0
+
+
+# 方法说明：验证 Qwen sidecar 不可用时会缓存无参考方案而不重复分析。
+def test_character_mode_caches_qwen_unavailable_fallback(tmp_path, monkeypatch):
+    workflow = PROJECT_ROOT / "workflows" / "flux2-klein-4b-qwen3-vl-character-colorize.json"
+    no_reference_workflow = PROJECT_ROOT / "workflows" / "flux2-klein-4b-character-no-reference-colorize.json"
+
+    class OfflineLibrary(StubCharacterLibrary):
+        # 方法说明：模拟 Qwen sidecar 不可达。
+        def ready(self):
+            return False
+
+    library = OfflineLibrary(None)
+    loader = PresetWorkflowLoader(
+        fast_workflow=PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json",
+        quality_workflow=PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json",
+        flux2_character_workflow=workflow,
+        flux2_character_no_reference_workflow=no_reference_workflow,
+    )
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=loader,
+        flux2_character_enabled=True,
+        flux2_character_workflow=workflow,
+        flux2_character_no_reference_workflow=no_reference_workflow,
+        character_library=library,
+    )
+    strategy = backend.mode_strategy("flux2_character")
+    monkeypatch.setattr(strategy, "available", lambda: True)
+    monkeypatch.setattr(
+        backend.transport,
+        "run",
+        lambda workflow, **kwargs: Image.new("RGB", (20, 20), (80, 120, 200)),
+    )
+    reference = CharacterReferenceAsset(
+        character_id="work:character-a",
+        display_name="角色 A",
+        image_bytes=png_bytes((210, 30, 50), (8, 12)),
+    )
+    assets = InferenceAssets(
+        image_bytes=png_bytes("white", (8, 12)),
+        work_key="copy_manga:offline-qwen",
+        character_reference_assets=(reference,),
+    )
+    options = ProcessOptions(mode="flux2_character")
+    first_revision = backend.cache_revision(options, assets)
+    outcome = backend.process(assets, tmp_path / "offline.webp", options)
+    second_revision = backend.cache_revision(options, assets)
+
+    assert "qwen_sidecar_unavailable" in first_revision
+    assert first_revision == second_revision
+    assert outcome.reference_applied is False
+    assert "no-reference" in outcome.model_profile
+    assert library.prepare_calls == 0
+
+
+# 方法说明：验证角色档案分析失败后同一执行计划不会再次调用 Qwen。
+def test_character_mode_caches_qwen_analysis_failure(tmp_path, monkeypatch):
+    workflow = PROJECT_ROOT / "workflows" / "flux2-klein-4b-qwen3-vl-character-colorize.json"
+    no_reference_workflow = PROJECT_ROOT / "workflows" / "flux2-klein-4b-character-no-reference-colorize.json"
+
+    class FailingLibrary(StubCharacterLibrary):
+        # 方法说明：模拟 Qwen 角色档案分析请求失败。
+        def prepare_prompt_context(self, **_kwargs):
+            self.prepare_calls += 1
+            raise RuntimeError("qwen analysis failed")
+
+    library = FailingLibrary(None)
+    loader = PresetWorkflowLoader(
+        fast_workflow=PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json",
+        quality_workflow=PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json",
+        flux2_character_workflow=workflow,
+        flux2_character_no_reference_workflow=no_reference_workflow,
+    )
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=loader,
+        flux2_character_enabled=True,
+        flux2_character_workflow=workflow,
+        flux2_character_no_reference_workflow=no_reference_workflow,
+        character_library=library,
+    )
+    strategy = backend.mode_strategy("flux2_character")
+    monkeypatch.setattr(strategy, "available", lambda: True)
+    monkeypatch.setattr(
+        backend.transport,
+        "run",
+        lambda workflow, **kwargs: Image.new("RGB", (20, 20), (80, 120, 200)),
+    )
+    reference = CharacterReferenceAsset(
+        character_id="work:character-a",
+        display_name="角色 A",
+        image_bytes=png_bytes((210, 30, 50), (8, 12)),
+    )
+    assets = InferenceAssets(
+        image_bytes=png_bytes("white", (8, 12)),
+        work_key="copy_manga:qwen-analysis-failed",
+        character_reference_assets=(reference,),
+    )
+    options = ProcessOptions(mode="flux2_character")
+    revision = backend.cache_revision(options, assets)
+    outcome = backend.process(assets, tmp_path / "failed-analysis.webp", options)
+
+    assert "qwen_analysis_failed" in revision
+    assert outcome.reference_applied is False
+    assert library.prepare_calls == 1
+
+
 # 方法说明：验证角色工作流使用三张参考图、空 latent 和完整四步采样。
 def test_shipped_character_workflow_uses_three_references_and_empty_latent():
     path = PROJECT_ROOT / "workflows" / "flux2-klein-4b-qwen3-vl-character-colorize.json"

@@ -38,6 +38,18 @@ class WorkflowLoader(ABC):
     def supports_flux2_character_lineart(self) -> bool:
         return False
 
+    # 方法说明：判断角色档位的无参考 FLUX.2 工作流是否存在。
+    def supports_flux2_no_reference(self, *, lineart: bool = False) -> bool:
+        return False
+
+    # 方法说明：加载角色档位对应的无参考 FLUX.2 工作流。
+    def load_flux2_no_reference(self, *, lineart: bool = False) -> LoadedWorkflow:
+        raise RuntimeError("角色无参考 FLUX.2 工作流未配置")
+
+    # 方法说明：计算角色档位无参考 FLUX.2 工作流的稳定版本标识。
+    def flux2_no_reference_revision(self, *, lineart: bool = False) -> str:
+        return "missing:flux2-no-reference"
+
     # 方法说明：判断工作流加载器是否支持 Anima 漫画上色实验档。
     def supports_anima_colorize(self) -> bool:
         return False
@@ -66,6 +78,8 @@ class PresetWorkflowLoader(WorkflowLoader):
         flux2_quant_workflow: Path | None = None,
         flux2_character_workflow: Path | None = None,
         flux2_character_lineart_workflow: Path | None = None,
+        flux2_character_no_reference_workflow: Path | None = None,
+        flux2_character_lineart_no_reference_workflow: Path | None = None,
         anima_colorize_workflow: Path | None = None,
     ):
         self.fast_workflow = fast_workflow.resolve()
@@ -86,6 +100,16 @@ class PresetWorkflowLoader(WorkflowLoader):
         self.flux2_character_lineart_workflow = (
             flux2_character_lineart_workflow.resolve()
             if flux2_character_lineart_workflow is not None
+            else None
+        )
+        self.flux2_character_no_reference_workflow = (
+            flux2_character_no_reference_workflow.resolve()
+            if flux2_character_no_reference_workflow is not None
+            else None
+        )
+        self.flux2_character_lineart_no_reference_workflow = (
+            flux2_character_lineart_no_reference_workflow.resolve()
+            if flux2_character_lineart_no_reference_workflow is not None
             else None
         )
         self.anima_colorize_workflow = (
@@ -118,6 +142,25 @@ class PresetWorkflowLoader(WorkflowLoader):
             and self.flux2_character_lineart_workflow.is_file()
         )
 
+    # 方法说明：判断指定角色档位的无参考 FLUX.2 工作流文件是否存在。
+    def supports_flux2_no_reference(self, *, lineart: bool = False) -> bool:
+        path, _ = self._select_flux2_no_reference(lineart=lineart)
+        return bool(path and path.is_file())
+
+    # 方法说明：加载指定角色档位的无参考 FLUX.2 工作流。
+    def load_flux2_no_reference(self, *, lineart: bool = False) -> LoadedWorkflow:
+        path, model_profile = self._select_flux2_no_reference(lineart=lineart)
+        if path is None:
+            raise RuntimeError("角色无参考 FLUX.2 工作流未配置")
+        return self._load_path(path, model_profile)
+
+    # 方法说明：计算指定角色档位无参考 FLUX.2 工作流的稳定版本标识。
+    def flux2_no_reference_revision(self, *, lineart: bool = False) -> str:
+        path, _ = self._select_flux2_no_reference(lineart=lineart)
+        if path is None or not path.is_file():
+            return f"missing:{path}"
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
     # 方法说明：判断 Anima 漫画上色完整工作流文件是否存在。
     def supports_anima_colorize(self) -> bool:
         return bool(
@@ -128,6 +171,11 @@ class PresetWorkflowLoader(WorkflowLoader):
     # 方法说明：加载指定处理档位对应的完整工作流。
     def load(self, options: ProcessOptions) -> LoadedWorkflow:
         path, model_profile = self._select(options)
+        return self._load_path(path, model_profile)
+
+    # 方法说明：读取并校验单个完整 API 格式 ComfyUI 工作流文件。
+    @staticmethod
+    def _load_path(path: Path, model_profile: str) -> LoadedWorkflow:
         if not path.is_file():
             raise RuntimeError(f"ComfyUI workflow not found: {path}")
         try:
@@ -186,3 +234,19 @@ class PresetWorkflowLoader(WorkflowLoader):
             )
         path = self.quality_workflow if mode == "quality" else self.fast_workflow
         return path, "sd15-colorize"
+
+    # 方法说明：选择角色稳定或线稿保真档的无参考工作流与模型标识。
+    def _select_flux2_no_reference(
+        self,
+        *,
+        lineart: bool,
+    ) -> tuple[Path | None, str]:
+        if lineart:
+            return (
+                self.flux2_character_lineart_no_reference_workflow,
+                "flux2-klein-4b-character-lineart-no-reference",
+            )
+        return (
+            self.flux2_character_no_reference_workflow,
+            "flux2-klein-4b-character-no-reference",
+        )

@@ -10,6 +10,7 @@ import pytest
 
 from comic_enhancer.config import Settings
 from comic_enhancer.config import load_settings
+from comic_enhancer.inference import InferenceOutcome
 from comic_enhancer.main import (
     create_app,
     prioritized_metadata_candidates,
@@ -171,8 +172,8 @@ def test_flux2_character_lineart_mode_is_valid():
         ("flux2_character_lineart", "flux2_character_lineart_profile_ready"),
     ],
 )
-# 方法说明：验证角色档没有参考图时返回可恢复的 409 而不是内部错误。
-def test_character_modes_without_references_return_409(
+# 方法说明：验证角色档没有参考图时继续走无参考处理，而不是返回 409。
+def test_character_modes_without_references_use_no_reference_fallback(
     tmp_path,
     monkeypatch,
     mode,
@@ -189,6 +190,31 @@ def test_character_modes_without_references_return_409(
         ready_method,
         lambda: True,
     )
+    monkeypatch.setattr(
+        app.state.processor.backend,
+        "cache_revision",
+        lambda *_args, **_kwargs: "no-reference-test-v1",
+    )
+
+    # 方法说明：模拟无参考策略输出，避免 API 单测依赖本机 Real-CUGAN 资源。
+    def process_without_references(_assets, output_path, _options):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(png_bytes())
+        return InferenceOutcome(
+            reference_applied=False,
+            processed_panels=0,
+            model_profile=(
+                "flux2-klein-4b-character-lineart-no-reference"
+                if mode == "flux2_character_lineart"
+                else "flux2-klein-4b-character-no-reference"
+            ),
+        )
+
+    monkeypatch.setattr(
+        app.state.processor.backend,
+        "process",
+        process_without_references,
+    )
     client = TestClient(app)
 
     response = client.post(
@@ -204,8 +230,9 @@ def test_character_modes_without_references_return_409(
         files={"image": ("page.png", png_bytes(), "image/png")},
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "当前作品暂无可用角色参考图"
+    assert response.status_code == 200
+    assert response.json()["reference_applied"] is False
+    assert "no-reference" in response.json()["model_profile"]
 
 
 # 方法说明：验证能力接口独立声明 Qwen3-VL 角色稳定档。

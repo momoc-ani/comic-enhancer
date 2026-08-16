@@ -275,6 +275,54 @@ def test_aggregator_uses_work_alias_to_resolve_characters(tmp_path: Path):
     assert len(result.selected.characters) == 1
 
 
+# 方法说明：验证篇章长标题会按篇章和母系列顺序派生查询别名。
+def test_aggregator_derives_chapter_and_parent_titles(tmp_path: Path):
+    class AliasProvider:
+        name = "bangumi"
+
+        # 方法说明：记录查询标题并只对母系列标题返回角色数据。
+        def __init__(self):
+            self.queries = []
+
+        # 方法说明：模拟篇章标题无结果、母系列标题命中角色的提供方。
+        def search(self, item):
+            self.queries.append(item.title)
+            if item.title == "Re：從零開始的異世界生活":
+                return WorkMetadata(
+                    provider=self.name,
+                    provider_id="rezero-parent",
+                    title=item.title,
+                    confidence=0.8,
+                    characters=[
+                        CharacterReference(
+                            provider=self.name,
+                            provider_id="emilia",
+                            name="艾米莉亚",
+                            image_url="https://example.com/emilia.jpg",
+                        )
+                    ],
+                )
+            return WorkMetadata(
+                provider=self.name,
+                provider_id="empty",
+                title=item.title,
+                confidence=0.45,
+            )
+
+    provider = AliasProvider()
+    result = MetadataAggregator(tmp_path, providers=[provider]).resolve(
+        work(title="Re：從零開始的異世界生活 第四章 聖域與強欲的魔女")
+    )
+
+    assert provider.queries[:3] == [
+        "Re：從零開始的異世界生活 第四章 聖域與強欲的魔女",
+        "Re：從零開始的異世界生活 第四章",
+        "Re：從零開始的異世界生活",
+    ]
+    assert result.selected is not None
+    assert result.selected.provider_id == "rezero-parent"
+
+
 # 方法说明：验证达到置信度门槛后按提供方顺序选择候选。
 def test_aggregator_prefers_provider_order_after_confidence_threshold(tmp_path: Path):
     class Provider:

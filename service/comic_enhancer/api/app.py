@@ -91,8 +91,14 @@ def _create_backend(settings: Settings) -> InferenceBackend:
             flux2_workflow=settings.comfyui_workflow_flux2,
             flux2_quant_workflow=settings.comfyui_workflow_flux2_quant,
             flux2_character_workflow=settings.comfyui_workflow_flux2_character,
+            flux2_character_no_reference_workflow=(
+                settings.comfyui_workflow_flux2_character_no_reference
+            ),
             flux2_character_lineart_workflow=(
                 settings.comfyui_workflow_flux2_character_lineart
+            ),
+            flux2_character_lineart_no_reference_workflow=(
+                settings.comfyui_workflow_flux2_character_lineart_no_reference
             ),
             anima_colorize_workflow=settings.comfyui_workflow_anima_colorize,
         )
@@ -106,6 +112,9 @@ def _create_backend(settings: Settings) -> InferenceBackend:
                 "flux2_quant_workflow": settings.comfyui_workflow_flux2_quant,
                 "flux2_character_enabled": settings.comfyui_flux2_character_enabled,
                 "flux2_character_workflow": settings.comfyui_workflow_flux2_character,
+                "flux2_character_no_reference_workflow": (
+                    settings.comfyui_workflow_flux2_character_no_reference
+                ),
                 "flux2_character_native_resolution": (
                     settings.comfyui_flux2_character_native_resolution
                 ),
@@ -114,6 +123,9 @@ def _create_backend(settings: Settings) -> InferenceBackend:
                 ),
                 "flux2_character_lineart_workflow": (
                     settings.comfyui_workflow_flux2_character_lineart
+                ),
+                "flux2_character_lineart_no_reference_workflow": (
+                    settings.comfyui_workflow_flux2_character_lineart_no_reference
                 ),
                 "anima_colorize_enabled": settings.comfyui_anima_colorize_enabled,
                 "anima_colorize_workflow": (

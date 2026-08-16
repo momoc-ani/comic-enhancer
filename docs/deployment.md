@@ -108,9 +108,11 @@ API 主机 `.env` 使用与 key 文件相同的值，并显式启用新档位：
 ```text
 COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_ENABLED=true
 COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER=/app/workflows/flux2-klein-4b-qwen3-vl-character-colorize.json
+COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_NO_REFERENCE=/app/workflows/flux2-klein-4b-character-no-reference-colorize.json
 COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_NATIVE_RESOLUTION=false
 COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_LINEART_ENABLED=true
 COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_LINEART=/app/workflows/flux2-klein-4b-qwen3-vl-character-lineart-colorize.json
+COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_LINEART_NO_REFERENCE=/app/workflows/flux2-klein-4b-character-lineart-no-reference-colorize.json
 COMIC_ENHANCER_QWEN_VL_URL=http://<AMD主机内网IP>:8080
 COMIC_ENHANCER_QWEN_VL_API_KEY=<sidecar key>
 COMIC_ENHANCER_QWEN_VL_MODEL_ID=qwen3-vl-4b-instruct-q8_0
@@ -121,7 +123,7 @@ COMIC_ENHANCER_QWEN_VL_DEPLOYMENT_REVISION=q8_0-054721f4-mmproj-f16-256f3a43
 
 开启 `COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_LINEART_ENABLED=true` 后，插件会显示独立的“角色线稿保真模式”。该档位保持 `0.85MP`、4 steps 和三张角色参考图，ComfyUI 恢复原图尺寸，服务端保留原图高频线稿/网点并融合 FLUX.2 低频明度和色度，最后由 Real-CUGAN 2x 输出。该档位不使用 `ComfyUI 原图直出`，并且不会改变 `flux2_character` 的默认行为。
 
-能力接口只有在独立工作流存在、ComfyUI 可达、角色库可用且 Real-CUGAN 二阶段就绪时，才分别返回 `flux2_character_available=true` 或 `flux2_character_lineart_available=true`。任何分析、JSON 校验、角色计划、FLUX.2、结构保护或放大阶段失败都直接让对应档位失败，插件继续显示原图；不会回退到 `flux2`、`quality` 或其他档位。
+能力接口在角色参考或无参考工作流至少一条存在、ComfyUI 可达且 Real-CUGAN 二阶段就绪时，分别返回 `flux2_character_available=true` 或 `flux2_character_lineart_available=true`。没有角色图、角色图元数据失败、Qwen3-VL 不可用或角色档案分析失败时，服务改用对应的单输入无参考 FLUX.2 工作流；该工作流不上传角色图、不注入角色调色板，并返回 `reference_applied=false` 及带 `no-reference` 的真实 `model_profile`。FLUX.2、结构保护或放大阶段失败仍直接失败，插件继续显示原图；不会回退到 SD1.5、`quality` 或其他档位。
 
 替换其他 ComfyUI 工作流时，导出 API 格式 JSON，并在 `settings.json` 或环境变量中修改对应工作流路径。单输入工作流必须只有一个 `LoadImage`；多输入工作流使用 `_meta.title` 声明 `INPUT_IMAGE`、`REFERENCE_IMAGE` 等角色；所有工作流至少有一个 `SaveImage`，其余模型和参数必须全部预设。服务不依赖固定节点编号。
 

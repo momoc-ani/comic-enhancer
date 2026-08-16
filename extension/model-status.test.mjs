@@ -126,3 +126,24 @@ test("shows character lineart mode availability and execution", () => {
   assert.equal(actual.title, "角色线稿保真档 · 角色参考");
   assert.match(actual.detail, /FLUX\.2 线稿保真 · Real-CUGAN 2x/);
 });
+
+// 方法说明：验证角色参考不可用时显示真实的无参考模型档位。
+test("shows character no-reference fallback profile", () => {
+  const characterSettings = {
+    ...settings,
+    profile: "remote-flux2_character",
+    mode: "flux2_character",
+  };
+  const execution = buildModelExecution(
+    {
+      model_profile: "flux2-klein-4b-character-no-reference",
+      reference_applied: false,
+      elapsed_ms: 1200,
+    },
+    characterSettings,
+  );
+  const actual = describeModelTier(characterSettings, execution);
+
+  assert.equal(actual.title, "角色稳定档 · 无参考");
+  assert.match(actual.detail, /FLUX\.2 Klein 4B · 无参考降级/);
+});

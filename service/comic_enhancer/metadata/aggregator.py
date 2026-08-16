@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
+import re
 import time
 from typing import Any
 
@@ -25,8 +26,13 @@ from .providers import (
 
 
 logger = logging.getLogger(__name__)
-METADATA_CACHE_REVISION = "metadata-alias-search-v2"
-MAX_SEARCH_TITLES = 2
+METADATA_CACHE_REVISION = "metadata-derived-alias-search-v3"
+MAX_SEARCH_TITLES = 6
+
+_ARC_TITLE_PATTERN = re.compile(
+    r"^(?P<series>.+?)\s+(?P<arc>第\s*[0-9一二三四五六七八九十百千零〇两兩]+\s*"
+    r"(?:章|篇|部|季|卷|幕|期))(?:\s+.+)?$"
+)
 
 
 class MetadataAggregator:
@@ -150,11 +156,21 @@ class MetadataAggregator:
             seen.add(key)
             aliases.append(normalized)
         aliases.sort(key=lambda value: abs(len(value) - len(canonical)))
-        titles = [*aliases[:1], canonical]
+        titles = [*aliases[:2], canonical]
+        for title in [canonical, *aliases]:
+            titles.extend(_derive_title_aliases(title))
+        unique_titles: list[str] = []
+        seen_titles: set[str] = set()
+        for title in titles:
+            normalized = title.strip()
+            key = normalized.casefold()
+            if not normalized or key in seen_titles:
+                continue
+            seen_titles.add(key)
+            unique_titles.append(normalized)
         return [
             work.model_copy(update={"title": title})
-            for title in titles[:MAX_SEARCH_TITLES]
-            if title
+            for title in unique_titles[:MAX_SEARCH_TITLES]
         ] or [work]
 
     # 方法说明：计算单提供方多个标题结果的稳定优先级。
@@ -250,3 +266,14 @@ class MetadataAggregator:
             encoding="utf-8",
         )
         temporary.replace(path)
+
+
+# 方法说明：从带篇章编号的长标题生成保留篇章和母系列两级查询别名。
+def _derive_title_aliases(title: str) -> list[str]:
+    normalized = re.sub(r"\s+", " ", title).strip()
+    match = _ARC_TITLE_PATTERN.match(normalized)
+    if match is None:
+        return []
+    series = match.group("series").strip()
+    arc = re.sub(r"\s+", "", match.group("arc"))
+    return [f"{series} {arc}", series]
