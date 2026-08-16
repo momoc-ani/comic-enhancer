@@ -1,16 +1,5 @@
 # 项目协作说明
 
-<!-- fastctx:begin -->
-## 本地文件检查
-
-本地文件读取、搜索和查找优先使用 FastCtx MCP 工具：
-`mcp__fastctx__read`、`mcp__fastctx__grep`、`mcp__fastctx__glob`。调用时传入绝对路径；
-若结果最后一行是 `Partial`，必须严格按提示参数继续读取。FastCtx 不可用时再回退到
-`rg`、Git 只读命令或其他本地工具。
-
-机械式跨文件替换优先使用 `mcp__fastctx__replace` 并先执行 dry-run；语义修改、生成内容和
-小范围编辑使用 `apply_patch`。
-<!-- fastctx:end -->
 
 ## 重要说明
 
@@ -126,6 +115,7 @@ docker compose -f compose.nvidia-remote.yaml up -d --build
   或受保护内容。
 - 不要提交生成物、运行时缓存、下载中的临时文件、模型权重或测试数据副本。
 - 重要架构、模型、许可证、安全边界和发布决策必须由用户审核。
+- 必须要要写注释，每个方法都要说明作用！
 
 ## 已知注意事项
 
@@ -152,3 +142,8 @@ docker compose -f compose.nvidia-remote.yaml up -d --build
 - `docs/model-roadmap.md`
 - `docs/lora-training-input.md`
 - `benchmarks/README.md`
+
+
+## 日志打印规则
+- 只需要关键点打印，不用打印太多的
+- 打印格式，功能 + 参数 + 结果 + 【关键功能需要】耗时

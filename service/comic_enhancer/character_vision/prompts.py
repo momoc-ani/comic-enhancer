@@ -5,7 +5,7 @@ import json
 
 PROFILE_TEMPLATE_REVISION = "qwen-profile-regions-v3-complete-character-palette"
 PAGE_TEMPLATE_REVISION = "qwen-page-character-grounding-v5-tight-regions"
-PROMPT_PLANNER_REVISION = "flux2-character-prompts-v5-pixel-lock"
+PROMPT_PLANNER_REVISION = "flux2-character-prompts-v6-complete-scene-color"
 
 
 # 方法说明：构造只提取角色稳定特征和采色区域的提示词。
@@ -214,8 +214,11 @@ def build_static_character_guide(characters: list[dict[str, object]]) -> str:
         blocks.append(" ".join(block))
     guide = " ".join(blocks) or "No static character palette is available."
     return (
-        "CHARACTER PALETTE-ONLY GUIDE. Change chroma only inside confidently matching regions that already "
-        "exist in the source manga page. Apply available colors to matching facial details, garment layers, "
+        "CHARACTER PALETTE-ONLY GUIDE. The matching restrictions below apply only when copying a named "
+        "character palette; they must not leave backgrounds, architecture, furniture, floors, walls, "
+        "vegetation, sky, objects, or unmatched people grayscale. Fully color every existing non-text source "
+        "region with coherent anime colors. For named characters, change chroma only inside confidently "
+        "matching regions that already exist in the source manga page. Apply available colors to matching facial details, garment layers, "
         "legwear, footwear, accessories, jewelry, and held props only when those exact parts are visibly "
         "present. This guide must never add, remove, replace, reshape, reconstruct, complete, or move "
         "any hairstyle, eye, face, garment, stocking, leg feature, shoe, armor, accessory, pose, line, "

@@ -22,7 +22,7 @@ from .flux2_base import FLUX2_OUTPUT_SCALE
 
 
 FLUX2_CHARACTER_PROCESSING_REVISION = (
-    "flux2-character-full-chroma-180-source-latent-four-step-v10"
+    "flux2-character-full-chroma-180-empty-latent-three-reference-v11"
 )
 
 
@@ -150,7 +150,18 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 for character in context.characters
             ]
         )
-        input_images = {"INPUT_IMAGE": assets.image_bytes}
+        references = [
+            character.reference.image_bytes for character in context.characters
+        ]
+        input_images = {
+            "INPUT_IMAGE": assets.image_bytes,
+            **{
+                f"REFERENCE_IMAGE_{slot}": references[
+                    min(slot - 1, len(references) - 1)
+                ]
+                for slot in range(1, 4)
+            },
+        }
         try:
             generated = self.transport.run(
                 loaded_workflow.prompt,
@@ -201,7 +212,8 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 "status": "success",
                 "profiles": len(context.characters),
                 "palette_profiles": len(context.characters),
-                "reference_images_uploaded": 0,
+                "reference_profiles": len(references),
+                "reference_images_uploaded": 3,
                 "processed_panels": outcome.processed_panels,
                 "model_profile": outcome.model_profile,
             },

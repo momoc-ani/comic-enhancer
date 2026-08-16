@@ -98,15 +98,26 @@
       });
     }
 
-    // 方法说明：调度当前视口附近的漫画页预取。
+    // 方法说明：只显示当前视口页，并将后续页放入后台预热队列。
     prefetchAroundViewport(images) {
       const firstBelowViewport = images.findIndex(
         (image) => image.getBoundingClientRect().bottom >= 0,
       );
       const start = firstBelowViewport < 0 ? 0 : firstBelowViewport;
       const count = Math.max(0, Number(settings.prefetchPages) || 0);
-      images.slice(start, start + count + 1).forEach((image, offset) => {
-        this.enqueue(image, offset);
+      const currentImage = images[start];
+      if (currentImage) this.enqueue(currentImage, 0);
+      images.slice(start + 1, start + count + 1).forEach((image) => {
+        const entry = entriesByImage.get(image);
+        const imageUrl = this.adapter.imageUrl(image);
+        if (!entry || !imageUrl) return;
+        this.enqueuePrefetch(
+          imageUrl,
+          entry.index,
+          this.chapter,
+          currentChapterPrefetchPriority,
+          "current",
+        );
       });
       this.releaseDistantResults(images, start, count);
     }
@@ -188,6 +199,11 @@
         settingsVersion,
       });
       pending.sort(compareTasks);
+      logScheduler(
+        "页面任务入队",
+        { 页码: entry.index + 1, 类型: "显示", 优先级: priority },
+        { 待处理数: pending.length },
+      );
       this.drain();
     }
 
@@ -208,6 +224,11 @@
         settingsVersion,
       });
       pending.sort(compareTasks);
+      logScheduler(
+        "页面任务入队",
+        { 页码: index + 1, 类型: "预热", 优先级: priority },
+        { 待处理数: pending.length },
+      );
       this.drain();
     }
 
@@ -234,8 +255,14 @@
     async processDisplayTask(task) {
       const entry = entriesByImage.get(task.image);
       if (!entry || entry.state !== "queued") return;
+      const startedAt = Date.now();
       entry.state = "processing";
       markState(task.image, "processing");
+      logScheduler(
+        "页面处理开始",
+        { 页码: task.index + 1, 类型: "显示" },
+        { 待处理数: pending.length },
+      );
       try {
         const response = await this.requestProcessing(task, false);
         if (task.settingsVersion !== settingsVersion) return;
@@ -244,9 +271,21 @@
         await showResult(task.image, response.result);
         entry.state = "completed";
         warmedUrls.add(task.imageUrl);
+        logScheduler(
+          "页面处理完成",
+          { 页码: task.index + 1, 类型: "显示" },
+          { 状态: "已显示" },
+          Date.now() - startedAt,
+        );
       } catch (error) {
         if (task.settingsVersion !== settingsVersion) return;
         entry.state = "failed";
+        logScheduler(
+          "页面处理失败",
+          { 页码: task.index + 1, 类型: "显示" },
+          { 错误: error instanceof Error ? error.message : String(error) },
+          Date.now() - startedAt,
+        );
         markState(
           task.image,
           "failed",
@@ -257,12 +296,27 @@
 
     // 方法说明：处理缓存预热任务且不向当前页面下载增强结果。
     async processPrefetchTask(task) {
+      const startedAt = Date.now();
       try {
         if (warmedUrls.has(task.imageUrl)) return;
         await this.requestProcessing(task, true);
-        if (task.settingsVersion === settingsVersion) warmedUrls.add(task.imageUrl);
+        if (task.settingsVersion === settingsVersion) {
+          warmedUrls.add(task.imageUrl);
+          logScheduler(
+            "页面预热完成",
+            { 页码: task.index + 1, 话别: task.chapterScope },
+            { 状态: "服务端已缓存" },
+            Date.now() - startedAt,
+          );
+        }
       } catch (error) {
         if (task.settingsVersion !== settingsVersion) return;
+        logScheduler(
+          "页面预热失败",
+          { 页码: task.index + 1, 话别: task.chapterScope },
+          { 错误: error instanceof Error ? error.message : String(error) },
+          Date.now() - startedAt,
+        );
         console.warn(
           `Comic Enhancer ${task.chapterScope === "next" ? "下一话" : "当前话"}` +
             `第 ${task.index + 1} 页预生成失败:`,
@@ -299,6 +353,14 @@
       left.priority - right.priority ||
       left.index - right.index ||
       left.sequence - right.sequence
+    );
+  }
+
+  // 方法说明：输出不包含图片地址和令牌的调度诊断日志。
+  function logScheduler(feature, parameters, result, elapsedMs) {
+    const duration = Number.isFinite(elapsedMs) ? ` 耗时_ms=${Math.max(0, elapsedMs)}` : "";
+    console.info(
+      `功能=${feature} 参数=${JSON.stringify(parameters)} 结果=${JSON.stringify(result)}${duration}`,
     );
   }
 

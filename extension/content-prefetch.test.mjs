@@ -92,6 +92,7 @@ test("prefetches the current CopyManga chapter in page order", async () => {
     new FakeImage("https://img.example/page-3.webp", 3300),
   ];
   const processCalls = [];
+  let releaseFirst;
   globalThis.location = {
     hostname: "www.mangacopy.com",
     pathname: "/comic/work/chapter/ordered",
@@ -130,14 +131,14 @@ test("prefetches the current CopyManga chapter in page order", async () => {
       // 方法说明：记录显示任务和缓存预热任务的实际发送顺序。
       async sendMessage(message) {
         if (message.type === "COMIC_ENHANCER_SETTINGS") {
-          return { enabled: true, mode: "fast", prefetchPages: 0 };
+          return { enabled: true, mode: "fast", prefetchPages: 1 };
         }
         if (message.type === "COMIC_ENHANCER_PROCESS") {
           processCalls.push({
             imageUrl: message.payload.imageUrl,
             prefetchOnly: message.payload.prefetchOnly,
           });
-          return {
+          const result = {
             ok: true,
             result: {
               image_data_url: "data:image/webp;base64,AA==",
@@ -146,6 +147,12 @@ test("prefetches the current CopyManga chapter in page order", async () => {
               model_profile: "sd15-colorize",
             },
           };
+          if (processCalls.length === 1) {
+            return new Promise((resolve) => {
+              releaseFirst = () => resolve(result);
+            });
+          }
+          return result;
         }
         return { ok: true };
       },
@@ -154,6 +161,12 @@ test("prefetches the current CopyManga chapter in page order", async () => {
 
   await import("./copy-manga.js");
   await import(`./content.js?ordered-prefetch-test=${Date.now()}`);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(processCalls, [
+    { imageUrl: "https://img.example/page-1.webp", prefetchOnly: false },
+  ]);
+
+  releaseFirst();
   await new Promise((resolve) => setTimeout(resolve, 30));
 
   assert.deepEqual(processCalls, [
