@@ -202,3 +202,72 @@ def protect_source_ink_only(
         )
     )
     return Image.composite(source, colorized, dark_mask)
+
+
+# 方法说明：保留原图高频结构，并融合生成图低频明度和色彩层次。
+def protect_source_high_frequency_structure(
+    source_bytes: bytes,
+    generated: Image.Image,
+    *,
+    chroma_gain: float = 1.0,
+    chroma_blur_radius: float = 0.0,
+    luminance_blend: float = 0.65,
+    luminance_blur_radius: float = 8.0,
+) -> Image.Image:
+    if chroma_gain <= 0:
+        raise ValueError("chroma_gain must be positive")
+    if chroma_blur_radius < 0:
+        raise ValueError("chroma_blur_radius must not be negative")
+    if not 0 <= luminance_blend <= 1:
+        raise ValueError("luminance_blend must be between zero and one")
+    if luminance_blur_radius <= 0:
+        raise ValueError("luminance_blur_radius must be positive")
+
+    with Image.open(BytesIO(source_bytes)) as source_file:
+        source = ImageOps.exif_transpose(source_file).convert("RGB")
+    source = source.resize(generated.size, Image.Resampling.LANCZOS)
+    generated = generated.convert("RGB")
+    source_y = source.convert("YCbCr").getchannel("Y")
+    generated_y, generated_cb, generated_cr = generated.convert("YCbCr").split()
+
+    chroma_blur = ImageFilter.GaussianBlur(chroma_blur_radius)
+    if chroma_blur_radius:
+        generated_cb = generated_cb.filter(chroma_blur)
+        generated_cr = generated_cr.filter(chroma_blur)
+    generated_cb = generated_cb.point(
+        lambda value: max(
+            0,
+            min(255, round(128 + (value - 128) * chroma_gain)),
+        )
+    )
+    generated_cr = generated_cr.point(
+        lambda value: max(
+            0,
+            min(255, round(128 + (value - 128) * chroma_gain)),
+        )
+    )
+
+    luminance_blur = ImageFilter.GaussianBlur(luminance_blur_radius)
+    source_low = source_y.filter(luminance_blur)
+    generated_low = generated_y.filter(luminance_blur)
+    brighter = ImageChops.subtract(generated_low, source_low).point(
+        lambda value: round(value * luminance_blend)
+    )
+    darker = ImageChops.subtract(source_low, generated_low).point(
+        lambda value: round(value * luminance_blend)
+    )
+    blended_y = ImageChops.add(source_y, brighter)
+    blended_y = ImageChops.subtract(blended_y, darker)
+    colorized = Image.merge(
+        "YCbCr",
+        (blended_y, generated_cb, generated_cr),
+    ).convert("RGB")
+
+    dark_mask = source_y.point(
+        lambda value: (
+            255
+            if value <= 40
+            else max(0, min(255, round((96 - value) * 255 / 56)))
+        )
+    )
+    return Image.composite(source, colorized, dark_mask)

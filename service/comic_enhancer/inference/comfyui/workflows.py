@@ -38,6 +38,10 @@ class WorkflowLoader(ABC):
     def supports_flux2_character_lineart(self) -> bool:
         return False
 
+    # 方法说明：判断工作流加载器是否支持 Anima 漫画上色实验档。
+    def supports_anima_colorize(self) -> bool:
+        return False
+
     # 方法说明：加载指定档位对应的完整工作流。
     @abstractmethod
     def load(self, options: ProcessOptions) -> LoadedWorkflow:
@@ -62,6 +66,7 @@ class PresetWorkflowLoader(WorkflowLoader):
         flux2_quant_workflow: Path | None = None,
         flux2_character_workflow: Path | None = None,
         flux2_character_lineart_workflow: Path | None = None,
+        anima_colorize_workflow: Path | None = None,
     ):
         self.fast_workflow = fast_workflow.resolve()
         self.quality_workflow = quality_workflow.resolve()
@@ -81,6 +86,11 @@ class PresetWorkflowLoader(WorkflowLoader):
         self.flux2_character_lineart_workflow = (
             flux2_character_lineart_workflow.resolve()
             if flux2_character_lineart_workflow is not None
+            else None
+        )
+        self.anima_colorize_workflow = (
+            anima_colorize_workflow.resolve()
+            if anima_colorize_workflow is not None
             else None
         )
 
@@ -106,6 +116,13 @@ class PresetWorkflowLoader(WorkflowLoader):
         return bool(
             self.flux2_character_lineart_workflow
             and self.flux2_character_lineart_workflow.is_file()
+        )
+
+    # 方法说明：判断 Anima 漫画上色完整工作流文件是否存在。
+    def supports_anima_colorize(self) -> bool:
+        return bool(
+            self.anima_colorize_workflow
+            and self.anima_colorize_workflow.is_file()
         )
 
     # 方法说明：加载指定处理档位对应的完整工作流。
@@ -159,6 +176,13 @@ class PresetWorkflowLoader(WorkflowLoader):
             return (
                 self.flux2_character_lineart_workflow,
                 "flux2-klein-4b-qwen3-vl-character-lineart",
+            )
+        if mode == "anima_colorize":
+            if self.anima_colorize_workflow is None:
+                raise RuntimeError("Anima 漫画上色工作流未配置")
+            return (
+                self.anima_colorize_workflow,
+                "anima-2.9b-preview-v1",
             )
         path = self.quality_workflow if mode == "quality" else self.fast_workflow
         return path, "sd15-colorize"

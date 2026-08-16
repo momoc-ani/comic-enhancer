@@ -94,6 +94,7 @@ def _create_backend(settings: Settings) -> InferenceBackend:
             flux2_character_lineart_workflow=(
                 settings.comfyui_workflow_flux2_character_lineart
             ),
+            anima_colorize_workflow=settings.comfyui_workflow_anima_colorize,
         )
         backend_options.update(
             {
@@ -113,6 +114,10 @@ def _create_backend(settings: Settings) -> InferenceBackend:
                 ),
                 "flux2_character_lineart_workflow": (
                     settings.comfyui_workflow_flux2_character_lineart
+                ),
+                "anima_colorize_enabled": settings.comfyui_anima_colorize_enabled,
+                "anima_colorize_workflow": (
+                    settings.comfyui_workflow_anima_colorize
                 ),
                 "character_library": character_library,
                 "timeout_seconds": settings.comfyui_timeout_seconds,
@@ -190,6 +195,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
                 "flux2_character_lineart_enabled": (
                     context.settings.comfyui_flux2_character_lineart_enabled
+                ),
+                "anima_colorize_enabled": (
+                    context.settings.comfyui_anima_colorize_enabled
                 ),
             },
             result={"status": "started"},

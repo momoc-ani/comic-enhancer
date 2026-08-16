@@ -64,6 +64,10 @@ class RoutedInferenceBackend(InferenceBackend):
             and self.upscale_profile_ready()
         )
 
+    # 方法说明：检查 Anima 漫画上色及其 Real-CUGAN 二阶段是否可用。
+    def anima_colorize_profile_ready(self) -> bool:
+        return self.backend.anima_colorize_profile_ready() and self.upscale_profile_ready()
+
     # 方法说明：检查 Real-CUGAN 放大档位是否可用。
     def upscale_profile_ready(self) -> bool:
         return self.upscaler.available()
@@ -82,6 +86,7 @@ class RoutedInferenceBackend(InferenceBackend):
             ProcessingMode.FLUX2_QUANT,
             ProcessingMode.FLUX2_CHARACTER,
             ProcessingMode.FLUX2_CHARACTER_LINEART,
+            ProcessingMode.ANIMA_COLORIZE,
         }:
             return f"{revision}:post-upscale:{self.upscaler.cache_revision()}"
         return revision if self.name == self.backend.name else f"{self.name}:{revision}"
@@ -100,22 +105,33 @@ class RoutedInferenceBackend(InferenceBackend):
             ProcessingMode.FLUX2_QUANT,
             ProcessingMode.FLUX2_CHARACTER,
             ProcessingMode.FLUX2_CHARACTER_LINEART,
+            ProcessingMode.ANIMA_COLORIZE,
         }:
-            return self._process_flux2_pipeline(assets, output_path, options)
+            return self._process_comfyui_upscale_pipeline(assets, output_path, options)
         return self.backend.process(assets, output_path, options)
 
-    # 方法说明：串联 FLUX.2 首阶段和 Real-CUGAN 二阶段放大策略。
-    def _process_flux2_pipeline(
+    # 方法说明：串联生成模型首阶段和 Real-CUGAN 二阶段放大策略。
+    def _process_comfyui_upscale_pipeline(
         self,
         assets: InferenceAssets,
         output_path: Path,
         options: ProcessOptions,
     ) -> InferenceOutcome:
         started = time.perf_counter()
+        pipeline_name = (
+            "Anima"
+            if options.mode == ProcessingMode.ANIMA_COLORIZE
+            else "FLUX.2"
+        )
+        stage_suffix = (
+            "anima" if options.mode == ProcessingMode.ANIMA_COLORIZE else "flux2"
+        )
         if not self.upscale_profile_ready():
-            raise RuntimeError("FLUX.2 二阶段放大资源未就绪")
-        stage_path = output_path.with_name(f"{output_path.stem}.flux2-stage.webp")
-        stage = "flux2"
+            raise RuntimeError(f"{pipeline_name} 二阶段放大资源未就绪")
+        stage_path = output_path.with_name(
+            f"{output_path.stem}.{stage_suffix}-stage.webp"
+        )
+        stage = stage_suffix
         primary_elapsed_ms = 0
         secondary_elapsed_ms = 0
         try:
@@ -130,7 +146,7 @@ class RoutedInferenceBackend(InferenceBackend):
             log_operation(
                 logger,
                 logging.INFO,
-                feature="FLUX.2首阶段完成",
+                feature=f"{pipeline_name}首阶段完成",
                 parameters={
                     "work_key": assets.work_key,
                     "mode": str(options.mode),
@@ -161,7 +177,7 @@ class RoutedInferenceBackend(InferenceBackend):
             log_operation(
                 logger,
                 logging.INFO,
-                feature="FLUX.2二阶段放大完成",
+                feature=f"{pipeline_name}二阶段放大完成",
                 parameters={
                     "work_key": assets.work_key,
                     "mode": str(options.mode),
@@ -188,7 +204,7 @@ class RoutedInferenceBackend(InferenceBackend):
             log_operation(
                 logger,
                 logging.INFO,
-                feature="FLUX.2二阶段处理",
+                feature=f"{pipeline_name}二阶段处理",
                 parameters={
                     "work_key": assets.work_key,
                     "mode": str(options.mode),
@@ -208,7 +224,7 @@ class RoutedInferenceBackend(InferenceBackend):
             log_operation(
                 logger,
                 logging.ERROR,
-                feature="FLUX.2二阶段处理",
+                feature=f"{pipeline_name}二阶段处理",
                 parameters={
                     "work_key": assets.work_key,
                     "mode": str(options.mode),

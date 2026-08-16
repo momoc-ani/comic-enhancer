@@ -34,6 +34,10 @@ class InferenceBackend(ABC):
     def flux2_character_lineart_profile_ready(self) -> bool:
         return False
 
+    # 方法说明：检查 Anima 漫画上色实验档位是否可用。
+    def anima_colorize_profile_ready(self) -> bool:
+        return False
+
     # 方法说明：检查 Real-CUGAN 放大档位是否可用。
     def upscale_profile_ready(self) -> bool:
         return False

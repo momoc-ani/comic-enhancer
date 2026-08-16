@@ -19,6 +19,7 @@ MODE_LABELS = {
         "角色线稿保真模式（Qwen3-VL + FLUX.2）",
         1,
     ),
+    ProcessingMode.ANIMA_COLORIZE: ("Anima 漫画上色实验模式", 1),
 }
 
 
@@ -50,6 +51,7 @@ async def capabilities(
         ProcessingMode.FLUX2_CHARACTER_LINEART: (
             backend.flux2_character_lineart_profile_ready()
         ),
+        ProcessingMode.ANIMA_COLORIZE: backend.anima_colorize_profile_ready(),
     }
     processing_modes = [
         mode
@@ -77,6 +79,7 @@ async def capabilities(
         flux2_character_lineart_available=availability[
             ProcessingMode.FLUX2_CHARACTER_LINEART
         ],
+        anima_colorize_available=availability[ProcessingMode.ANIMA_COLORIZE],
         prefetch_pages=settings.prefetch_pages,
         max_parallel_inference=settings.max_parallel_inference,
     )

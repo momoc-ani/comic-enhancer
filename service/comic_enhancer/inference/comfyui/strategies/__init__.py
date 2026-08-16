@@ -1,3 +1,7 @@
+from .anima_colorize import (
+    ANIMA_COLORIZE_PROCESSING_REVISION,
+    AnimaColorizeModeStrategy,
+)
 from .base import ComfyUIModeStrategy
 from .fast import FastModeStrategy
 from .flux2 import FLUX2_PROCESSING_REVISION, Flux2ModeStrategy
@@ -17,6 +21,8 @@ from .quality import QualityModeStrategy
 
 __all__ = [
     "ComfyUIModeStrategy",
+    "ANIMA_COLORIZE_PROCESSING_REVISION",
+    "AnimaColorizeModeStrategy",
     "FLUX2_PROCESSING_REVISION",
     "FLUX2_OUTPUT_SCALE",
     "FLUX2_CHARACTER_PROCESSING_REVISION",
