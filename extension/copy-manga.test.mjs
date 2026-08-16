@@ -7,6 +7,8 @@ const {
   CopyMangaAdapter,
   decryptChapterImageUrls,
   extractEncryptedChapter,
+  extractWorkDetails,
+  normalizeWorkTitle,
 } = globalThis.ComicEnhancerCopyManga;
 
 // 方法说明：将测试密文字节编码为拷贝漫画使用的十六进制格式。
@@ -83,6 +85,85 @@ test("extracts CopyManga encrypted chapter fields", () => {
     contentKey: "1234567890abcdef0011",
     cipherKey: "op0zzpvv.nmn.00p",
   });
+});
+
+// 方法说明：验证镜像站仅在章节阅读路径中启用适配器。
+test("matches CopyManga mirror chapter pages only", () => {
+  assert.equal(
+    CopyMangaAdapter.matches(
+      new URL("https://www.copy3000.com/comic/work/chapter/current"),
+    ),
+    true,
+  );
+  assert.equal(
+    CopyMangaAdapter.matches(
+      new URL("https://www.mangacopy.com/rank?type=male&table=month"),
+    ),
+    false,
+  );
+  assert.equal(
+    CopyMangaAdapter.matches(new URL("https://www.copy3000.com/comic/work")),
+    false,
+  );
+});
+
+// 方法说明：验证章节号和站点后缀不会污染作品规范标题。
+test("normalizes CopyManga chapter titles", () => {
+  assert.equal(
+    normalizeWorkTitle("劍姬神聖譚 - 第02话 - 拷貝漫畫 拷贝漫画"),
+    "劍姬神聖譚",
+  );
+  assert.equal(normalizeWorkTitle("劍姬神聖譚/第02話"), "劍姬神聖譚");
+});
+
+// 方法说明：验证作品目录页会提供规范标题、简体别名和作品属性。
+test("extracts CopyManga work aliases from the detail page", () => {
+  const titleNode = {
+    textContent: "劍姬神聖譚",
+    getAttribute(name) { return name === "title" ? "劍姬神聖譚" : null; },
+  };
+  const aliasText = { textContent: "劍姬神聖譚,剑姬神圣谭,剑姬" };
+  const aliasRow = {
+    textContent: "別名：劍姬神聖譚,剑姬神圣谭,剑姬",
+    querySelector() { return aliasText; },
+    querySelectorAll() { return []; },
+  };
+  const authorLink = { textContent: "大森藤ノ" };
+  const authorRow = {
+    textContent: "作者：大森藤ノ",
+    querySelector() { return null; },
+    querySelectorAll() { return [authorLink]; },
+  };
+  const tagLink = { textContent: "#冒險" };
+  const cover = {
+    dataset: { src: "/cover.webp" },
+    currentSrc: "",
+    src: "",
+  };
+  const document = {
+    title: "污染标题",
+    querySelector(selector) {
+      if (selector === ".comicParticulars-title h6") return titleNode;
+      if (selector === ".comicParticulars-left-img img") return cover;
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector === ".comicParticulars-title li") return [aliasRow, authorRow];
+      if (selector.includes(".comicParticulars-tag")) return [tagLink];
+      return [];
+    },
+  };
+
+  assert.deepEqual(
+    extractWorkDetails(document, "https://www.copy3000.com/comic/work"),
+    {
+      title: "劍姬神聖譚",
+      title_aliases: ["剑姬神圣谭", "剑姬"],
+      author: "大森藤ノ",
+      tags: ["冒險"],
+      cover_url: "https://www.copy3000.com/cover.webp",
+    },
+  );
 });
 
 // 方法说明：验证适配器优先使用拷贝漫画的稳定下一话链接。

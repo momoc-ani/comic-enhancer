@@ -3,7 +3,7 @@ from pathlib import Path
 import httpx
 
 from comic_enhancer.metadata import AniListProvider, BangumiProvider, KitsuProvider, MangaUpdatesProvider, MetadataAggregator, _confidence
-from comic_enhancer.models import WorkIdentity
+from comic_enhancer.models import CharacterReference, WorkIdentity, WorkMetadata
 
 
 # 方法说明：创建测试使用的作品身份数据。
@@ -225,6 +225,54 @@ def test_aggregator_cache_key_changes_with_external_ids(tmp_path: Path):
     anime_entry = work(external_ids={"bangumi": "511177"})
 
     assert aggregator._cache_path(manga_entry) != aggregator._cache_path(anime_entry)
+
+
+# 方法说明：验证聚合器优先使用最接近规范标题的站点别名获取角色。
+def test_aggregator_uses_work_alias_to_resolve_characters(tmp_path: Path):
+    class AliasProvider:
+        name = "bangumi"
+
+        # 方法说明：初始化查询记录。
+        def __init__(self):
+            self.queries = []
+
+        # 方法说明：仅对简体作品别名返回带角色的正确候选。
+        def search(self, item):
+            self.queries.append(item.title)
+            if item.title != "剑姬神圣谭":
+                return WorkMetadata(
+                    provider=self.name,
+                    provider_id="wrong",
+                    title="剑姬怒放",
+                    confidence=0.45,
+                )
+            return WorkMetadata(
+                provider=self.name,
+                provider_id="130544",
+                title="期待在地下城邂逅有错吗 外传 剑姬神圣谭",
+                confidence=0.65,
+                characters=[
+                    CharacterReference(
+                        provider=self.name,
+                        provider_id="1",
+                        name="艾丝·华伦斯坦",
+                        image_url="https://example.com/ais.jpg",
+                    )
+                ],
+            )
+
+    provider = AliasProvider()
+    result = MetadataAggregator(tmp_path, providers=[provider]).resolve(
+        work(
+            title="劍姬神聖譚",
+            title_aliases=["剑姬神圣谭", "剑姬"],
+        )
+    )
+
+    assert provider.queries == ["剑姬神圣谭"]
+    assert result.selected is not None
+    assert result.selected.provider_id == "130544"
+    assert len(result.selected.characters) == 1
 
 
 # 方法说明：验证达到置信度门槛后按提供方顺序选择候选。

@@ -2,11 +2,17 @@ import { buildModelExecution } from "./model-status.js";
 import { DEFAULT_SETTINGS, migrateSettings } from "./settings.js";
 
 const SUPPORTED_PAGE_PATTERNS = Object.freeze([
-  "*://*.copymanga.com/*",
-  "*://*.copymanga.site/*",
-  "*://*.copymanga.tv/*",
-  "*://*.mangacopy.com/*",
+  "*://*.copymanga.com/comic/*/chapter/*",
+  "*://*.copymanga.site/comic/*/chapter/*",
+  "*://*.copymanga.tv/comic/*/chapter/*",
+  "*://*.mangacopy.com/comic/*/chapter/*",
+  "*://*.copy3000.com/comic/*/chapter/*",
 ]);
+
+const COPY_MANGA_HOST_PATTERN =
+  /(^|\.)(copymanga\.(com|site|tv)|mangacopy\.com|copy3000\.com)$/i;
+const COPY_MANGA_CHAPTER_PATH_PATTERN =
+  /^\/comic\/[^/]+\/chapter\/[^/]+\/?$/i;
 
 chrome.runtime.onInstalled.addListener(async () => {
   const stored = await chrome.storage.local.get(null);
@@ -55,12 +61,14 @@ async function injectContent(tabId) {
   });
 }
 
-// 方法说明：判断地址是否属于受支持的漫画页面。
+// 方法说明：判断地址是否属于受支持的拷贝漫画章节阅读页。
 function isSupportedPage(url) {
   if (!url) return false;
   try {
-    return /(^|\.)(copymanga\.(com|site|tv)|mangacopy\.com)$/i.test(
-      new URL(url).hostname,
+    const pageUrl = new URL(url);
+    return (
+      COPY_MANGA_HOST_PATTERN.test(pageUrl.hostname) &&
+      COPY_MANGA_CHAPTER_PATH_PATTERN.test(pageUrl.pathname)
     );
   } catch {
     return false;

@@ -7,6 +7,7 @@ class WorkIdentity(BaseModel):
     source: str = Field(min_length=1)
     source_work_id: str = Field(min_length=1)
     title: str = ""
+    title_aliases: list[str] = Field(default_factory=list)
     author: str = ""
     tags: list[str] = Field(default_factory=list)
     cover_url: str | None = None

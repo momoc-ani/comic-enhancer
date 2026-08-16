@@ -21,6 +21,10 @@ REFERENCE_MODES = {
     ProcessingMode.FLUX2_CHARACTER,
     ProcessingMode.FLUX2_CHARACTER_LINEART,
 }
+REQUIRED_CHARACTER_REFERENCE_MODES = {
+    ProcessingMode.FLUX2_CHARACTER,
+    ProcessingMode.FLUX2_CHARACTER_LINEART,
+}
 
 
 @router.post("/v1/pages/process", response_model=ProcessResult)
@@ -55,6 +59,7 @@ async def process_page(
             "source": work.source,
             "source_work_id": work.source_work_id,
             "title": work.title,
+            "title_aliases": work.title_aliases,
             "author": work.author,
             "tags": work.tags,
             "external_ids": work.external_ids,
@@ -189,6 +194,30 @@ async def process_page(
             },
             elapsed_ms=(time.perf_counter() - reference_started) * 1000,
         )
+        if (
+            options.mode in REQUIRED_CHARACTER_REFERENCE_MODES
+            and not character_reference_assets
+        ):
+            detail = "当前作品暂无可用角色参考图"
+            log_operation(
+                logger,
+                logging.WARNING,
+                feature="页面处理接口返回",
+                parameters={
+                    "work_key": work.key,
+                    "mode": str(options.mode),
+                    "page_index": options.page_index,
+                },
+                result={
+                    "status": "rejected",
+                    "status_code": 409,
+                    "stage": "character_references",
+                    "detail": detail,
+                    "metadata_candidates": len(resolution.candidates),
+                },
+                elapsed_ms=(time.perf_counter() - request_started) * 1000,
+            )
+            raise HTTPException(status_code=409, detail=detail)
 
     try:
         result = await context.processor.process(
