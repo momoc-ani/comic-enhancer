@@ -5,7 +5,7 @@ import json
 
 PROFILE_TEMPLATE_REVISION = "qwen-profile-regions-v3-complete-character-palette"
 PAGE_TEMPLATE_REVISION = "qwen-page-character-grounding-v5-tight-regions"
-PROMPT_PLANNER_REVISION = "flux2-character-prompts-v4-complete-character-palette"
+PROMPT_PLANNER_REVISION = "flux2-character-prompts-v5-pixel-lock"
 
 
 # 方法说明：构造只提取角色稳定特征和采色区域的提示词。
@@ -73,14 +73,16 @@ def build_page_prompt(candidates: list[dict[str, object]]) -> str:
 # 方法说明：生成覆盖整页背景和结构保护的固定 FLUX.2 提示词。
 def build_global_prompt() -> str:
     return (
-        "Faithfully colorize every existing region of this manga page without redrawing. "
+        "Perform a pixel-preserving color overlay on this manga page without redrawing. "
         "Use natural coherent anime colors for existing characters, objects, and backgrounds. "
         "The source page is the absolute authority for identity, hairstyle, clothing design, pose, "
         "anatomy, composition, panel layout, line art, screentone, luminance, and whitespace. "
         "Preserve every glyph, punctuation mark, speech bubble, caption, sound effect, panel border, "
         "screentone pattern, black ink line, facial feature, clothing fold, prop, and background object "
-        "in exactly the same position and shape. Add flat base color with restrained cel shading only. "
-        "Do not invent, remove, clean up, translate, reconstruct, or redesign any content."
+        "in exactly the same position and shape. Change chroma only; do not create any new pixel-level "
+        "structure. Add flat base color with restrained cel shading only. Do not invent, remove, clean "
+        "up, translate, reconstruct, complete, or redesign any content. If a region or identity is "
+        "uncertain, leave the source pixels unchanged."
     )
 
 
@@ -131,10 +133,12 @@ def build_character_prompt(
     details = ", ".join([*traits[:10], *palette]) or "use the assigned reference identity"
     return (
         f"Character {character_id}, color guidance inside the assigned visible character region only: {details}. "
+        "The traits identify existing source regions only and are never instructions to draw them. "
         "Keep the exact hairstyle, face, clothing parts, accessories, pose, contours, folds, and "
         "grayscale shading visible in the source page. Apply reference colors only to matching visible "
-        "parts. This is palette guidance only: do not reconstruct the character or transfer this "
-        "character's colors to another person or the background."
+        "parts by changing chroma only. This is palette guidance only: do not reconstruct, complete, "
+        "replace, or redraw the character, and do not transfer this character's colors to another "
+        "person or the background. If the match is uncertain, leave the source unchanged."
     )
 
 
@@ -189,9 +193,9 @@ def build_static_character_guide(characters: list[dict[str, object]]) -> str:
         stable_traits = [str(value) for value in item.get("stable_traits", [])][:8]
         outfit_traits = [str(value) for value in item.get("outfit_traits", [])][:8]
         block = [
-            f"Character {item['display_name']} visual anchors: "
+            f"Character {item['display_name']} recognition-only anchors: "
             + (", ".join(stable_traits) or "use the supplied reference identity")
-            + "."
+            + ". These anchors only identify source regions; never draw, complete, or transfer them."
         ]
         if stable_palette:
             block.append(
@@ -210,11 +214,12 @@ def build_static_character_guide(characters: list[dict[str, object]]) -> str:
         blocks.append(" ".join(block))
     guide = " ".join(blocks) or "No static character palette is available."
     return (
-        "CHARACTER COLOR GUIDE. Apply the complete available character palette, including facial details, "
-        "all visible garment layers, legwear, footwear, accessories, jewelry, and held props. This guide "
-        "only assigns color to matching regions that already exist "
-        "in the source manga page. It must never add, remove, replace, reshape, reconstruct, or move "
+        "CHARACTER PALETTE-ONLY GUIDE. Change chroma only inside confidently matching regions that already "
+        "exist in the source manga page. Apply available colors to matching facial details, garment layers, "
+        "legwear, footwear, accessories, jewelry, and held props only when those exact parts are visibly "
+        "present. This guide must never add, remove, replace, reshape, reconstruct, complete, or move "
         "any hairstyle, eye, face, garment, stocking, leg feature, shoe, armor, accessory, pose, line, "
-        "text, panel, or object. Do not apply an absent character or absent clothing feature. "
+        "text, panel, background, or object. Do not create new pixels from a reference description. Do not "
+        "apply an absent or uncertain character or clothing feature; leave such source pixels unchanged. "
         + guide
     )

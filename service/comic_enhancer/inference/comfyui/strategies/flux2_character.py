@@ -16,13 +16,13 @@ from ....character_vision import (
 from ....domain import ProcessingMode, ProcessOptions
 from ....logging_utils import log_operation
 from ...contracts import InferenceAssets, InferenceOutcome
-from ..image_ops import restore_geometry, save_output
+from ..image_ops import protect_source_luminance_and_ink, restore_geometry, save_output
 from .base import ComfyUIModeStrategy
 from .flux2_base import FLUX2_OUTPUT_SCALE
 
 
 FLUX2_CHARACTER_PROCESSING_REVISION = (
-    "flux2-character-static-profile-reference-v5"
+    "flux2-character-full-chroma-180-source-latent-four-step-v10"
 )
 
 
@@ -151,15 +151,6 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             ]
         )
         input_images = {"INPUT_IMAGE": assets.image_bytes}
-        references = [
-            character.reference.image_bytes for character in context.characters
-        ]
-        for slot in range(1, 4):
-            input_images[f"REFERENCE_IMAGE_{slot}"] = (
-                references[slot - 1]
-                if slot <= len(references)
-                else assets.image_bytes
-            )
         try:
             generated = self.transport.run(
                 loaded_workflow.prompt,
@@ -190,6 +181,7 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             generated,
             output_scale=FLUX2_OUTPUT_SCALE,
         )
+        generated = protect_source_luminance_and_ink(assets.image_bytes, generated)
         save_output(generated, output_path)
         outcome = InferenceOutcome(
             reference_applied=True,
@@ -208,7 +200,8 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             result={
                 "status": "success",
                 "profiles": len(context.characters),
-                "reference_slots": len(references),
+                "palette_profiles": len(context.characters),
+                "reference_images_uploaded": 0,
                 "processed_panels": outcome.processed_panels,
                 "model_profile": outcome.model_profile,
             },

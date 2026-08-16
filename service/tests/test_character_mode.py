@@ -268,8 +268,8 @@ def character_prompt_context(reference):
     )
 
 
-# 方法说明：验证角色档位绑定完整静态调色提示和参考图槽位，不调用页面 mask 计划。
-def test_flux2_character_strategy_binds_static_palette_and_reference_slots(
+# 方法说明：验证角色档位只绑定原图与静态调色提示，并对最终结果执行结构保护。
+def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
     tmp_path,
     monkeypatch,
 ):
@@ -337,9 +337,7 @@ def test_flux2_character_strategy_binds_static_palette_and_reference_slots(
     assert outcome.model_profile == "flux2-klein-4b-qwen3-vl-character"
     assert outcome.reference_applied is True
     assert outcome.processed_panels == 0
-    assert captured["inputs"]["REFERENCE_IMAGE_1"] == reference.image_bytes
-    assert captured["inputs"]["REFERENCE_IMAGE_2"] == source
-    assert captured["inputs"]["REFERENCE_IMAGE_3"] == source
+    assert captured["inputs"] == {"INPUT_IMAGE": source}
     prompt_nodes = {
         node.get("_meta", {}).get("title"): node
         for node in captured["workflow"].values()
@@ -358,6 +356,8 @@ def test_flux2_character_strategy_binds_static_palette_and_reference_slots(
     ):
         assert token in prompt
     assert "must never add, remove, replace, reshape" in prompt
+    assert "Change chroma only" in prompt
+    assert "leave such source pixels unchanged" in prompt
     assert not any(
         node.get("class_type") == "ConditioningSetMask"
         for node in captured["workflow"].values()
@@ -365,12 +365,14 @@ def test_flux2_character_strategy_binds_static_palette_and_reference_slots(
     )
     with Image.open(output_path) as output:
         assert output.size == (16, 24)
-        red, green, blue = output.getpixel((8, 12))
-        assert red >= 70 and green >= 100 and blue >= 170
+        assert max(output.getpixel((8, 12))) <= 40
+        red, green, blue = output.getpixel((6, 12))
+        assert blue >= red + 10
+        assert blue >= green
 
 
-# 方法说明：验证仓库自带角色工作流使用参考图槽位和基础 FLUX.2 原图结构分支。
-def test_shipped_character_workflow_is_self_contained_and_reference_bound():
+# 方法说明：验证角色工作流使用原图 latent 和完整四步采样且不注入角色参考图。
+def test_shipped_character_workflow_uses_source_latent_and_full_sampling():
     path = PROJECT_ROOT / "workflows" / "flux2-klein-4b-qwen3-vl-character-colorize.json"
     workflow = json.loads(path.read_text(encoding="utf-8"))
     serialized = json.dumps(workflow)
@@ -382,17 +384,26 @@ def test_shipped_character_workflow_is_self_contained_and_reference_bound():
 
     assert "${" not in serialized
     for slot in range(1, 4):
-        assert f"REFERENCE_IMAGE_{slot}" in titles
+        assert f"REFERENCE_IMAGE_{slot}" not in titles
     assert "Colorization Instruction" in titles
     assert not any(
         node.get("class_type") == "ConditioningSetMask"
         for node in workflow.values()
         if isinstance(node, dict)
     )
-    assert sum(node.get("class_type") == "ReferenceLatent" for node in workflow.values()) >= 1
-    assert sum(node.get("class_type") == "EmptyFlux2LatentImage" for node in workflow.values()) == 1
+    assert sum(node.get("class_type") == "ReferenceLatent" for node in workflow.values()) == 2
+    assert sum(node.get("class_type") == "EmptyFlux2LatentImage" for node in workflow.values()) == 0
+    assert sum(node.get("class_type") == "SplitSigmas" for node in workflow.values()) == 0
     assert sum(node.get("class_type") == "Flux2Scheduler" for node in workflow.values()) == 1
     assert sum(node.get("class_type") == "SaveImage" for node in workflow.values()) == 1
+    sampler = next(
+        node for node in workflow.values() if node.get("class_type") == "SamplerCustomAdvanced"
+    )
+    scheduler_id = next(
+        node_id for node_id, node in workflow.items() if node.get("class_type") == "Flux2Scheduler"
+    )
+    assert sampler["inputs"]["latent_image"] == ["11", 0]
+    assert sampler["inputs"]["sigmas"] == [scheduler_id, 0]
     assert workflow["34"]["inputs"]["filename_prefix"] == "comic-enhancer/flux2-character"
 
 

@@ -9,7 +9,7 @@
 - 参考图分析只发生在角色档案缺失或版本变化时，并按角色缓存。
 - Pillow 根据 Qwen3-VL 给出的参考图区域确定性采样 RGB，不采纳模型自由生成的颜色名称。
 - 每页只读取静态角色档案，追加到 `Colorization Instruction`，不生成页面 bbox、mask 或页面级 VLM 计划。
-- FLUX.2 仍以原图为页面结构权威，只给原图已有区域上色；工作流直出后继续本地几何恢复和 Real-CUGAN 放大。
+- FLUX.2 仍以原图为页面结构权威，从原图 latent 执行完整四步上色；工作流直出后保留全页色度并回注原图明度、文字和墨线，再继续本地几何恢复和 Real-CUGAN 放大。
 - 任何阶段失败都保留原图；本档位不静默回退到其他模型档位。
 
 ## 边界
@@ -39,8 +39,8 @@ Chrome 扩展
        |- 静态 CharacterPromptContext 缓存
        `-> 唯一 ComfyUI
             `-> flux2-klein-4b-qwen3-vl-character-colorize.json
-                 -> FLUX.2 直出
-                 -> 几何恢复与 Real-CUGAN 二阶段放大
+                 -> 原图 latent 四步 FLUX.2 上色
+                 -> 几何恢复、源图结构回注与 Real-CUGAN 二阶段放大
 ```
 
 插件只能访问 Comic Enhancer API，不能直连 Qwen3-VL、ComfyUI 或结果地址。Qwen3-VL 是视觉分析 sidecar，不是第二个生成后端；Comic Enhancer API 仍只配置一个 ComfyUI 地址。
@@ -94,11 +94,11 @@ Qwen3-VL 只能返回看得清且属于上述词表的区域。没有证据的�
 1. 按作品键和参考图内容读取已缓存的 `CharacterPromptContext`。
 2. 从角色档案生成固定英文 `CHARACTER COLOR GUIDE`，按角色列出完整可用 RGB 调色板。
 3. 将指南追加到工作流唯一的 `Colorization Instruction` 节点；不把 VLM 自由文本直接透传给 FLUX.2。
-4. 上传原图到 `INPUT_IMAGE`，将最多三张角色参考图绑定到 `REFERENCE_IMAGE_1/2/3`；未使用槽位绑定当前原图，避免重复使用某个角色图。
-5. 提交完整 FLUX.2 工作流，直出漫画页结果。
-6. 执行现有几何恢复和本地 Real-CUGAN 二阶段放大，保存不可变 WebP。
+4. 只上传漫画原图到 `INPUT_IMAGE`；角色参考图不进入 ComfyUI，只用于离线档案分析和 Pillow RGB 采样。
+5. 将漫画原图编码为 latent 后执行完整四步上色；不从空 latent 重建页面，结构仍由原图 latent 和后处理锁定。
+6. 按原图几何恢复结果，以固定 `1.80x` 色度增益保留 FLUX.2 在人物、物体和背景生成的全页色度，同时回注原图明度、文字和深色墨线，再执行本地 Real-CUGAN 二阶段放大，保存不可变 WebP。该增益仅属于 `flux2_character`，其他档位不复用。
 
-这里没有页面级 Qwen3-VL 调用、角色 bbox、`ConditioningSetMask` 或本地明度/文字/墨线回注。页面结构保护由原工作流的源图、正向结构约束和负向 conditioning 完成，最终质量必须通过授权样本验收。
+这里没有页面级 Qwen3-VL 调用、角色 bbox 或 `ConditioningSetMask`。角色调色板只约束匹配人物，背景颜色由 FLUX.2 根据页面内容生成；页面结构由源图 latent、正负向约束和本地明度/文字/墨线回注共同保护。角色档不使用其他档位会压低浅色区域色度的保守蒙版，最终质量仍必须通过授权样本验收。
 
 ## Qwen3-VL 角色档案契约
 
@@ -145,12 +145,13 @@ Qwen3-VL 只能返回看得清且属于上述词表的区域。没有证据的�
 
 - 是自包含 ComfyUI API JSON，不含 `${...}` 占位符。
 - 唯一正向提示节点标题为 `Colorization Instruction`。
-- 存在 `REFERENCE_IMAGE_1/2/3`，并能被加载器稳定发现。
-- 保留基础工作流的 `ReferenceLatent`、`EmptyFlux2LatentImage`、`Flux2Scheduler` 和 `SaveImage`。
+- 只存在唯一 `INPUT_IMAGE`，角色参考图不得作为工作流输入。
+- 保留源图 `VAEEncode` 和源图 `ReferenceLatent`，将完整 `Flux2Scheduler` 输出用于原图 latent，不包含 `SplitSigmas` 或 `EmptyFlux2LatentImage`。
+- 保留唯一 `Flux2Scheduler` 和 `SaveImage`。
 - 不包含 `ConditioningSetMask`、页面 bbox 输入或角色分支 mask。
 - 输出前缀为 `comic-enhancer/flux2-character`。
 
-策略只绑定输入图和提示词，不修改节点拓扑；工作流失败时 `Flux2CharacterModeStrategy` 直接失败，插件继续显示原图。
+策略只绑定漫画原图和提示词，不上传角色参考图，也不在运行时修改节点拓扑；工作流失败时 `Flux2CharacterModeStrategy` 直接失败，插件继续显示原图。
 
 ## 缓存和版本
 

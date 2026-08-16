@@ -6,6 +6,9 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageOps
 
 
+CHARACTER_CHROMA_GAIN = 1.8
+
+
 # 方法说明：按统一格式原子保存推理结果图。
 def save_output(image: Image.Image, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,6 +94,44 @@ def protect_source_structure(
         lambda value: max(0, min(255, round((245 - value) * 255 / 80)))
     )
     colorized = Image.composite(colorized, source, color_mask)
+
+    dark_mask = source_y.point(
+        lambda value: (
+            255
+            if value <= 112
+            else max(0, min(255, round((176 - value) * 255 / 64)))
+        )
+    )
+    return Image.composite(source, colorized, dark_mask)
+
+
+# 方法说明：保留全页生成色度，并用原图明度和深色墨线锁定页面结构。
+def protect_source_luminance_and_ink(
+    source_bytes: bytes,
+    generated: Image.Image,
+) -> Image.Image:
+    with Image.open(BytesIO(source_bytes)) as source_file:
+        source = ImageOps.exif_transpose(source_file).convert("RGB")
+    source = source.resize(generated.size, Image.Resampling.LANCZOS)
+
+    source_y, _, _ = source.convert("YCbCr").split()
+    _, generated_cb, generated_cr = generated.convert("YCbCr").split()
+    generated_cb = generated_cb.point(
+        lambda value: max(
+            0,
+            min(255, round(128 + (value - 128) * CHARACTER_CHROMA_GAIN)),
+        )
+    )
+    generated_cr = generated_cr.point(
+        lambda value: max(
+            0,
+            min(255, round(128 + (value - 128) * CHARACTER_CHROMA_GAIN)),
+        )
+    )
+    colorized = Image.merge(
+        "YCbCr",
+        (source_y, generated_cb, generated_cr),
+    ).convert("RGB")
 
     dark_mask = source_y.point(
         lambda value: (
