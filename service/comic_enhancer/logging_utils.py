@@ -14,7 +14,7 @@ SENSITIVE_KEYS = {
 }
 
 
-# 方法说明：按统一的功能、参数、结果和耗时格式记录安全日志。
+# 方法说明：按统一格式记录安全日志，并允许显式字段保留完整文本。
 def log_operation(
     target_logger: logging.Logger,
     level: int,
@@ -23,9 +23,13 @@ def log_operation(
     parameters: dict[str, Any],
     result: dict[str, Any],
     elapsed_ms: int | float | None = None,
+    full_text_keys: set[str] | None = None,
 ) -> None:
-    parameter_text = _safe_json(parameters)
-    result_text = _safe_json(result)
+    allowed_full_text_keys = {
+        item.lower() for item in (full_text_keys or set())
+    }
+    parameter_text = _safe_json(parameters, allowed_full_text_keys)
+    result_text = _safe_json(result, allowed_full_text_keys)
     suffix = (
         f" 耗时_ms={max(0, round(elapsed_ms))}"
         if elapsed_ms is not None
@@ -42,9 +46,12 @@ def log_operation(
 
 
 # 方法说明：将日志字段递归脱敏并编码为紧凑 JSON。
-def _safe_json(value: dict[str, Any]) -> str:
+def _safe_json(
+    value: dict[str, Any],
+    full_text_keys: set[str] | None = None,
+) -> str:
     return json.dumps(
-        _sanitize(value),
+        _sanitize(value, full_text_keys=full_text_keys or set()),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -53,8 +60,13 @@ def _safe_json(value: dict[str, Any]) -> str:
 
 
 # 方法说明：隐藏敏感键并限制任意字符串的日志长度。
-def _sanitize(value: Any, key: str = "") -> Any:
+def _sanitize(
+    value: Any,
+    key: str = "",
+    full_text_keys: set[str] | None = None,
+) -> Any:
     normalized_key = key.lower()
+    allowed_full_text_keys = full_text_keys or set()
     if (
         normalized_key in SENSITIVE_KEYS
         or normalized_key.endswith("_api_key")
@@ -63,11 +75,22 @@ def _sanitize(value: Any, key: str = "") -> Any:
         return "***"
     if isinstance(value, dict):
         return {
-            str(item_key): _sanitize(item_value, str(item_key))
+            str(item_key): _sanitize(
+                item_value,
+                str(item_key),
+                allowed_full_text_keys,
+            )
             for item_key, item_value in value.items()
         }
     if isinstance(value, (list, tuple, set)):
-        return [_sanitize(item) for item in value]
-    if isinstance(value, str) and len(value) > 256:
+        return [
+            _sanitize(item, key, allowed_full_text_keys)
+            for item in value
+        ]
+    if (
+        isinstance(value, str)
+        and normalized_key not in allowed_full_text_keys
+        and len(value) > 256
+    ):
         return f"{value[:253]}..."
     return value

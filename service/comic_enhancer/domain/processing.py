@@ -17,6 +17,7 @@ class ProcessOptions(BaseModel):
     mode: ProcessingMode = ProcessingMode.FAST
     page_index: int = Field(default=0, ge=0)
     palette_version: str = "default"
+    comfyui_direct_output: bool = False
 
 
 class ProcessResult(BaseModel):
@@ -30,6 +31,7 @@ class ProcessResult(BaseModel):
     result_url: str
     elapsed_ms: int
     cached: bool
+    comfyui_direct_output: bool = False
 
 
 class ProcessingModeOption(BaseModel):

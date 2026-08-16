@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   localApiBaseUrl: LOCAL_API_URL,
   localApiToken: "",
   localMode: "fast",
+  comfyuiDirectOutput: false,
 });
 
 const SETTING_KEYS = new Set(Object.keys(DEFAULT_SETTINGS));
@@ -96,6 +97,7 @@ export function migrateSettings(raw = {}) {
   const merged = {
     ...DEFAULT_SETTINGS,
     ...retainedRaw,
+    comfyuiDirectOutput: normalizeBoolean(raw.comfyuiDirectOutput),
     remoteApiBaseUrl: normalizeUrl(
       raw.remoteApiBaseUrl ||
         (deployment === "remote" ? legacyUrl : "") ||
@@ -120,4 +122,9 @@ export function migrateSettings(raw = {}) {
     ),
   };
   return activateDeployment(merged, deployment);
+}
+
+// 方法说明：将旧版或存储中的开关值规范化为布尔值。
+function normalizeBoolean(value) {
+  return value === true || value === 1 || value === "1" || value === "true";
 }

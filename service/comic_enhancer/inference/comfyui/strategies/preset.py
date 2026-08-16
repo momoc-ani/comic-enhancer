@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import logging
+import time
 import uuid
 from pathlib import Path
 
 from ....domain import ProcessOptions
+from ....logging_utils import log_operation
 from ...contracts import InferenceAssets, InferenceOutcome
 from ..image_ops import protect_source_structure, save_output
 from .base import ComfyUIModeStrategy
+
+
+logger = logging.getLogger(__name__)
 
 
 class PresetModeStrategy(ComfyUIModeStrategy):
@@ -31,14 +37,45 @@ class PresetModeStrategy(ComfyUIModeStrategy):
         output_path: Path,
         options: ProcessOptions,
     ) -> InferenceOutcome:
+        started = time.perf_counter()
         loaded_workflow = self.workflow_loader.load(options)
+        workflow_revision = self.workflow_loader.revision(options)
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="ComfyUI预设工作流加载",
+            parameters={
+                "mode": str(options.mode),
+                "workflow": str(loaded_workflow.source),
+                "model_profile": loaded_workflow.model_profile,
+                "input_bytes": len(assets.image_bytes),
+            },
+            result={
+                "status": "loaded",
+                "workflow_revision": workflow_revision[:16],
+            },
+        )
         generated = self.transport.run(
             loaded_workflow.prompt,
             input_images={"INPUT_IMAGE": assets.image_bytes},
             output_prefix=f"comic-enhancer/{uuid.uuid4().hex}",
         )
-        save_output(
-            protect_source_structure(assets.image_bytes, generated),
-            output_path,
+        processed = protect_source_structure(assets.image_bytes, generated)
+        save_output(processed, output_path)
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="ComfyUI预设服务端后处理",
+            parameters={
+                "mode": str(options.mode),
+                "workflow": str(loaded_workflow.source),
+            },
+            result={
+                "status": "success",
+                "model_profile": loaded_workflow.model_profile,
+                "comfyui_size": list(generated.size),
+                "output_size": list(processed.size),
+            },
+            elapsed_ms=(time.perf_counter() - started) * 1000,
         )
         return InferenceOutcome(model_profile=loaded_workflow.model_profile)

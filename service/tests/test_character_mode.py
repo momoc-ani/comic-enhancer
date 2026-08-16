@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from PIL import Image
+import pytest
 
 from comic_enhancer.character_library import (
     CharacterColorEvidence,
@@ -268,10 +269,16 @@ def character_prompt_context(reference):
     )
 
 
-# 方法说明：验证角色档位绑定原图、三张角色参考图与静态调色提示，并执行结构保护。
+# 方法说明：验证角色档位绑定原图、三张角色参考图与静态调色提示，并按开关选择后处理。
+@pytest.mark.parametrize(
+    ("comfyui_direct_output", "expected_size"),
+    [(False, (16, 24)), (True, (20, 20))],
+)
 def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
     tmp_path,
     monkeypatch,
+    comfyui_direct_output,
+    expected_size,
 ):
     workflow = PROJECT_ROOT / "workflows" / "flux2-klein-4b-qwen3-vl-character-colorize.json"
     reference = CharacterReferenceAsset(
@@ -311,7 +318,7 @@ def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
         prepare_workflow(workflow_copy)
         captured["workflow"] = workflow_copy
         captured["inputs"] = input_images
-        return Image.new("RGB", (16, 24), (80, 120, 200))
+        return Image.new("RGB", (20, 20), (80, 120, 200))
 
     monkeypatch.setattr(backend.transport, "run", run_character)
     source_image = Image.new("RGB", (8, 12), "white")
@@ -325,7 +332,10 @@ def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
         work_key="copy_manga:123",
         character_reference_assets=(reference,),
     )
-    options = ProcessOptions(mode="flux2_character")
+    options = ProcessOptions(
+        mode="flux2_character",
+        comfyui_direct_output=comfyui_direct_output,
+    )
     revision = backend.cache_revision(options, assets)
     output_path = tmp_path / "character.webp"
 
@@ -371,11 +381,18 @@ def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
         if isinstance(node, dict)
     )
     with Image.open(output_path) as output:
-        assert output.size == (16, 24)
-        assert max(output.getpixel((8, 12))) <= 40
-        red, green, blue = output.getpixel((6, 12))
-        assert blue >= red + 10
-        assert blue >= green
+        assert output.size == expected_size
+        if comfyui_direct_output:
+            pixel = output.getpixel((10, 10))
+            assert all(
+                abs(actual - expected) <= 2
+                for actual, expected in zip(pixel, (80, 120, 200))
+            )
+        else:
+            assert max(output.getpixel((8, 12))) <= 40
+            red, green, blue = output.getpixel((6, 12))
+            assert blue >= red + 10
+            assert blue >= green
 
 
 # 方法说明：验证角色工作流使用三张参考图、空 latent 和完整四步采样。

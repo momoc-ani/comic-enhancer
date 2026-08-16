@@ -1,4 +1,5 @@
 from io import BytesIO
+import logging
 from pathlib import Path
 import subprocess
 import sys
@@ -88,6 +89,46 @@ def test_process_uses_base_workflow_and_cache(tmp_path):
     image = client.get(result_path, headers=headers)
     assert image.status_code == 200
     assert image.headers["content-type"] == "image/webp"
+
+
+# 方法说明：验证页面处理接口打印安全的入口参数和完整响应结构。
+def test_process_logs_request_parameters_and_response(tmp_path, caplog):
+    settings = Settings(
+        api_token="test-token",
+        runtime_dir=tmp_path / "runtime",
+    )
+    client = TestClient(create_app(settings))
+
+    with caplog.at_level(
+        logging.INFO,
+        logger="comic_enhancer.api.routes.pages",
+    ):
+        response = client.post(
+            "/v1/pages/process",
+            headers={"Authorization": "Bearer test-token"},
+            data={
+                "work_json": (
+                    '{"source":"copy_manga","source_work_id":"123",'
+                    '"title":"测试作品"}'
+                ),
+                "options_json": (
+                    '{"mode":"fast","page_index":2,'
+                    '"comfyui_direct_output":true}'
+                ),
+            },
+            files={"image": ("page.png", png_bytes(), "image/png")},
+        )
+
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert response.status_code == 200
+    assert "功能=页面处理接口请求" in messages
+    assert "功能=页面处理接口返回" in messages
+    assert '"source_work_id":"123"' in messages
+    assert '"page_index":2' in messages
+    assert '"comfyui_direct_output":true' in messages
+    assert '"status_code":200' in messages
+    assert '"cache_key":' in messages
+    assert "test-token" not in messages
 
 
 # 方法说明：验证能力接口要求有效鉴权。
@@ -225,6 +266,44 @@ def test_cache_key_changes_with_backend_revision(tmp_path):
 
     assert first.json()["cache_key"] != second.json()["cache_key"]
     assert second.json()["cached"] is False
+
+
+# 方法说明：验证 ComfyUI 直出状态进入缓存键并在 API 结果中返回。
+def test_comfyui_direct_output_changes_cache_key_and_result(tmp_path):
+    settings = Settings(
+        api_token="test-token",
+        runtime_dir=tmp_path / "runtime",
+    )
+    client = TestClient(create_app(settings))
+    headers = {"Authorization": "Bearer test-token"}
+    work_json = '{"source":"copy_manga","source_work_id":"123"}'
+    image = png_bytes()
+
+    normal = client.post(
+        "/v1/pages/process",
+        headers=headers,
+        data={
+            "work_json": work_json,
+            "options_json": '{"mode":"fast","comfyui_direct_output":false}',
+        },
+        files={"image": ("page.png", image, "image/png")},
+    )
+    direct = client.post(
+        "/v1/pages/process",
+        headers=headers,
+        data={
+            "work_json": work_json,
+            "options_json": '{"mode":"fast","comfyui_direct_output":true}',
+        },
+        files={"image": ("page.png", image, "image/png")},
+    )
+
+    assert normal.status_code == 200
+    assert direct.status_code == 200
+    assert normal.json()["comfyui_direct_output"] is False
+    assert direct.json()["comfyui_direct_output"] is True
+    assert normal.json()["cache_key"] != direct.json()["cache_key"]
+    assert direct.json()["cached"] is False
 
 
 # 方法说明：验证 JSON 配置中的路径字段会转换为路径对象。

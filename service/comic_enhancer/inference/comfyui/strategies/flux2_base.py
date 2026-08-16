@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import uuid
 
 from ....domain import ProcessOptions
+from ....logging_utils import log_operation
 from ...contracts import InferenceAssets, InferenceOutcome
 from ..image_ops import restore_geometry, save_output
 from .base import (
@@ -11,6 +13,9 @@ from .base import (
     reference_cache_revision,
     select_reference_images,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 FLUX2_PROCESSING_REVISION = "flux2-baseline-direct-prompt-v12"
@@ -67,6 +72,24 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
         if self.workflow_path is None:
             raise RuntimeError("FLUX.2 工作流未配置")
         loaded_workflow = self.workflow_loader.load(options)
+        workflow_revision = self.workflow_loader.revision(options)
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="FLUX.2工作流加载",
+            parameters={
+                "mode": str(options.mode),
+                "workflow": str(loaded_workflow.source),
+                "model_profile": loaded_workflow.model_profile,
+                "reference_limit": self.reference_limit,
+            },
+            result={
+                "status": "loaded",
+                "workflow_revision": workflow_revision[:16],
+                "reference_count": len(references),
+                "input_bytes": len(assets.image_bytes),
+            },
+        )
         input_images = {
             "INPUT_IMAGE": assets.image_bytes,
             **{
@@ -83,12 +106,29 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
                 f"comic-enhancer/{self.output_prefix}-{uuid.uuid4().hex}"
             ),
         )
+        generated_size = generated.size
         generated = restore_geometry(
             assets.image_bytes,
             generated,
             output_scale=FLUX2_OUTPUT_SCALE,
         )
         save_output(generated, output_path)
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="FLUX.2服务端几何恢复",
+            parameters={
+                "mode": str(options.mode),
+                "workflow": str(loaded_workflow.source),
+                "output_scale": FLUX2_OUTPUT_SCALE,
+            },
+            result={
+                "status": "success",
+                "comfyui_size": list(generated_size),
+                "saved_size": list(generated.size),
+                "model_profile": loaded_workflow.model_profile,
+            },
+        )
         return InferenceOutcome(
             reference_applied=True,
             model_profile=loaded_workflow.model_profile,

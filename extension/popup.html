@@ -42,6 +42,14 @@
         </select>
       </label>
 
+      <label id="comfyuiDirectOutputField" class="toggle-field">
+        <span>
+          <strong>ComfyUI 原图直出</strong>
+          <small>跳过服务端二次处理，保留 Real-CUGAN 放大</small>
+        </span>
+        <input id="comfyuiDirectOutput" type="checkbox">
+      </label>
+
       <label class="field">
         <span id="apiBaseUrlLabel">远端服务地址</span>
         <input id="apiBaseUrl" type="url" spellcheck="false" placeholder="http://192.168.38.226:8765">

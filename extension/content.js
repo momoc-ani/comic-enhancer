@@ -338,7 +338,13 @@
           imageUrl: task.imageUrl,
           work: this.work,
           chapter: task.chapter || this.chapter,
-          options: { page_index: task.index, palette_version: "default" },
+          options: {
+            page_index: task.index,
+            palette_version: "default",
+            comfyui_direct_output: Boolean(
+              settings.comfyuiDirectOutput && settings.mode === "flux2_character",
+            ),
+          },
           prefetchOnly,
         },
       });
@@ -495,7 +501,8 @@
     const runChanged =
       settings?.mode !== message.settings.mode ||
       settings?.apiBaseUrl !== message.settings.apiBaseUrl ||
-      settings?.apiToken !== message.settings.apiToken;
+      settings?.apiToken !== message.settings.apiToken ||
+      settings?.comfyuiDirectOutput !== message.settings.comfyuiDirectOutput;
     settings = { ...settings, ...message.settings };
     if (settings.enabled) {
       if (!scheduler) {

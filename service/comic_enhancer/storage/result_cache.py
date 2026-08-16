@@ -38,6 +38,7 @@ class ResultCache:
                 work.key,
                 options.mode,
                 options.palette_version,
+                "comfyui-direct-output" if options.comfyui_direct_output else "",
                 backend_revision,
             ]
         )

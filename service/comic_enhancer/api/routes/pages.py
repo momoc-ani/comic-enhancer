@@ -31,6 +31,7 @@ async def process_page(
     _: None = Depends(authorize),
 ) -> ProcessResult:
     """处理单页图片并返回统一结果。"""
+    request_started = time.perf_counter()
     context = get_context(request)
     try:
         work = context.identities.enrich(
@@ -40,32 +41,76 @@ async def process_page(
     except (json.JSONDecodeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
-    if (
-        options.mode == ProcessingMode.UPSCALE
-        and not context.backend.upscale_profile_ready()
-    ):
-        raise HTTPException(status_code=409, detail="Real-CUGAN 放大档未启用")
-    if (
-        options.mode == ProcessingMode.FLUX2
-        and not context.backend.flux2_profile_ready()
-    ):
-        raise HTTPException(status_code=409, detail="FLUX.2 二阶段放大档未启用")
-    if (
-        options.mode == ProcessingMode.FLUX2_QUANT
-        and not context.backend.flux2_quant_profile_ready()
-    ):
-        raise HTTPException(status_code=409, detail="FLUX.2 量化二阶段放大档未启用")
-    if (
-        options.mode == ProcessingMode.FLUX2_CHARACTER
-        and not context.backend.flux2_character_profile_ready()
-    ):
-        raise HTTPException(status_code=409, detail="Qwen3-VL 角色稳定档未启用")
-
     image_bytes = await image.read()
     if not image_bytes:
         raise HTTPException(status_code=422, detail="empty image")
     if len(image_bytes) > 30 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="image exceeds 30 MiB")
+
+    request_parameters = {
+        "work": {
+            "source": work.source,
+            "source_work_id": work.source_work_id,
+            "title": work.title,
+            "author": work.author,
+            "tags": work.tags,
+            "external_ids": work.external_ids,
+            "has_cover_url": bool(work.cover_url),
+        },
+        "options": options.model_dump(mode="json"),
+        "image": {
+            "filename": image.filename or "",
+            "content_type": image.content_type or "",
+            "bytes": len(image_bytes),
+        },
+    }
+    log_operation(
+        logger,
+        logging.INFO,
+        feature="页面处理接口请求",
+        parameters=request_parameters,
+        result={"status": "validated"},
+    )
+
+    unavailable_detail = ""
+    if (
+        options.mode == ProcessingMode.UPSCALE
+        and not context.backend.upscale_profile_ready()
+    ):
+        unavailable_detail = "Real-CUGAN 放大档未启用"
+    elif (
+        options.mode == ProcessingMode.FLUX2
+        and not context.backend.flux2_profile_ready()
+    ):
+        unavailable_detail = "FLUX.2 二阶段放大档未启用"
+    elif (
+        options.mode == ProcessingMode.FLUX2_QUANT
+        and not context.backend.flux2_quant_profile_ready()
+    ):
+        unavailable_detail = "FLUX.2 量化二阶段放大档未启用"
+    elif (
+        options.mode == ProcessingMode.FLUX2_CHARACTER
+        and not context.backend.flux2_character_profile_ready()
+    ):
+        unavailable_detail = "Qwen3-VL 角色稳定档未启用"
+    if unavailable_detail:
+        log_operation(
+            logger,
+            logging.WARNING,
+            feature="页面处理接口返回",
+            parameters={
+                "work_key": work.key,
+                "mode": str(options.mode),
+                "page_index": options.page_index,
+            },
+            result={
+                "status": "rejected",
+                "status_code": 409,
+                "detail": unavailable_detail,
+            },
+            elapsed_ms=(time.perf_counter() - request_started) * 1000,
+        )
+        raise HTTPException(status_code=409, detail=unavailable_detail)
 
     character_references: dict[str, bytes] = {}
     character_reference_assets: list[CharacterReferenceAsset] = []
@@ -87,6 +132,23 @@ async def process_page(
                 },
                 result={"status": "failed", "error": type(error).__name__},
                 elapsed_ms=(time.perf_counter() - reference_started) * 1000,
+            )
+            log_operation(
+                logger,
+                logging.ERROR,
+                feature="页面处理接口返回",
+                parameters={
+                    "work_key": work.key,
+                    "mode": str(options.mode),
+                    "page_index": options.page_index,
+                },
+                result={
+                    "status": "failed",
+                    "status_code": 500,
+                    "stage": "character_references",
+                    "error": type(error).__name__,
+                },
+                elapsed_ms=(time.perf_counter() - request_started) * 1000,
             )
             raise
         for entry, reference in entries[:reference_limit]:
@@ -120,11 +182,48 @@ async def process_page(
             elapsed_ms=(time.perf_counter() - reference_started) * 1000,
         )
 
-    return await context.processor.process(
-        image_bytes,
-        None,
-        work,
-        options,
-        character_references=character_references,
-        character_reference_assets=tuple(character_reference_assets),
+    try:
+        result = await context.processor.process(
+            image_bytes,
+            None,
+            work,
+            options,
+            character_references=character_references,
+            character_reference_assets=tuple(character_reference_assets),
+        )
+    except Exception as error:
+        log_operation(
+            logger,
+            logging.ERROR,
+            feature="页面处理接口返回",
+            parameters={
+                "work_key": work.key,
+                "mode": str(options.mode),
+                "page_index": options.page_index,
+            },
+            result={
+                "status": "failed",
+                "status_code": 500,
+                "stage": "processing",
+                "error": type(error).__name__,
+            },
+            elapsed_ms=(time.perf_counter() - request_started) * 1000,
+        )
+        raise
+    log_operation(
+        logger,
+        logging.INFO,
+        feature="页面处理接口返回",
+        parameters={
+            "work_key": work.key,
+            "mode": str(options.mode),
+            "page_index": options.page_index,
+        },
+        result={
+            "status": "success",
+            "status_code": 200,
+            "response": result.model_dump(mode="json"),
+        },
+        elapsed_ms=(time.perf_counter() - request_started) * 1000,
     )
+    return result

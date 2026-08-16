@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+from io import BytesIO
 from pathlib import Path
 import time
+
+from PIL import Image
 
 from ..domain import ProcessingMode, ProcessOptions
 from ..logging_utils import log_operation
@@ -113,6 +116,26 @@ class RoutedInferenceBackend(InferenceBackend):
                 (time.perf_counter() - primary_started) * 1000
             )
             stage_bytes = stage_path.read_bytes()
+            with Image.open(BytesIO(stage_bytes)) as stage_image:
+                stage_size = stage_image.size
+            log_operation(
+                logger,
+                logging.INFO,
+                feature="FLUX.2首阶段完成",
+                parameters={
+                    "work_key": assets.work_key,
+                    "mode": str(options.mode),
+                    "comfyui_direct_output": options.comfyui_direct_output,
+                },
+                result={
+                    "status": "success",
+                    "model_profile": primary.model_profile,
+                    "stage_size": list(stage_size),
+                    "stage_bytes": len(stage_bytes),
+                    "elapsed_ms": primary_elapsed_ms,
+                },
+                elapsed_ms=primary_elapsed_ms,
+            )
             stage = "realcugan"
             secondary_started = time.perf_counter()
             secondary = self.upscaler.process(
@@ -121,6 +144,27 @@ class RoutedInferenceBackend(InferenceBackend):
             )
             secondary_elapsed_ms = round(
                 (time.perf_counter() - secondary_started) * 1000
+            )
+            output_size = None
+            if output_path.is_file():
+                with Image.open(output_path) as output_image:
+                    output_size = output_image.size
+            log_operation(
+                logger,
+                logging.INFO,
+                feature="FLUX.2二阶段放大完成",
+                parameters={
+                    "work_key": assets.work_key,
+                    "mode": str(options.mode),
+                    "comfyui_direct_output": options.comfyui_direct_output,
+                },
+                result={
+                    "status": "success",
+                    "model_profile": secondary.model_profile,
+                    "output_size": list(output_size) if output_size else None,
+                    "elapsed_ms": secondary_elapsed_ms,
+                },
+                elapsed_ms=secondary_elapsed_ms,
             )
             model_profile = (
                 primary.model_profile

@@ -14,6 +14,8 @@ const elements = {
   enabled: document.getElementById("enabled"),
   deploymentTabs: [...document.querySelectorAll(".deployment-tab")],
   mode: document.getElementById("mode"),
+  comfyuiDirectOutput: document.getElementById("comfyuiDirectOutput"),
+  comfyuiDirectOutputField: document.getElementById("comfyuiDirectOutputField"),
   apiBaseUrl: document.getElementById("apiBaseUrl"),
   apiBaseUrlLabel: document.getElementById("apiBaseUrlLabel"),
   apiToken: document.getElementById("apiToken"),
@@ -39,6 +41,7 @@ elements.deploymentTabs.forEach((tab) => {
   tab.addEventListener("click", () => switchDeployment(tab.dataset.deployment));
 });
 elements.mode.addEventListener("change", renderSelection);
+elements.comfyuiDirectOutput.addEventListener("change", markConnectionDirty);
 elements.apiBaseUrl.addEventListener("input", markConnectionDirty);
 elements.apiToken.addEventListener("input", markConnectionDirty);
 elements.save.addEventListener("click", save);
@@ -69,6 +72,7 @@ async function load() {
     },
   };
   elements.enabled.checked = Boolean(storedSettings.enabled);
+  elements.comfyuiDirectOutput.checked = Boolean(storedSettings.comfyuiDirectOutput);
   populateActiveForm();
   await checkService(resolveSettings(storedSettings));
 }
@@ -88,6 +92,7 @@ function populateActiveForm() {
   elements.mode.value = draft.mode;
   elements.apiBaseUrl.value = draft.apiBaseUrl;
   elements.apiToken.value = draft.apiToken;
+  elements.comfyuiDirectOutput.checked = Boolean(storedSettings.comfyuiDirectOutput);
   elements.apiBaseUrlLabel.textContent =
     activeDeployment === "remote" ? "远端服务地址" : "本地服务地址";
   elements.apiBaseUrl.placeholder =
@@ -114,9 +119,17 @@ async function switchDeployment(deployment) {
 // 方法说明：根据当前选择刷新档位和模型状态。
 function renderSelection() {
   const settings = resolveSettings(storedSettings);
+  renderComfyuiDirectOutputControl(settings.mode);
   const capabilities = cachedCapabilities(settings);
   applyModeAvailability(capabilities);
   renderModelTier(settings, capabilities);
+}
+
+// 方法说明：仅在 Qwen3-VL + FLUX.2 角色档显示原图直出开关。
+function renderComfyuiDirectOutputControl(mode) {
+  const visible = mode === "flux2_character";
+  elements.comfyuiDirectOutputField.hidden = !visible;
+  elements.comfyuiDirectOutput.disabled = !visible;
 }
 
 // 方法说明：渲染当前模型档位及最近执行详情。
@@ -192,6 +205,7 @@ async function save() {
         apiBaseUrl: settings.apiBaseUrl,
         mode: settings.mode,
         prefetchPages: settings.prefetchPages,
+        comfyuiDirectOutput: settings.comfyuiDirectOutput,
       },
     });
   } catch (error) {
@@ -213,6 +227,7 @@ function resolveSettings(current = DEFAULT_SETTINGS) {
     localApiBaseUrl: drafts.local.apiBaseUrl,
     localApiToken: drafts.local.apiToken,
     localMode: drafts.local.mode,
+    comfyuiDirectOutput: Boolean(elements.comfyuiDirectOutput.checked),
   };
   return activateDeployment(merged, activeDeployment);
 }

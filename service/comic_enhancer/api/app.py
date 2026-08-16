@@ -18,6 +18,7 @@ from ..config import Settings, load_settings
 from ..identities import WorkIdentityRegistry
 from ..inference import InferenceBackend, create_backend
 from ..inference.comfyui import PresetWorkflowLoader
+from ..logging_utils import log_operation
 from ..metadata import (
     AniListProvider,
     BangumiProvider,
@@ -38,14 +39,21 @@ from .routes import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 # 方法说明：让业务 INFO 日志复用 Uvicorn 的终端处理器和格式。
 def _configure_application_logging() -> None:
     application_logger = logging.getLogger("comic_enhancer")
     application_logger.setLevel(logging.INFO)
-    uvicorn_logger = logging.getLogger("uvicorn.error")
-    if uvicorn_logger.handlers:
-        application_logger.handlers = list(uvicorn_logger.handlers)
+    uvicorn_error_logger = logging.getLogger("uvicorn.error")
+    uvicorn_logger = logging.getLogger("uvicorn")
+    handlers = uvicorn_error_logger.handlers or uvicorn_logger.handlers
+    if handlers:
+        application_logger.handlers = list(handlers)
         application_logger.propagate = False
+    else:
+        application_logger.propagate = True
 
 def _create_backend(settings: Settings) -> InferenceBackend:
     """按配置创建统一推理后端。"""
@@ -154,7 +162,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI):
         """管理应用启动和关闭期间的后台资源。"""
         context.settings.runtime_dir.mkdir(parents=True, exist_ok=True)
-        yield
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="Comic Enhancer服务启动",
+            parameters={
+                "backend": context.settings.backend,
+                "runtime_dir": str(context.settings.runtime_dir),
+                "comfyui_url": context.settings.comfyui_url,
+                "flux2_character_enabled": (
+                    context.settings.comfyui_flux2_character_enabled
+                ),
+            },
+            result={"status": "started"},
+        )
+        try:
+            yield
+        finally:
+            log_operation(
+                logger,
+                logging.INFO,
+                feature="Comic Enhancer服务关闭",
+                parameters={"backend": context.settings.backend},
+                result={"status": "stopped"},
+            )
 
     app = FastAPI(title="Comic Enhancer", version=__version__, lifespan=lifespan)
     app.state.context = context

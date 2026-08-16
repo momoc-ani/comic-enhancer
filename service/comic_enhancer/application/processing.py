@@ -86,6 +86,7 @@ class ProcessingService:
                 reference_applied=bool(metadata.get("reference_applied", False)),
                 processed_panels=int(metadata.get("processed_panels", 0)),
                 model_profile=str(metadata.get("model_profile", "")),
+                comfyui_direct_output=options.comfyui_direct_output,
             )
 
         async with self.semaphore:
@@ -123,6 +124,7 @@ class ProcessingService:
                         "reference_applied": outcome.reference_applied,
                         "processed_panels": outcome.processed_panels,
                         "model_profile": outcome.model_profile,
+                        "comfyui_direct_output": options.comfyui_direct_output,
                     },
                 )
 
@@ -138,6 +140,7 @@ class ProcessingService:
                 reference_applied=bool(metadata.get("reference_applied", False)),
                 processed_panels=int(metadata.get("processed_panels", 0)),
                 model_profile=str(metadata.get("model_profile", "")),
+                comfyui_direct_output=options.comfyui_direct_output,
             )
 
         return self._result(
@@ -150,6 +153,7 @@ class ProcessingService:
             reference_applied=outcome.reference_applied,
             processed_panels=outcome.processed_panels,
             model_profile=outcome.model_profile,
+            comfyui_direct_output=options.comfyui_direct_output,
         )
 
     def _result(
@@ -164,6 +168,7 @@ class ProcessingService:
         reference_applied: bool = False,
         processed_panels: int = 0,
         model_profile: str = "",
+        comfyui_direct_output: bool = False,
     ) -> ProcessResult:
         """组装统一的页面处理结果。"""
         elapsed_ms = round((time.perf_counter() - started) * 1000)
@@ -178,6 +183,7 @@ class ProcessingService:
             result_url=f"/v1/results/{output_path.name}",
             elapsed_ms=elapsed_ms,
             cached=cached,
+            comfyui_direct_output=comfyui_direct_output,
         )
         log_operation(
             logger,
@@ -195,6 +201,7 @@ class ProcessingService:
                 "reference_applied": reference_applied,
                 "processed_panels": processed_panels,
                 "model_profile": model_profile,
+                "comfyui_direct_output": comfyui_direct_output,
             },
             elapsed_ms=elapsed_ms,
         )

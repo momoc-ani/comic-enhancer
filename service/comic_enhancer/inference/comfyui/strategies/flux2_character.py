@@ -96,9 +96,9 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             f"{PROMPT_PLANNER_REVISION}:{model_revision}"
         )
         if assets is None:
-            return base
+            return _append_direct_output_revision(base, options)
         context = self._prepare(assets)
-        return f"{base}:{context.digest}"
+        return _append_direct_output_revision(f"{base}:{context.digest}", options)
 
     # 方法说明：执行独立角色提示工作流，直出 FLUX.2 结果并交给外层本地放大档。
     def process(
@@ -112,6 +112,7 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             "work_key": assets.work_key,
             "references": len(assets.character_reference_assets),
             "processing_revision": FLUX2_CHARACTER_PROCESSING_REVISION,
+            "comfyui_direct_output": options.comfyui_direct_output,
         }
         if not self.available():
             log_operation(
@@ -136,6 +137,25 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
 
         context = self._prepare(assets)
         loaded_workflow = self.workflow_loader.load(options)
+        workflow_revision = self.workflow_loader.revision(options)
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="角色稳定工作流加载",
+            parameters={
+                "mode": str(options.mode),
+                "workflow": str(loaded_workflow.source),
+                "model_profile": loaded_workflow.model_profile,
+                "comfyui_direct_output": options.comfyui_direct_output,
+                "reference_count": len(context.characters),
+            },
+            result={
+                "status": "loaded",
+                "workflow_revision": workflow_revision[:16],
+                "context_digest": context.digest[:12],
+                "input_bytes": len(assets.image_bytes),
+            },
+        )
         guide = build_static_character_guide(
             [
                 {
@@ -187,12 +207,65 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 elapsed_ms=(time.perf_counter() - started) * 1000,
             )
             raise
-        generated = restore_geometry(
-            assets.image_bytes,
-            generated,
-            output_scale=FLUX2_OUTPUT_SCALE,
+        comfyui_size = generated.size
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="角色稳定ComfyUI输出",
+            parameters={
+                "mode": str(options.mode),
+                "workflow": str(loaded_workflow.source),
+                "model_profile": loaded_workflow.model_profile,
+                "context_digest": context.digest[:12],
+            },
+            result={
+                "status": "success",
+                "size": list(comfyui_size),
+                "comfyui_direct_output": options.comfyui_direct_output,
+            },
         )
-        generated = protect_source_luminance_and_ink(assets.image_bytes, generated)
+        if not options.comfyui_direct_output:
+            generated = restore_geometry(
+                assets.image_bytes,
+                generated,
+                output_scale=FLUX2_OUTPUT_SCALE,
+            )
+            generated = protect_source_luminance_and_ink(
+                assets.image_bytes,
+                generated,
+            )
+            log_operation(
+                logger,
+                logging.INFO,
+                feature="角色稳定服务端二次处理",
+                parameters={
+                    "mode": str(options.mode),
+                    "output_scale": FLUX2_OUTPUT_SCALE,
+                    "comfyui_direct_output": False,
+                },
+                result={
+                    "status": "success",
+                    "comfyui_size": list(comfyui_size),
+                    "output_size": list(generated.size),
+                    "structure_protection": True,
+                },
+            )
+        else:
+            log_operation(
+                logger,
+                logging.INFO,
+                feature="角色稳定服务端二次处理",
+                parameters={
+                    "mode": str(options.mode),
+                    "comfyui_direct_output": True,
+                },
+                result={
+                    "status": "skipped",
+                    "reason": "comfyui_direct_output",
+                    "output_size": list(generated.size),
+                    "realcugan_stage": "enabled_by_outer_pipeline",
+                },
+            )
         save_output(generated, output_path)
         outcome = InferenceOutcome(
             reference_applied=True,
@@ -214,6 +287,7 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 "palette_profiles": len(context.characters),
                 "reference_profiles": len(references),
                 "reference_images_uploaded": 3,
+                "comfyui_direct_output": options.comfyui_direct_output,
                 "processed_panels": outcome.processed_panels,
                 "model_profile": outcome.model_profile,
             },
@@ -280,6 +354,13 @@ def _assets_key(assets: InferenceAssets, model_revision: str) -> str:
         digest.update(reference.character_id.encode("utf-8"))
         digest.update(reference.image_bytes)
     return digest.hexdigest()
+
+
+# 方法说明：为直出和结构保护两种结果生成互不复用的缓存版本。
+def _append_direct_output_revision(base: str, options: ProcessOptions) -> str:
+    if options.comfyui_direct_output:
+        return f"{base}:comfyui-direct-output"
+    return base
 
 
 # 方法说明：把静态角色颜色指南追加到基础 FLUX.2 正向提示词节点。

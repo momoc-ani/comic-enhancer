@@ -211,6 +211,64 @@ def test_flux2_pipeline_uses_upscale_as_second_stage(tmp_path, monkeypatch):
     )
 
 
+# 方法说明：验证角色档直出模式跳过首阶段后处理后仍执行 Real-CUGAN 放大。
+def test_flux2_character_direct_output_still_uses_upscale(
+    tmp_path,
+    monkeypatch,
+):
+    backend = PassthroughBackend()
+    upscaler = create_realcugan_resources(tmp_path / "resource" / "realcugan")
+    routed = RoutedInferenceBackend(backend, upscaler)
+    captured = {}
+
+    monkeypatch.setattr(backend, "flux2_character_profile_ready", lambda: True)
+
+    # 方法说明：模拟角色档 ComfyUI 原图直出并记录开关值。
+    def process_character(assets, output_path, options):
+        captured["direct_output"] = options.comfyui_direct_output
+        Image.new("RGB", (20, 20), (80, 120, 200)).save(
+            output_path,
+            format="WEBP",
+        )
+        return InferenceOutcome(
+            reference_applied=True,
+            model_profile="flux2-klein-4b-qwen3-vl-character",
+        )
+
+    # 方法说明：模拟 Real-CUGAN 读取直出阶段结果并再次放大两倍。
+    def process_upscale(assets, output_path):
+        with Image.open(BytesIO(assets.image_bytes)) as source:
+            captured["stage_size"] = source.size
+            source.resize((source.width * 2, source.height * 2)).save(
+                output_path,
+                format="WEBP",
+            )
+        return InferenceOutcome(model_profile=REALCUGAN_MODEL_PROFILE)
+
+    monkeypatch.setattr(backend, "process", process_character)
+    monkeypatch.setattr(upscaler, "process", process_upscale)
+    output_path = tmp_path / "character-direct-upscaled.webp"
+
+    outcome = routed.process(
+        InferenceAssets(
+            image_bytes=png_bytes((8, 12)),
+            work_key="copy_manga:123",
+        ),
+        output_path,
+        ProcessOptions(
+            mode="flux2_character",
+            comfyui_direct_output=True,
+        ),
+    )
+
+    assert captured["direct_output"] is True
+    assert captured["stage_size"] == (20, 20)
+    with Image.open(output_path) as result:
+        assert result.size == (40, 40)
+    assert outcome.reference_applied is True
+    assert outcome.model_profile == "flux2-klein-4b-qwen3-vl-character"
+
+
 # 方法说明：验证 UPSCALE 二阶段失败时不回退到质量档。
 def test_flux2_upscale_failure_does_not_fallback(tmp_path, monkeypatch):
     backend = PassthroughBackend()

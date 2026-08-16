@@ -13,6 +13,7 @@ import time
 from PIL import Image, ImageOps
 
 from .contracts import InferenceAssets, InferenceOutcome
+from ..logging_utils import log_operation
 
 
 logger = logging.getLogger(__name__)
@@ -143,7 +144,6 @@ class RealCuganUpscaler:
             raise RuntimeError("当前平台不支持 Real-CUGAN 放大资源")
 
         started = time.perf_counter()
-        logger.info("Real-CUGAN 两倍放大开始")
         with tempfile.TemporaryDirectory(prefix="comic-enhancer-realcugan-") as temp:
             temp_dir = Path(temp)
             input_path = temp_dir / "input.png"
@@ -168,6 +168,23 @@ class RealCuganUpscaler:
                 "-f",
                 "png",
             ]
+            log_operation(
+                logger,
+                logging.INFO,
+                feature="Real-CUGAN放大执行",
+                parameters={
+                    "executable": executable.name,
+                    "model_dir": str(model_dir),
+                    "scale": 2,
+                    "denoise": -1,
+                    "timeout_seconds": self.timeout_seconds,
+                    "source_size": list(source_size),
+                },
+                result={
+                    "status": "started",
+                    "output_format": "png",
+                },
+            )
             completed = subprocess.run(
                 command,
                 cwd=platform_dir,
@@ -184,6 +201,20 @@ class RealCuganUpscaler:
             )
             if completed.returncode != 0:
                 detail = (completed.stderr or completed.stdout).strip()[-1000:]
+                log_operation(
+                    logger,
+                    logging.ERROR,
+                    feature="Real-CUGAN放大执行",
+                    parameters={
+                        "executable": executable.name,
+                        "source_size": list(source_size),
+                    },
+                    result={
+                        "status": "failed",
+                        "returncode": completed.returncode,
+                    },
+                    elapsed_ms=(time.perf_counter() - started) * 1000,
+                )
                 raise RuntimeError(
                     f"Real-CUGAN 执行失败（退出码 {completed.returncode}）: {detail}"
                 )
@@ -194,6 +225,20 @@ class RealCuganUpscaler:
 
         expected_size = (source_size[0] * 2, source_size[1] * 2)
         if result.size != expected_size:
+            log_operation(
+                logger,
+                logging.ERROR,
+                feature="Real-CUGAN放大校验",
+                parameters={
+                    "source_size": list(source_size),
+                    "expected_size": list(expected_size),
+                },
+                result={
+                    "status": "failed",
+                    "actual_size": list(result.size),
+                },
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+            )
             raise RuntimeError(
                 "Real-CUGAN 输出尺寸不符合两倍放大契约: "
                 f"expected={expected_size} actual={result.size}"
@@ -202,8 +247,20 @@ class RealCuganUpscaler:
         temporary = output_path.with_suffix(".tmp.webp")
         result.save(temporary, format="WEBP", quality=93, method=4)
         temporary.replace(output_path)
-        logger.info(
-            "Real-CUGAN 两倍放大完成，耗时 %.3f 秒",
-            time.perf_counter() - started,
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="Real-CUGAN放大完成",
+            parameters={
+                "scale": 2,
+                "denoise": -1,
+                "source_size": list(source_size),
+            },
+            result={
+                "status": "success",
+                "output_size": list(result.size),
+                "model_profile": self.model_profile,
+            },
+            elapsed_ms=(time.perf_counter() - started) * 1000,
         )
         return InferenceOutcome(model_profile=self.model_profile)

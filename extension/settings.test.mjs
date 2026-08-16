@@ -59,3 +59,13 @@ test("accepts experimental modes with conservative prefetch", () => {
   assert.equal(prefetchPagesForMode("upscale"), 1);
   assert.equal(prefetchPagesForMode("flux2"), 1);
 });
+
+// 方法说明：验证 ComfyUI 直出开关默认关闭且能从存储中迁移。
+test("migrates the ComfyUI direct output switch", () => {
+  assert.equal(migrateSettings({}).comfyuiDirectOutput, false);
+  assert.equal(migrateSettings({ comfyuiDirectOutput: true }).comfyuiDirectOutput, true);
+  assert.equal(
+    migrateSettings({ comfyuiDirectOutput: "false" }).comfyuiDirectOutput,
+    false,
+  );
+});
