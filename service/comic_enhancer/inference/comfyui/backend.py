@@ -21,6 +21,7 @@ from .strategies import (
     FastModeStrategy,
     Flux2ModeStrategy,
     Flux2CharacterModeStrategy,
+    Flux2CharacterLineartModeStrategy,
     Flux2QuantModeStrategy,
     QualityModeStrategy,
 )
@@ -37,6 +38,7 @@ class ComfyUIBackend(InferenceBackend):
         "flux2-klein-4b",
         "flux2-klein-4b-qwen3-fp8",
         "flux2-klein-4b-qwen3-vl-character",
+        "flux2-klein-4b-qwen3-vl-character-lineart",
     )
 
     # 方法说明：初始化传输层并注册每个处理档位的独立策略实现。
@@ -55,6 +57,8 @@ class ComfyUIBackend(InferenceBackend):
         flux2_character_enabled: bool = False,
         flux2_character_workflow: Path | None = None,
         flux2_character_native_resolution: bool = False,
+        flux2_character_lineart_enabled: bool = False,
+        flux2_character_lineart_workflow: Path | None = None,
         character_library: CharacterLibraryBuilder | None = None,
     ):
         self.base_url = base_url.rstrip("/")
@@ -93,6 +97,12 @@ class ComfyUIBackend(InferenceBackend):
                 character_library=character_library,
                 **shared_options,
             ),
+            Flux2CharacterLineartModeStrategy(
+                enabled=flux2_character_lineart_enabled,
+                workflow_path=flux2_character_lineart_workflow,
+                character_library=character_library,
+                **shared_options,
+            ),
         )
         self._mode_strategies = {strategy.mode: strategy for strategy in strategies}
 
@@ -111,6 +121,10 @@ class ComfyUIBackend(InferenceBackend):
     # 方法说明：检查 Qwen3-VL 角色稳定档是否可用。
     def flux2_character_profile_ready(self) -> bool:
         return self.mode_available(ProcessingMode.FLUX2_CHARACTER)
+
+    # 方法说明：检查角色线稿保真档是否可用。
+    def flux2_character_lineart_profile_ready(self) -> bool:
+        return self.mode_available(ProcessingMode.FLUX2_CHARACTER_LINEART)
 
     # 方法说明：检查指定处理档位是否可用。
     def mode_available(self, mode: ProcessingMode | str) -> bool:

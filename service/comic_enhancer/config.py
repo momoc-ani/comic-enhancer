@@ -35,6 +35,8 @@ class Settings:
     comfyui_workflow_flux2_quant: Path | None = None
     comfyui_flux2_character_enabled: bool = False
     comfyui_workflow_flux2_character: Path | None = None
+    comfyui_flux2_character_lineart_enabled: bool = False
+    comfyui_workflow_flux2_character_lineart: Path | None = None
     comfyui_flux2_character_native_resolution: bool = False
     qwen_vl_base_url: str = "http://127.0.0.1:8080"
     qwen_vl_api_key: str = ""
@@ -77,6 +79,7 @@ def load_settings() -> Settings:
         "comfyui_workflow_flux2",
         "comfyui_workflow_flux2_quant",
         "comfyui_workflow_flux2_character",
+        "comfyui_workflow_flux2_character_lineart",
         "character_library_root",
         "work_identity_index",
     ):
@@ -137,6 +140,14 @@ def load_settings() -> Settings:
         "COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_NATIVE_RESOLUTION": (
             "comfyui_flux2_character_native_resolution",
             lambda value: value.lower() in {"1", "true", "yes", "on"},
+        ),
+        "COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_LINEART_ENABLED": (
+            "comfyui_flux2_character_lineart_enabled",
+            lambda value: value.lower() in {"1", "true", "yes", "on"},
+        ),
+        "COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_LINEART": (
+            "comfyui_workflow_flux2_character_lineart",
+            Path,
         ),
         "COMIC_ENHANCER_QWEN_VL_URL": ("qwen_vl_base_url", str),
         "COMIC_ENHANCER_QWEN_VL_API_KEY": ("qwen_vl_api_key", str),

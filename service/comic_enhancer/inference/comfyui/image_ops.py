@@ -3,7 +3,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image, ImageChops, ImageFilter, ImageOps
 
 
 CHARACTER_CHROMA_GAIN = 1.8
@@ -109,23 +109,35 @@ def protect_source_structure(
 def protect_source_luminance_and_ink(
     source_bytes: bytes,
     generated: Image.Image,
+    *,
+    chroma_gain: float = CHARACTER_CHROMA_GAIN,
+    chroma_blur_radius: float = 0.0,
 ) -> Image.Image:
+    """保留原图明度和墨线，并按档位提取生成图色度。"""
+    if chroma_gain <= 0:
+        raise ValueError("chroma_gain must be positive")
+    if chroma_blur_radius < 0:
+        raise ValueError("chroma_blur_radius must not be negative")
     with Image.open(BytesIO(source_bytes)) as source_file:
         source = ImageOps.exif_transpose(source_file).convert("RGB")
     source = source.resize(generated.size, Image.Resampling.LANCZOS)
 
     source_y, _, _ = source.convert("YCbCr").split()
     _, generated_cb, generated_cr = generated.convert("YCbCr").split()
+    if chroma_blur_radius:
+        blur = ImageFilter.GaussianBlur(chroma_blur_radius)
+        generated_cb = generated_cb.filter(blur)
+        generated_cr = generated_cr.filter(blur)
     generated_cb = generated_cb.point(
         lambda value: max(
             0,
-            min(255, round(128 + (value - 128) * CHARACTER_CHROMA_GAIN)),
+            min(255, round(128 + (value - 128) * chroma_gain)),
         )
     )
     generated_cr = generated_cr.point(
         lambda value: max(
             0,
-            min(255, round(128 + (value - 128) * CHARACTER_CHROMA_GAIN)),
+            min(255, round(128 + (value - 128) * chroma_gain)),
         )
     )
     colorized = Image.merge(
@@ -138,6 +150,55 @@ def protect_source_luminance_and_ink(
             255
             if value <= 112
             else max(0, min(255, round((176 - value) * 255 / 64)))
+        )
+    )
+    return Image.composite(source, colorized, dark_mask)
+
+
+# 方法说明：只回注原图深色墨线，保留生成图的明度和色彩层次。
+def protect_source_ink_only(
+    source_bytes: bytes,
+    generated: Image.Image,
+    *,
+    chroma_gain: float = 1.0,
+    chroma_blur_radius: float = 0.0,
+) -> Image.Image:
+    if chroma_gain <= 0:
+        raise ValueError("chroma_gain must be positive")
+    if chroma_blur_radius < 0:
+        raise ValueError("chroma_blur_radius must not be negative")
+    with Image.open(BytesIO(source_bytes)) as source_file:
+        source = ImageOps.exif_transpose(source_file).convert("RGB")
+    source = source.resize(generated.size, Image.Resampling.LANCZOS)
+    generated = generated.convert("RGB")
+    generated_y, generated_cb, generated_cr = generated.convert("YCbCr").split()
+    if chroma_blur_radius:
+        blur = ImageFilter.GaussianBlur(chroma_blur_radius)
+        generated_cb = generated_cb.filter(blur)
+        generated_cr = generated_cr.filter(blur)
+    generated_cb = generated_cb.point(
+        lambda value: max(
+            0,
+            min(255, round(128 + (value - 128) * chroma_gain)),
+        )
+    )
+    generated_cr = generated_cr.point(
+        lambda value: max(
+            0,
+            min(255, round(128 + (value - 128) * chroma_gain)),
+        )
+    )
+    colorized = Image.merge(
+        "YCbCr",
+        (generated_y, generated_cb, generated_cr),
+    ).convert("RGB")
+
+    source_y = source.convert("YCbCr").getchannel("Y")
+    dark_mask = source_y.point(
+        lambda value: (
+            255
+            if value <= 40
+            else max(0, min(255, round((96 - value) * 255 / 56)))
         )
     )
     return Image.composite(source, colorized, dark_mask)

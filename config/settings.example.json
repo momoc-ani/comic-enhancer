@@ -18,6 +18,7 @@
   "comfyui_workflow_flux2_quant": "workflows/flux2-klein-4b-reference-colorize-qwen3-fp8.json",
   "comfyui_flux2_character_enabled": false,
   "comfyui_workflow_flux2_character": "workflows/flux2-klein-4b-qwen3-vl-character-colorize.json",
+  "comfyui_workflow_flux2_character_lineart": "workflows/flux2-klein-4b-qwen3-vl-character-lineart-colorize.json",
   "comfyui_flux2_character_native_resolution": false,
   "qwen_vl_base_url": "http://127.0.0.1:8080",
   "qwen_vl_api_key": "",

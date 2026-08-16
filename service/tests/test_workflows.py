@@ -16,6 +16,7 @@ from comic_enhancer.inference.comfyui.strategies import (
     FastModeStrategy,
     Flux2ModeStrategy,
     Flux2CharacterModeStrategy,
+    Flux2CharacterLineartModeStrategy,
     Flux2QuantModeStrategy,
     QualityModeStrategy,
 )
@@ -100,11 +101,43 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
         "flux2": Flux2ModeStrategy,
         "flux2_quant": Flux2QuantModeStrategy,
         "flux2_character": Flux2CharacterModeStrategy,
+        "flux2_character_lineart": Flux2CharacterLineartModeStrategy,
     }
     for mode, strategy_type in expected.items():
         strategy = backend.mode_strategy(mode)
         assert isinstance(strategy, strategy_type)
     assert len({type(backend.mode_strategy(mode)) for mode in expected}) == len(expected)
+
+
+# 方法说明：验证线稿保真工作流保持 0.85MP 四步生成并在末端恢复原图尺寸。
+def test_shipped_character_lineart_workflow_has_source_structure_contract():
+    path = (
+        PROJECT_ROOT
+        / "workflows"
+        / "flux2-klein-4b-qwen3-vl-character-lineart-colorize.json"
+    )
+    workflow = json.loads(path.read_text(encoding="utf-8"))
+    load_titles = {
+        node.get("_meta", {}).get("title")
+        for node in workflow.values()
+        if isinstance(node, dict) and node.get("class_type") == "LoadImage"
+    }
+
+    assert load_titles == {
+        "INPUT_IMAGE",
+        "REFERENCE_IMAGE_1",
+        "REFERENCE_IMAGE_2",
+        "REFERENCE_IMAGE_3",
+    }
+    assert workflow["10"]["inputs"]["megapixels"] == 0.85
+    assert workflow["28"]["inputs"]["steps"] == 4
+    assert workflow["32"]["inputs"]["latent_image"] == ["27", 0]
+    assert workflow["27"]["class_type"] == "EmptyFlux2LatentImage"
+    assert workflow["34"]["inputs"]["images"] == ["35", 0]
+    assert workflow["35"]["inputs"]["width"] == ["36", 0]
+    assert workflow["35"]["inputs"]["height"] == ["36", 1]
+    assert workflow["36"]["inputs"]["image"] == ["1", 0]
+    assert "strictly aligned color map" in workflow["8"]["inputs"]["text"]
 
 
 @pytest.mark.parametrize("mode", ["flux2", "flux2_quant"])

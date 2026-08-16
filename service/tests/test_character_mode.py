@@ -27,7 +27,9 @@ from comic_enhancer.inference import InferenceAssets
 from comic_enhancer.inference.comfyui import ComfyUIBackend, PresetWorkflowLoader
 from comic_enhancer.inference.comfyui.strategies import (
     FLUX2_CHARACTER_PROCESSING_REVISION,
+    FLUX2_CHARACTER_LINEART_PROCESSING_REVISION,
     Flux2CharacterModeStrategy,
+    Flux2CharacterLineartModeStrategy,
 )
 from comic_enhancer.models import ProcessOptions
 
@@ -415,6 +417,92 @@ def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
             red, green, blue = output.getpixel((6, 12))
             assert blue >= red + 10
             assert blue >= green
+
+
+# 方法说明：验证独立线稿档只采用 FLUX.2 色度并保留原图尺寸、明度和墨线。
+def test_flux2_character_lineart_strategy_uses_color_only_output(
+    tmp_path,
+    monkeypatch,
+):
+    workflow = (
+        PROJECT_ROOT
+        / "workflows"
+        / "flux2-klein-4b-qwen3-vl-character-lineart-colorize.json"
+    )
+    reference = CharacterReferenceAsset(
+        character_id="work:character-a",
+        display_name="角色 A",
+        image_bytes=png_bytes((210, 30, 50), (8, 12)),
+    )
+    library = StubCharacterLibrary(character_prompt_context(reference))
+    loader = PresetWorkflowLoader(
+        fast_workflow=PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json",
+        quality_workflow=PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json",
+        flux2_character_lineart_workflow=workflow,
+    )
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=loader,
+        flux2_character_lineart_enabled=True,
+        flux2_character_lineart_workflow=workflow,
+        character_library=library,
+    )
+    strategy = backend.mode_strategy("flux2_character_lineart")
+    assert isinstance(strategy, Flux2CharacterLineartModeStrategy)
+    monkeypatch.setattr(strategy, "available", lambda: True)
+    captured = {}
+
+    # 方法说明：模拟 ComfyUI 执行并返回与原图相同尺寸的纯色结果。
+    def run_lineart(
+        workflow_template,
+        *,
+        input_images,
+        output_prefix,
+        prepare_workflow,
+    ):
+        workflow_copy = json.loads(json.dumps(workflow_template))
+        prepare_workflow(workflow_copy)
+        captured["workflow"] = workflow_copy
+        captured["inputs"] = input_images
+        return Image.new("RGB", (8, 12), (80, 120, 200))
+
+    monkeypatch.setattr(backend.transport, "run", run_lineart)
+    source_image = Image.new("RGB", (8, 12), (180, 180, 180))
+    for y in range(source_image.height):
+        source_image.putpixel((4, y), (0, 0, 0))
+    source_stream = BytesIO()
+    source_image.save(source_stream, format="PNG")
+    source = source_stream.getvalue()
+    assets = InferenceAssets(
+        image_bytes=source,
+        work_key="copy_manga:123",
+        character_reference_assets=(reference,),
+    )
+    options = ProcessOptions(mode="flux2_character_lineart")
+    output_path = tmp_path / "lineart.webp"
+
+    revision = backend.cache_revision(options, assets)
+    outcome = backend.process(assets, output_path, options)
+
+    assert FLUX2_CHARACTER_LINEART_PROCESSING_REVISION in revision
+    assert outcome.model_profile == "flux2-klein-4b-qwen3-vl-character-lineart"
+    assert outcome.reference_applied is True
+    assert captured["workflow"]["10"]["inputs"]["megapixels"] == 0.85
+    assert captured["workflow"]["34"]["inputs"]["images"] == ["35", 0]
+    assert captured["inputs"] == {
+        "INPUT_IMAGE": source,
+        "REFERENCE_IMAGE_1": reference.image_bytes,
+        "REFERENCE_IMAGE_2": reference.image_bytes,
+        "REFERENCE_IMAGE_3": reference.image_bytes,
+    }
+    with Image.open(output_path) as output:
+        assert output.size == (8, 12)
+        assert max(output.getpixel((4, 6))) <= 60
+        red, green, blue = output.getpixel((2, 6))
+        assert blue > red
+        assert blue > green
 
 
 # 方法说明：验证角色工作流使用三张参考图、空 latent 和完整四步采样。

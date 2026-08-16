@@ -4,6 +4,7 @@ from PIL import Image
 
 from comic_enhancer.inference.comfyui.image_ops import (
     pad_square,
+    protect_source_ink_only,
     protect_source_luminance_and_ink,
     protect_source_structure,
     restore_geometry,
@@ -51,6 +52,27 @@ def test_luminance_and_ink_protection_keeps_full_page_chroma():
     background_pixel = result.getpixel((0, 0))
     assert max(ink_pixel) <= 16
     assert background_pixel[2] >= background_pixel[0] + 35
+
+
+# 方法说明：验证线稿档只锁定原图深色墨线并保留生成图明度。
+def test_ink_only_protection_keeps_generated_bright_background():
+    source = Image.new("RGB", (8, 8), (80, 80, 80))
+    for y in range(2, 6):
+        source.putpixel((3, y), (0, 0, 0))
+    generated = Image.new("RGB", (8, 8), (60, 150, 240))
+
+    result = protect_source_ink_only(
+        image_bytes(source),
+        generated,
+        chroma_gain=1.25,
+        chroma_blur_radius=1.0,
+    )
+
+    ink_pixel = result.getpixel((3, 3))
+    background_pixel = result.getpixel((0, 0))
+    assert max(ink_pixel) <= 16
+    assert background_pixel[2] > background_pixel[0]
+    assert background_pixel[2] > 180
 
 
 # 方法说明：验证竖图几何恢复后保持原始比例。

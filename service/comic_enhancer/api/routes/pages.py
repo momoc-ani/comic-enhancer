@@ -19,6 +19,7 @@ REFERENCE_MODES = {
     ProcessingMode.FLUX2,
     ProcessingMode.FLUX2_QUANT,
     ProcessingMode.FLUX2_CHARACTER,
+    ProcessingMode.FLUX2_CHARACTER_LINEART,
 }
 
 
@@ -38,6 +39,8 @@ async def process_page(
             WorkIdentity.model_validate(json.loads(work_json))
         )
         options = ProcessOptions.model_validate(json.loads(options_json))
+        if options.mode == ProcessingMode.FLUX2_CHARACTER_LINEART:
+            options = options.model_copy(update={"comfyui_direct_output": False})
     except (json.JSONDecodeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -93,6 +96,11 @@ async def process_page(
         and not context.backend.flux2_character_profile_ready()
     ):
         unavailable_detail = "Qwen3-VL 角色稳定档未启用"
+    elif (
+        options.mode == ProcessingMode.FLUX2_CHARACTER_LINEART
+        and not context.backend.flux2_character_lineart_profile_ready()
+    ):
+        unavailable_detail = "角色线稿保真档未启用"
     if unavailable_detail:
         log_operation(
             logger,

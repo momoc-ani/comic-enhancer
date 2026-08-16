@@ -64,7 +64,10 @@ def _create_backend(settings: Settings) -> InferenceBackend:
     }
     if settings.backend == "comfyui":
         character_library = None
-        if settings.comfyui_flux2_character_enabled:
+        if (
+            settings.comfyui_flux2_character_enabled
+            or settings.comfyui_flux2_character_lineart_enabled
+        ):
             character_library_root = (
                 settings.character_library_root
                 or settings.runtime_dir / "character-library"
@@ -88,6 +91,9 @@ def _create_backend(settings: Settings) -> InferenceBackend:
             flux2_workflow=settings.comfyui_workflow_flux2,
             flux2_quant_workflow=settings.comfyui_workflow_flux2_quant,
             flux2_character_workflow=settings.comfyui_workflow_flux2_character,
+            flux2_character_lineart_workflow=(
+                settings.comfyui_workflow_flux2_character_lineart
+            ),
         )
         backend_options.update(
             {
@@ -101,6 +107,12 @@ def _create_backend(settings: Settings) -> InferenceBackend:
                 "flux2_character_workflow": settings.comfyui_workflow_flux2_character,
                 "flux2_character_native_resolution": (
                     settings.comfyui_flux2_character_native_resolution
+                ),
+                "flux2_character_lineart_enabled": (
+                    settings.comfyui_flux2_character_lineart_enabled
+                ),
+                "flux2_character_lineart_workflow": (
+                    settings.comfyui_workflow_flux2_character_lineart
                 ),
                 "character_library": character_library,
                 "timeout_seconds": settings.comfyui_timeout_seconds,
@@ -175,6 +187,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "comfyui_url": context.settings.comfyui_url,
                 "flux2_character_enabled": (
                     context.settings.comfyui_flux2_character_enabled
+                ),
+                "flux2_character_lineart_enabled": (
+                    context.settings.comfyui_flux2_character_lineart_enabled
                 ),
             },
             result={"status": "started"},

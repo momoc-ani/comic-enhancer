@@ -15,6 +15,10 @@ MODE_LABELS = {
     ProcessingMode.FLUX2: ("最高质量模式（FLUX.2）", 1),
     ProcessingMode.FLUX2_QUANT: ("质量模式（FLUX.2 量化实验）", 1),
     ProcessingMode.FLUX2_CHARACTER: ("角色稳定模式（Qwen3-VL + FLUX.2）", 1),
+    ProcessingMode.FLUX2_CHARACTER_LINEART: (
+        "角色线稿保真模式（Qwen3-VL + FLUX.2）",
+        1,
+    ),
 }
 
 
@@ -43,6 +47,9 @@ async def capabilities(
         ProcessingMode.FLUX2: backend.flux2_profile_ready(),
         ProcessingMode.FLUX2_QUANT: backend.flux2_quant_profile_ready(),
         ProcessingMode.FLUX2_CHARACTER: backend.flux2_character_profile_ready(),
+        ProcessingMode.FLUX2_CHARACTER_LINEART: (
+            backend.flux2_character_lineart_profile_ready()
+        ),
     }
     processing_modes = [
         mode
@@ -67,6 +74,9 @@ async def capabilities(
         flux2_available=availability[ProcessingMode.FLUX2],
         flux2_quant_available=availability[ProcessingMode.FLUX2_QUANT],
         flux2_character_available=availability[ProcessingMode.FLUX2_CHARACTER],
+        flux2_character_lineart_available=availability[
+            ProcessingMode.FLUX2_CHARACTER_LINEART
+        ],
         prefetch_pages=settings.prefetch_pages,
         max_parallel_inference=settings.max_parallel_inference,
     )

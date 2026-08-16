@@ -29,6 +29,7 @@ API 先通过 `RoutedInferenceBackend` 区分平台原生档位与主推理后�
 - 快速档和质量档复用同一个预设策略实现，只替换完整工作流；
 - 放大档只在显式启用且当前平台的 Real-CUGAN 可执行文件、`models-se/up2x-no-denoise.param` 和 `.bin` 齐全时可用，不选择角色参考图；
 - FLUX.2 独立管理最多 3 张参考图，使用旧基准的 `0.85MP` 四步空 latent 工作流输出上色结果；最高质量档在工作流末端恢复原图宽高，再交给 UPSCALE 策略执行二阶段 Real-CUGAN 放大。API 不复用 SD1.5 的后端业务后处理，量化实验档保持独立输出契约。
+- 角色线稿保真档独立管理最多 3 张角色参考图，使用同样的 `0.85MP` 四步空 latent 工作流；ComfyUI 恢复原图尺寸后，服务端采用 FLUX.2 的明度和色度，仅回注原图深色墨线，再交给 UPSCALE 策略执行一次 Real-CUGAN 2x。该档位强制跳过角色档直出开关，不改变其他策略。
 
 策略之间不共享业务后处理函数。上传、ComfyUI 队列提交、轮询、结果下载、缓存和鉴权属于后端基础设施，可以复用。`flux2` 和 `flux2_quant` 在 FLUX.2 第一阶段或 UPSCALE 二阶段失败时都直接返回失败，不回退到质量策略；插件收到失败后继续保留原图。
 
@@ -54,9 +55,11 @@ service/comic_enhancer/inference/
       flux2_character.py
 ```
 
-五个 ComfyUI 档位各自实现可用性、缓存版本、适配器策略和处理逻辑。共享基类只定义窄契约，共享辅助只处理传输或无档位含义的算法；`ComfyUIBackend` 不再包含任何档位私有处理流程。FLUX.2 的二阶段放大由外层路由组合 UPSCALE 策略完成。旧的 `backends.py`、`workflows.py` 和 `realcugan.py` 仅保留兼容导出，不承载业务实现。
+六个 ComfyUI 档位各自实现可用性、缓存版本、适配器策略和处理逻辑。共享基类只定义窄契约，共享辅助只处理传输或无档位含义的算法；`ComfyUIBackend` 不再包含任何档位私有处理流程。FLUX.2 的二阶段放大由外层路由组合 UPSCALE 策略完成。旧的 `backends.py`、`workflows.py` 和 `realcugan.py` 仅保留兼容导出，不承载业务实现。
 
 `flux2_character` 是第五个独立 ComfyUI 档位。它通过 `character_vision` 窄接口访问独立 Qwen3-VL sidecar，并由 `character_library` 保存内容寻址参考图、SQLite 角色档案和轻量召回向量。Qwen3-VL 只在角色参考图首次进入角色库或档案版本变化时分析参考图；新档位处理漫画页时不调用页面 VLM，不生成页面 bbox 或角色 mask。Qwen 输出受控结构特征和采色区域，RGB 颜色由 Pillow 在参考图证据区域内确定性采样。工作流接收漫画原图、最多三张已建档角色参考图和静态 palette-only 提示，使用高质量 FLUX.2 四步空 latent 完成全页着色。默认路径保持 0.85MP、服务端几何恢复和原有二阶段契约；开启 `comfyui_flux2_character_native_resolution` 实验开关后，运行时按页面原图像素量调整漫画输入，使用工作流内 `ImageScale` 做最终原图尺寸校正，服务端不再执行原图 2x 的几何放大，再交给外层 Real-CUGAN 2x。`ComfyUI 原图直出` 仍只控制明度/墨线结构保护，不改变原图分辨率实验开关。两项开关只对 `flux2_character` 生效，不改变 Qwen3-VL 角色档案、参考图和提示词流程。
+
+`flux2_character_lineart` 是独立的线稿保真档位。它复用 Qwen3-VL 角色库和三张参考图，但工作流、策略、缓存版本和模型标识均独立；FLUX.2 只提供色度，服务端固定保留原图明度、网点和墨线，禁止 `ComfyUI 原图直出`。首版不引入页面分格检测，先验证整页高密度线稿的结构稳定性。
 
 外部数据与本地存储能力也按职责分包：
 
@@ -115,6 +118,17 @@ service/comic_enhancer/
   -> ComfyUI 工作流末端以 Lanczos 恢复为原图准确宽高
   -> API 校验首阶段输出为原图尺寸，不再执行 Pillow 二次插值
   -> UPSCALE 策略使用 Real-CUGAN 放大 2x
+  -> 最终精确输出原图宽高各 2x
+```
+
+线稿保真档的附加链路为：
+
+```text
+原始漫画页 + 最多 3 张角色参考图
+  -> 0.85MP FLUX.2 四步空 latent 生成颜色引导
+  -> ComfyUI 恢复原图宽高
+  -> 保留 FLUX.2 明度和色度，仅回注原图深色墨线
+  -> Real-CUGAN 2x
   -> 最终精确输出原图宽高各 2x
 ```
 

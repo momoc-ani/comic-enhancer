@@ -57,6 +57,13 @@ class RoutedInferenceBackend(InferenceBackend):
     def flux2_character_profile_ready(self) -> bool:
         return self.backend.flux2_character_profile_ready() and self.upscale_profile_ready()
 
+    # 方法说明：检查角色线稿保真档及其 Real-CUGAN 二阶段是否可用。
+    def flux2_character_lineart_profile_ready(self) -> bool:
+        return (
+            self.backend.flux2_character_lineart_profile_ready()
+            and self.upscale_profile_ready()
+        )
+
     # 方法说明：检查 Real-CUGAN 放大档位是否可用。
     def upscale_profile_ready(self) -> bool:
         return self.upscaler.available()
@@ -74,6 +81,7 @@ class RoutedInferenceBackend(InferenceBackend):
             ProcessingMode.FLUX2,
             ProcessingMode.FLUX2_QUANT,
             ProcessingMode.FLUX2_CHARACTER,
+            ProcessingMode.FLUX2_CHARACTER_LINEART,
         }:
             return f"{revision}:post-upscale:{self.upscaler.cache_revision()}"
         return revision if self.name == self.backend.name else f"{self.name}:{revision}"
@@ -91,6 +99,7 @@ class RoutedInferenceBackend(InferenceBackend):
             ProcessingMode.FLUX2,
             ProcessingMode.FLUX2_QUANT,
             ProcessingMode.FLUX2_CHARACTER,
+            ProcessingMode.FLUX2_CHARACTER_LINEART,
         }:
             return self._process_flux2_pipeline(assets, output_path, options)
         return self.backend.process(assets, output_path, options)

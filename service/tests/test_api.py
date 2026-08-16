@@ -156,6 +156,13 @@ def test_flux2_character_mode_is_valid():
     assert options.mode == ProcessingMode.FLUX2_CHARACTER
 
 
+# 方法说明：验证角色线稿保真档是独立合法处理档位。
+def test_flux2_character_lineart_mode_is_valid():
+    options = ProcessOptions(mode="flux2_character_lineart")
+
+    assert options.mode == ProcessingMode.FLUX2_CHARACTER_LINEART
+
+
 # 方法说明：验证能力接口独立声明 Qwen3-VL 角色稳定档。
 def test_capabilities_advertise_flux2_character_independently(tmp_path, monkeypatch):
     workflow = tmp_path / "flux2-character.json"
@@ -186,6 +193,41 @@ def test_capabilities_advertise_flux2_character_independently(tmp_path, monkeypa
     payload = response.json()
     assert "flux2_character" in payload["processing_modes"]
     assert payload["flux2_character_available"] is True
+
+
+# 方法说明：验证能力接口独立声明角色线稿保真档。
+def test_capabilities_advertise_flux2_character_lineart_independently(
+    tmp_path,
+    monkeypatch,
+):
+    workflow = tmp_path / "flux2-character-lineart.json"
+    workflow.write_text("{}", encoding="utf-8")
+    settings = Settings(
+        api_token="test-token",
+        runtime_dir=tmp_path / "runtime",
+        backend="comfyui",
+        comfyui_flux2_character_lineart_enabled=True,
+        comfyui_workflow_flux2_character_lineart=workflow,
+        character_library_root=tmp_path / "character-library",
+    )
+    app = create_app(settings)
+    monkeypatch.setattr(app.state.processor.backend, "ready", lambda: True)
+    monkeypatch.setattr(
+        app.state.processor.backend,
+        "flux2_character_lineart_profile_ready",
+        lambda: True,
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/v1/capabilities",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "flux2_character_lineart" in payload["processing_modes"]
+    assert payload["flux2_character_lineart_available"] is True
 
 
 # 方法说明：验证 FLUX.2 仅在候选工作流就绪时对外声明。

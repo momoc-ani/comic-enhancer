@@ -5,6 +5,10 @@ from .flux2_character import (
     FLUX2_CHARACTER_PROCESSING_REVISION,
     Flux2CharacterModeStrategy,
 )
+from .flux2_character_lineart import (
+    FLUX2_CHARACTER_LINEART_PROCESSING_REVISION,
+    Flux2CharacterLineartModeStrategy,
+)
 from .flux2_base import FLUX2_OUTPUT_SCALE
 from .flux2_quant import Flux2QuantModeStrategy
 from .preset import PresetModeStrategy
@@ -16,9 +20,11 @@ __all__ = [
     "FLUX2_PROCESSING_REVISION",
     "FLUX2_OUTPUT_SCALE",
     "FLUX2_CHARACTER_PROCESSING_REVISION",
+    "FLUX2_CHARACTER_LINEART_PROCESSING_REVISION",
     "FastModeStrategy",
     "Flux2ModeStrategy",
     "Flux2CharacterModeStrategy",
+    "Flux2CharacterLineartModeStrategy",
     "Flux2QuantModeStrategy",
     "PresetModeStrategy",
     "QualityModeStrategy",

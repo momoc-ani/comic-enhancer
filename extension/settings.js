@@ -12,6 +12,11 @@ export const MODE_OPTIONS = Object.freeze([
     label: "角色稳定模式（Qwen3-VL + FLUX.2）",
     prefetchPages: 1,
   },
+  {
+    value: "flux2_character_lineart",
+    label: "角色线稿保真模式（Qwen3-VL + FLUX.2）",
+    prefetchPages: 1,
+  },
 ]);
 
 const MODE_VALUES = new Set(MODE_OPTIONS.map((option) => option.value));

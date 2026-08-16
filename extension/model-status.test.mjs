@@ -98,3 +98,31 @@ test("shows Real-CUGAN execution for upscale mode", () => {
   assert.equal(actual.title, "放大档 · 原生超分");
   assert.match(actual.detail, /Real-CUGAN SE 2x/);
 });
+
+// 方法说明：验证角色线稿保真档按独立能力和真实模型展示。
+test("shows character lineart mode availability and execution", () => {
+  const lineartSettings = {
+    ...settings,
+    profile: "remote-flux2_character_lineart",
+    mode: "flux2_character_lineart",
+  };
+  const unavailable = describeModelTier(lineartSettings, null, {
+    ready: true,
+    flux2_character_lineart_available: false,
+  });
+  assert.equal(unavailable.title, "角色线稿保真档");
+  assert.match(unavailable.detail, /未启用 角色线稿保真档/);
+
+  const execution = buildModelExecution(
+    {
+      model_profile:
+        "flux2-klein-4b-qwen3-vl-character-lineart+realcugan-se-2x",
+      reference_applied: true,
+      elapsed_ms: 6000,
+    },
+    lineartSettings,
+  );
+  const actual = describeModelTier(lineartSettings, execution);
+  assert.equal(actual.title, "角色线稿保真档 · 角色参考");
+  assert.match(actual.detail, /FLUX\.2 线稿保真 · Real-CUGAN 2x/);
+});
