@@ -168,6 +168,7 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
         guide = build_static_character_guide(
             [
                 {
+                    "reference_slot": character.slot,
                     "display_name": character.profile.display_name,
                     "stable_traits": character.profile.stable_traits,
                     "outfit_traits": character.profile.outfit_traits,

@@ -370,6 +370,7 @@ def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
     }
     prompt = prompt_nodes["Colorization Instruction"]["inputs"]["text"]
     for token in (
+        "REFERENCE_IMAGE_1 = Character 角色 A",
         "hair RGB(20, 30, 40)",
         "left eye RGB(40, 120, 200)",
         "face marking RGB(180, 20, 30)",
@@ -380,11 +381,11 @@ def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
         "existing character-held prop RGB(150, 80, 30)",
     ):
         assert token in prompt
-    assert "must never add, remove, replace, reshape" in prompt
-    assert "change chroma only" in prompt
-    assert "must not leave backgrounds" in prompt
-    assert "Fully color every existing non-text source region" in prompt
-    assert "leave such source pixels unchanged" in prompt
+    assert "CHARACTER REFERENCE MAP AND PALETTE GUIDE" in prompt
+    assert "Never transfer a named palette to another person or the background" in prompt
+    assert "ignore the named palette" in prompt
+    assert "color the existing person independently" in prompt
+    assert "Fully color all existing non-text backgrounds" in prompt
     assert not any(
         node.get("class_type") == "ConditioningSetMask"
         for node in captured["workflow"].values()
