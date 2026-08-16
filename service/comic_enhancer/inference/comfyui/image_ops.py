@@ -163,6 +163,7 @@ def protect_source_ink_only(
     chroma_gain: float = 1.0,
     chroma_blur_radius: float = 0.0,
 ) -> Image.Image:
+    """仅覆盖原图深色墨线，保留生成图的明度和色彩层次。"""
     if chroma_gain <= 0:
         raise ValueError("chroma_gain must be positive")
     if chroma_blur_radius < 0:
@@ -214,6 +215,7 @@ def protect_source_high_frequency_structure(
     luminance_blend: float = 0.65,
     luminance_blur_radius: float = 8.0,
 ) -> Image.Image:
+    """保留原图高频线稿和网点，并融合生成图的低频明度与色度。"""
     if chroma_gain <= 0:
         raise ValueError("chroma_gain must be positive")
     if chroma_blur_radius < 0:

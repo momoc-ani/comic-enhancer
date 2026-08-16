@@ -108,7 +108,7 @@ COMIC_ENHANCER_QWEN_VL_DEPLOYMENT_REVISION=q8_0-054721f4-mmproj-f16-256f3a43
 
 开启 `COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_NATIVE_RESOLUTION=true` 后，API 会按每页原图像素量调整角色工作流的漫画输入，并在 ComfyUI 内按原图宽高做尺寸校正，避免服务端先插值到原图 2x 再交给 Real-CUGAN。该实验路径会增加 FLUX.2 显存和首阶段耗时，必须先做单页显存与质量验收；关闭后恢复当前 0.85MP 基线。`ComfyUI 原图直出` 仍是独立的服务端结构保护开关。
 
-开启 `COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_LINEART_ENABLED=true` 后，插件会显示独立的“角色线稿保真模式”。该档位保持 `0.85MP`、4 steps 和三张角色参考图，ComfyUI 恢复原图尺寸，服务端保留 FLUX.2 明度和色度，仅回注原图深色墨线，最后由 Real-CUGAN 2x 输出。该档位不使用 `ComfyUI 原图直出`，并且不会改变 `flux2_character` 的默认行为。
+开启 `COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_LINEART_ENABLED=true` 后，插件会显示独立的“角色线稿保真模式”。该档位保持 `0.85MP`、4 steps 和三张角色参考图，ComfyUI 恢复原图尺寸，服务端保留原图高频线稿/网点并融合 FLUX.2 低频明度和色度，最后由 Real-CUGAN 2x 输出。该档位不使用 `ComfyUI 原图直出`，并且不会改变 `flux2_character` 的默认行为。
 
 能力接口只有在独立工作流存在、ComfyUI 可达、角色库可用且 Real-CUGAN 二阶段就绪时，才分别返回 `flux2_character_available=true` 或 `flux2_character_lineart_available=true`。任何分析、JSON 校验、角色计划、FLUX.2、结构保护或放大阶段失败都直接让对应档位失败，插件继续显示原图；不会回退到 `flux2`、`quality` 或其他档位。
 
