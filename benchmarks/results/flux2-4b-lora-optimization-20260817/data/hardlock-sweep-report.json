@@ -1,0 +1,402 @@
+[
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.10-cfg-1.0-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 5586,
+    "metrics": {
+      "gray_mae": 29.669,
+      "dark_retention": 0.963,
+      "white_retention": 0.8359,
+      "saturated_coverage": 0.3121
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.10-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.1,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图2.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.10-cfg-1.0-page-2.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4375,
+    "metrics": {
+      "gray_mae": 32.625,
+      "dark_retention": 0.933,
+      "white_retention": 0.8059,
+      "saturated_coverage": 0.3145
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.10-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.1,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图3.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.10-cfg-1.0-page-3.png",
+    "size": [
+      1124,
+      1600
+    ],
+    "elapsed_ms": 4156,
+    "metrics": {
+      "gray_mae": 19.645,
+      "dark_retention": 0.9537,
+      "white_retention": 0.9245,
+      "saturated_coverage": 0.1873
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.10-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.1,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.10-cfg-1.0-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4126,
+    "metrics": {
+      "gray_mae": 20.276,
+      "dark_retention": 0.9159,
+      "white_retention": 0.9245,
+      "saturated_coverage": 0.3664
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.10-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.1,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.15-cfg-1.0-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 3660,
+    "metrics": {
+      "gray_mae": 29.538,
+      "dark_retention": 0.9611,
+      "white_retention": 0.8374,
+      "saturated_coverage": 0.3116
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.15-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.15,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图2.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.15-cfg-1.0-page-2.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 3874,
+    "metrics": {
+      "gray_mae": 32.757,
+      "dark_retention": 0.9333,
+      "white_retention": 0.8052,
+      "saturated_coverage": 0.3046
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.15-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.15,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图3.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.15-cfg-1.0-page-3.png",
+    "size": [
+      1124,
+      1600
+    ],
+    "elapsed_ms": 3698,
+    "metrics": {
+      "gray_mae": 19.759,
+      "dark_retention": 0.9573,
+      "white_retention": 0.9283,
+      "saturated_coverage": 0.1764
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.15-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.15,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.15-cfg-1.0-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 3556,
+    "metrics": {
+      "gray_mae": 20.443,
+      "dark_retention": 0.907,
+      "white_retention": 0.9252,
+      "saturated_coverage": 0.3455
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.15-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.15,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.15-cfg-1.3-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 6476,
+    "metrics": {
+      "gray_mae": 32.13,
+      "dark_retention": 0.9687,
+      "white_retention": 0.8073,
+      "saturated_coverage": 0.3387
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.15-cfg-1.3",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.15,
+    "cfg": 1.3
+  },
+  {
+    "page": "原图2.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.15-cfg-1.3-page-2.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 6092,
+    "metrics": {
+      "gray_mae": 34.942,
+      "dark_retention": 0.9447,
+      "white_retention": 0.7987,
+      "saturated_coverage": 0.3667
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.15-cfg-1.3",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.15,
+    "cfg": 1.3
+  },
+  {
+    "page": "原图3.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.15-cfg-1.3-page-3.png",
+    "size": [
+      1124,
+      1600
+    ],
+    "elapsed_ms": 5930,
+    "metrics": {
+      "gray_mae": 22.045,
+      "dark_retention": 0.9564,
+      "white_retention": 0.9225,
+      "saturated_coverage": 0.2704
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.15-cfg-1.3",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.15,
+    "cfg": 1.3
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.15-cfg-1.3-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 5838,
+    "metrics": {
+      "gray_mae": 21.546,
+      "dark_retention": 0.9282,
+      "white_retention": 0.916,
+      "saturated_coverage": 0.4056
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.15-cfg-1.3",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.15,
+    "cfg": 1.3
+  },
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.20-cfg-1.0-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 3781,
+    "metrics": {
+      "gray_mae": 29.526,
+      "dark_retention": 0.96,
+      "white_retention": 0.8369,
+      "saturated_coverage": 0.306
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.20-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.2,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图2.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.20-cfg-1.0-page-2.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4015,
+    "metrics": {
+      "gray_mae": 32.896,
+      "dark_retention": 0.9335,
+      "white_retention": 0.8043,
+      "saturated_coverage": 0.2934
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.20-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.2,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图3.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.20-cfg-1.0-page-3.png",
+    "size": [
+      1124,
+      1600
+    ],
+    "elapsed_ms": 4064,
+    "metrics": {
+      "gray_mae": 19.719,
+      "dark_retention": 0.9545,
+      "white_retention": 0.9315,
+      "saturated_coverage": 0.1784
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.20-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.2,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.20-cfg-1.0-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 3846,
+    "metrics": {
+      "gray_mae": 20.623,
+      "dark_retention": 0.9086,
+      "white_retention": 0.9246,
+      "saturated_coverage": 0.3505
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.20-cfg-1.0",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.2,
+    "cfg": 1.0
+  },
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.20-cfg-1.3-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 6078,
+    "metrics": {
+      "gray_mae": 31.563,
+      "dark_retention": 0.9652,
+      "white_retention": 0.813,
+      "saturated_coverage": 0.3383
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.20-cfg-1.3",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.2,
+    "cfg": 1.3
+  },
+  {
+    "page": "原图2.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.20-cfg-1.3-page-2.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 6522,
+    "metrics": {
+      "gray_mae": 35.472,
+      "dark_retention": 0.9479,
+      "white_retention": 0.7996,
+      "saturated_coverage": 0.355
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.20-cfg-1.3",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.2,
+    "cfg": 1.3
+  },
+  {
+    "page": "原图3.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.20-cfg-1.3-page-3.png",
+    "size": [
+      1124,
+      1600
+    ],
+    "elapsed_ms": 6305,
+    "metrics": {
+      "gray_mae": 22.457,
+      "dark_retention": 0.9584,
+      "white_retention": 0.9209,
+      "saturated_coverage": 0.2453
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.20-cfg-1.3",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.2,
+    "cfg": 1.3
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-hardlock-sweep\\hardlock-ref-0.20-cfg-1.3-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 6198,
+    "metrics": {
+      "gray_mae": 21.669,
+      "dark_retention": 0.9314,
+      "white_retention": 0.9157,
+      "saturated_coverage": 0.3943
+    },
+    "status": "success",
+    "case": "hardlock-ref-0.20-cfg-1.3",
+    "lora_strength": 0.3,
+    "reference_megapixels": 0.2,
+    "cfg": 1.3
+  }
+]

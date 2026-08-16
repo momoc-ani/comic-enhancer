@@ -1,0 +1,82 @@
+[
+  {
+    "page": "原图1.webp",
+    "output": ".dev\\model-alternative-benchmark\\flux2-4b-lora-optimized\\page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 6938,
+    "metrics": {
+      "gray_mae": 32.209,
+      "dark_retention": 0.9712,
+      "white_retention": 0.8025,
+      "saturated_coverage": 0.3386
+    },
+    "status": "success",
+    "case": "flux2-4b-lora-optimized",
+    "lora_strength": 0.35,
+    "reference_megapixels": 0.15,
+    "cfg": 1.3
+  },
+  {
+    "page": "原图2.webp",
+    "output": ".dev\\model-alternative-benchmark\\flux2-4b-lora-optimized\\page-2.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 6760,
+    "metrics": {
+      "gray_mae": 35.283,
+      "dark_retention": 0.9469,
+      "white_retention": 0.7964,
+      "saturated_coverage": 0.3498
+    },
+    "status": "success",
+    "case": "flux2-4b-lora-optimized",
+    "lora_strength": 0.35,
+    "reference_megapixels": 0.15,
+    "cfg": 1.3
+  },
+  {
+    "page": "原图3.webp",
+    "output": ".dev\\model-alternative-benchmark\\flux2-4b-lora-optimized\\page-3.png",
+    "size": [
+      1124,
+      1600
+    ],
+    "elapsed_ms": 5592,
+    "metrics": {
+      "gray_mae": 21.582,
+      "dark_retention": 0.9544,
+      "white_retention": 0.9256,
+      "saturated_coverage": 0.2388
+    },
+    "status": "success",
+    "case": "flux2-4b-lora-optimized",
+    "lora_strength": 0.35,
+    "reference_megapixels": 0.15,
+    "cfg": 1.3
+  },
+  {
+    "page": "原图4.webp",
+    "output": ".dev\\model-alternative-benchmark\\flux2-4b-lora-optimized\\page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 5880,
+    "metrics": {
+      "gray_mae": 20.919,
+      "dark_retention": 0.9292,
+      "white_retention": 0.9204,
+      "saturated_coverage": 0.391
+    },
+    "status": "success",
+    "case": "flux2-4b-lora-optimized",
+    "lora_strength": 0.35,
+    "reference_megapixels": 0.15,
+    "cfg": 1.3
+  }
+]

@@ -1,0 +1,230 @@
+[
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.2-base-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 6258,
+    "metrics": {
+      "gray_mae": 31.995,
+      "dark_retention": 0.9718,
+      "white_retention": 0.8074,
+      "saturated_coverage": 0.3188
+    },
+    "status": "success",
+    "case": "lora-0.2-base",
+    "strength": 0.2,
+    "enhanced_prompt": false
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.2-base-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4579,
+    "metrics": {
+      "gray_mae": 30.908,
+      "dark_retention": 0.8826,
+      "white_retention": 0.7559,
+      "saturated_coverage": 0.3661
+    },
+    "status": "success",
+    "case": "lora-0.2-base",
+    "strength": 0.2,
+    "enhanced_prompt": false
+  },
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.2-color-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4710,
+    "metrics": {
+      "gray_mae": 32.538,
+      "dark_retention": 0.9592,
+      "white_retention": 0.7863,
+      "saturated_coverage": 0.2734
+    },
+    "status": "success",
+    "case": "lora-0.2-color",
+    "strength": 0.2,
+    "enhanced_prompt": true
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.2-color-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4385,
+    "metrics": {
+      "gray_mae": 30.23,
+      "dark_retention": 0.8205,
+      "white_retention": 0.7596,
+      "saturated_coverage": 0.2242
+    },
+    "status": "success",
+    "case": "lora-0.2-color",
+    "strength": 0.2,
+    "enhanced_prompt": true
+  },
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.3-base-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 5634,
+    "metrics": {
+      "gray_mae": 30.231,
+      "dark_retention": 0.9771,
+      "white_retention": 0.8211,
+      "saturated_coverage": 0.2923
+    },
+    "status": "success",
+    "case": "lora-0.3-base",
+    "strength": 0.3,
+    "enhanced_prompt": false
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.3-base-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4247,
+    "metrics": {
+      "gray_mae": 26.743,
+      "dark_retention": 0.9235,
+      "white_retention": 0.8475,
+      "saturated_coverage": 0.2839
+    },
+    "status": "success",
+    "case": "lora-0.3-base",
+    "strength": 0.3,
+    "enhanced_prompt": false
+  },
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.3-color-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4549,
+    "metrics": {
+      "gray_mae": 30.616,
+      "dark_retention": 0.9563,
+      "white_retention": 0.8149,
+      "saturated_coverage": 0.2564
+    },
+    "status": "success",
+    "case": "lora-0.3-color",
+    "strength": 0.3,
+    "enhanced_prompt": true
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.3-color-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4256,
+    "metrics": {
+      "gray_mae": 23.611,
+      "dark_retention": 0.8609,
+      "white_retention": 0.8934,
+      "saturated_coverage": 0.1974
+    },
+    "status": "success",
+    "case": "lora-0.3-color",
+    "strength": 0.3,
+    "enhanced_prompt": true
+  },
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.4-base-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 5202,
+    "metrics": {
+      "gray_mae": 29.26,
+      "dark_retention": 0.9753,
+      "white_retention": 0.8266,
+      "saturated_coverage": 0.2756
+    },
+    "status": "success",
+    "case": "lora-0.4-base",
+    "strength": 0.4,
+    "enhanced_prompt": false
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.4-base-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4495,
+    "metrics": {
+      "gray_mae": 23.536,
+      "dark_retention": 0.9482,
+      "white_retention": 0.8829,
+      "saturated_coverage": 0.2301
+    },
+    "status": "success",
+    "case": "lora-0.4-base",
+    "strength": 0.4,
+    "enhanced_prompt": false
+  },
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.4-color-page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4628,
+    "metrics": {
+      "gray_mae": 29.031,
+      "dark_retention": 0.9536,
+      "white_retention": 0.8215,
+      "saturated_coverage": 0.2368
+    },
+    "status": "success",
+    "case": "lora-0.4-color",
+    "strength": 0.4,
+    "enhanced_prompt": true
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-color-sweep\\lora-0.4-color-page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4586,
+    "metrics": {
+      "gray_mae": 20.443,
+      "dark_retention": 0.878,
+      "white_retention": 0.9179,
+      "saturated_coverage": 0.153
+    },
+    "status": "success",
+    "case": "lora-0.4-color",
+    "strength": 0.4,
+    "enhanced_prompt": true
+  }
+]

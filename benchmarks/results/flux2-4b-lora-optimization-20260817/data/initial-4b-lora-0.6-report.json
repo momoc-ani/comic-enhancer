@@ -1,0 +1,74 @@
+[
+  {
+    "page": "原图1.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-0_6\\page-1.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 8584,
+    "metrics": {
+      "gray_mae": 27.145,
+      "dark_retention": 0.943,
+      "white_retention": 0.8532,
+      "saturated_coverage": 0.1909
+    },
+    "status": "success",
+    "case": "flux2-4b-lora-0_6",
+    "phase": "cold"
+  },
+  {
+    "page": "原图2.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-0_6\\page-2.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 4480,
+    "metrics": {
+      "gray_mae": 27.624,
+      "dark_retention": 0.9262,
+      "white_retention": 0.8776,
+      "saturated_coverage": 0.1828
+    },
+    "status": "success",
+    "case": "flux2-4b-lora-0_6",
+    "phase": "hot"
+  },
+  {
+    "page": "原图3.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-0_6\\page-3.png",
+    "size": [
+      1124,
+      1600
+    ],
+    "elapsed_ms": 4554,
+    "metrics": {
+      "gray_mae": 16.49,
+      "dark_retention": 0.9586,
+      "white_retention": 0.9478,
+      "saturated_coverage": 0.1018
+    },
+    "status": "success",
+    "case": "flux2-4b-lora-0_6",
+    "phase": "hot"
+  },
+  {
+    "page": "原图4.webp",
+    "output": "C:\\Users\\momoc\\.codex\\worktrees\\00ba\\comic-enhancer\\.dev\\model-alternative-benchmark\\flux2-4b-lora-0_6\\page-4.png",
+    "size": [
+      1125,
+      1600
+    ],
+    "elapsed_ms": 5208,
+    "metrics": {
+      "gray_mae": 17.416,
+      "dark_retention": 0.9408,
+      "white_retention": 0.9336,
+      "saturated_coverage": 0.0984
+    },
+    "status": "success",
+    "case": "flux2-4b-lora-0_6",
+    "phase": "hot"
+  }
+]
