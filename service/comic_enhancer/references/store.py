@@ -11,6 +11,8 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from PIL import Image, ImageOps
 
+from ..networking import external_http_client
+
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +49,12 @@ class ReferenceImageStore:
     # 方法说明：从经过校验的公网地址下载参考图。
     def _download(self, url: str) -> bytes:
         current = url
-        with httpx.Client(timeout=self.timeout_seconds) as client:
-            for _ in range(4):
-                self._validate_public_url(current)
+        for _ in range(4):
+            self._validate_public_url(current)
+            with external_http_client(
+                current,
+                timeout=self.timeout_seconds,
+            ) as client:
                 with client.stream(
                     "GET",
                     current,

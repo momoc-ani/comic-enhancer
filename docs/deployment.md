@@ -78,6 +78,17 @@ API Token: 与远端 .env 中 COMIC_ENHANCER_TOKEN 相同
 
 插件只配置漫画增强服务地址，不提供 ComfyUI、FLUX.2 或 Real-CUGAN 地址入口。服务端也只配置一个 `COMIC_ENHANCER_COMFYUI_URL`；Real-CUGAN 配置是 API 本地资源根目录，不是独立推理 URL。
 
+### Windows 系统代理
+
+Windows 本地服务通过 WinHTTP 读取当前用户的系统代理策略。外部作品元数据和第三方角色参考图支持
+手动分协议代理、`ProxyOverride`、`<local>`、PAC 地址和 WPAD 自动检测，并按每个目标 URL 选择代理
+或直连。系统代理关闭且未启用 PAC/WPAD 时，服务强制直连并忽略残留的 `HTTP_PROXY`、
+`HTTPS_PROXY` 和 `ALL_PROXY` 环境变量；非 Windows 平台继续使用 `httpx` 的环境代理行为。
+
+ComfyUI 与 Qwen3-VL sidecar 属于部署内网能力，始终设置 `trust_env=False` 并强制直连，不读取
+Windows 系统代理、PAC 或代理环境变量。代理决策日志只记录目标主机、策略来源和 `proxy/direct`
+结果，不记录代理地址、账号或密码。
+
 ### Qwen3-VL 角色稳定档
 
 角色稳定档使用独立 AMD Windows 主机常驻 `llama-server`，Comic Enhancer API 通过内网 OpenAI 兼容接口访问。插件仍只连接 Comic Enhancer API，不能直接连接 Qwen3-VL。当前已验证组合为 RX 7700 XT 12GB、`llamacpp-rocm b1311 gfx110X`、Qwen3-VL-4B-Instruct Q8_0 和 F16 mmproj。

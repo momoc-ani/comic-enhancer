@@ -13,6 +13,7 @@ from PIL import Image, ImageOps
 from pydantic import BaseModel
 
 from ..logging_utils import log_operation
+from ..networking import direct_http_client
 from .contracts import (
     CharacterPageAnalysis,
     CharacterProfileAnalysis,
@@ -63,7 +64,7 @@ class LlamaCppCharacterVisionAnalyzer(CharacterVisionAnalyzer):
         if now < cached_until:
             return cached_value
         try:
-            with httpx.Client(headers=self._headers(), timeout=3) as client:
+            with direct_http_client(headers=self._headers(), timeout=3) as client:
                 health = client.get(f"{self.base_url}/health")
                 health.raise_for_status()
                 models = client.get(f"{self.base_url}/v1/models")
@@ -353,7 +354,10 @@ class LlamaCppCharacterVisionAnalyzer(CharacterVisionAnalyzer):
         }
         try:
             with self._request_lock:
-                with httpx.Client(headers=self._headers(), timeout=timeout) as client:
+                with direct_http_client(
+                    headers=self._headers(),
+                    timeout=timeout,
+                ) as client:
                     response = client.post(
                         f"{self.base_url}/v1/chat/completions",
                         json=payload,

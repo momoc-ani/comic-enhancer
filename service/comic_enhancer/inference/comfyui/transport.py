@@ -15,6 +15,7 @@ import httpx
 from PIL import Image, ImageOps
 
 from ...logging_utils import log_operation
+from ...networking import direct_http_client
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,8 @@ class ComfyUITransport:
     # 方法说明：检查 ComfyUI 基础服务是否可以响应。
     def ready(self) -> bool:
         try:
-            response = httpx.get(f"{self.base_url}/system_stats", timeout=2)
+            with direct_http_client(timeout=2) as client:
+                response = client.get(f"{self.base_url}/system_stats")
             return response.status_code == 200
         except httpx.HTTPError:
             return False
@@ -118,7 +120,7 @@ class ComfyUITransport:
                 },
                 full_text_keys={"text"},
             )
-        with httpx.Client(
+        with direct_http_client(
             base_url=self.base_url,
             timeout=self.timeout_seconds,
         ) as client:
