@@ -174,17 +174,16 @@ def test_flux2_pipeline_uses_upscale_as_second_stage(tmp_path, monkeypatch):
 
     monkeypatch.setattr(backend, "flux2_profile_ready", lambda: True)
 
-    # 方法说明：模拟 FLUX.2 首阶段写入原图两倍结果。
+    # 方法说明：模拟 FLUX.2 首阶段写入已由工作流恢复到原图尺寸的结果。
     def process_flux2(assets, output_path, options):
         with Image.open(BytesIO(assets.image_bytes)) as source:
-            generated = source.resize((source.width * 2, source.height * 2))
-            generated.save(output_path, format="WEBP")
+            source.save(output_path, format="WEBP")
         return InferenceOutcome(
             reference_applied=True,
             model_profile="flux2-klein-4b",
         )
 
-    # 方法说明：模拟 UPSCALE 二阶段读取首阶段结果并再次放大两倍。
+    # 方法说明：模拟 UPSCALE 二阶段读取原图尺寸首阶段结果并放大两倍。
     def process_upscale(assets, output_path):
         with Image.open(BytesIO(assets.image_bytes)) as source:
             captured["stage_size"] = source.size
@@ -201,9 +200,9 @@ def test_flux2_pipeline_uses_upscale_as_second_stage(tmp_path, monkeypatch):
         ProcessOptions(mode="flux2"),
     )
 
-    assert captured["stage_size"] == (16, 24)
+    assert captured["stage_size"] == (8, 12)
     with Image.open(output_path) as result:
-        assert result.size == (32, 48)
+        assert result.size == (16, 24)
     assert outcome.reference_applied is True
     assert outcome.model_profile == "flux2-klein-4b+realcugan-se-2x"
     assert "post-upscale" in routed.cache_revision(

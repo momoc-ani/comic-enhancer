@@ -40,7 +40,12 @@ class Flux2ModeStrategy(Flux2StrategyBase):
         output_path: Path,
         options: ProcessOptions,
     ) -> InferenceOutcome:
-        return self._process_flux2(assets, output_path, options)
+        return self._process_flux2(
+            assets,
+            output_path,
+            options,
+            restore_source_output=True,
+        )
 
 
 __all__ = ["FLUX2_PROCESSING_REVISION", "Flux2ModeStrategy"]

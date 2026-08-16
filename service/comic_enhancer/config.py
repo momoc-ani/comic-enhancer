@@ -35,6 +35,7 @@ class Settings:
     comfyui_workflow_flux2_quant: Path | None = None
     comfyui_flux2_character_enabled: bool = False
     comfyui_workflow_flux2_character: Path | None = None
+    comfyui_flux2_character_native_resolution: bool = False
     qwen_vl_base_url: str = "http://127.0.0.1:8080"
     qwen_vl_api_key: str = ""
     qwen_vl_model_id: str = "qwen3-vl-4b-instruct-q8_0"
@@ -132,6 +133,10 @@ def load_settings() -> Settings:
         "COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER": (
             "comfyui_workflow_flux2_character",
             Path,
+        ),
+        "COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_NATIVE_RESOLUTION": (
+            "comfyui_flux2_character_native_resolution",
+            lambda value: value.lower() in {"1", "true", "yes", "on"},
         ),
         "COMIC_ENHANCER_QWEN_VL_URL": ("qwen_vl_base_url", str),
         "COMIC_ENHANCER_QWEN_VL_API_KEY": ("qwen_vl_api_key", str),

@@ -200,21 +200,5 @@
     },
     "class_type": "SaveImage",
     "_meta": {"title": "OUTPUT_IMAGE"}
-  },
-  "35": {
-    "inputs": {
-      "upscale_method": "lanczos",
-      "width": ["36", 0],
-      "height": ["36", 1],
-      "crop": "disabled",
-      "image": ["33", 0]
-    },
-    "class_type": "ImageScale",
-    "_meta": {"title": "Restore Source Geometry"}
-  },
-  "36": {
-    "inputs": {"image": ["1", 0]},
-    "class_type": "GetImageSize",
-    "_meta": {"title": "SOURCE_IMAGE_SIZE"}
   }
 }

@@ -99,6 +99,9 @@ def _create_backend(settings: Settings) -> InferenceBackend:
                 "flux2_quant_workflow": settings.comfyui_workflow_flux2_quant,
                 "flux2_character_enabled": settings.comfyui_flux2_character_enabled,
                 "flux2_character_workflow": settings.comfyui_workflow_flux2_character,
+                "flux2_character_native_resolution": (
+                    settings.comfyui_flux2_character_native_resolution
+                ),
                 "character_library": character_library,
                 "timeout_seconds": settings.comfyui_timeout_seconds,
                 "poll_interval_seconds": settings.comfyui_poll_interval_seconds,

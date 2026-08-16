@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from collections import OrderedDict
 import hashlib
+from io import BytesIO
 import logging
 from pathlib import Path
 import threading
 import time
 import uuid
+
+from PIL import Image, ImageOps
 
 from ....character_library import CharacterLibraryBuilder, CharacterPromptContext
 from ....character_vision import (
@@ -22,7 +25,7 @@ from .flux2_base import FLUX2_OUTPUT_SCALE
 
 
 FLUX2_CHARACTER_PROCESSING_REVISION = (
-    "flux2-character-full-chroma-180-empty-latent-three-reference-v11"
+    "flux2-character-full-chroma-180-empty-latent-three-reference-v12"
 )
 
 
@@ -42,11 +45,13 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
         enabled: bool,
         workflow_path: Path | None,
         character_library: CharacterLibraryBuilder | None,
+        native_resolution: bool = False,
         **options,
     ):
         super().__init__(**options)
         self.enabled = enabled
         self.workflow_path = workflow_path
+        self.native_resolution = native_resolution
         self.character_library = character_library
         self._contexts: OrderedDict[str, CharacterPromptContext] = OrderedDict()
         self._context_lock = threading.Lock()
@@ -95,6 +100,8 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             f"{workflow_revision}:{FLUX2_CHARACTER_PROCESSING_REVISION}:"
             f"{PROMPT_PLANNER_REVISION}:{model_revision}"
         )
+        if self.native_resolution:
+            base = f"{base}:native-resolution-v1"
         if assets is None:
             return _append_direct_output_revision(base, options)
         context = self._prepare(assets)
@@ -113,6 +120,7 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             "references": len(assets.character_reference_assets),
             "processing_revision": FLUX2_CHARACTER_PROCESSING_REVISION,
             "comfyui_direct_output": options.comfyui_direct_output,
+            "native_resolution": self.native_resolution,
         }
         if not self.available():
             log_operation(
@@ -147,6 +155,7 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 "workflow": str(loaded_workflow.source),
                 "model_profile": loaded_workflow.model_profile,
                 "comfyui_direct_output": options.comfyui_direct_output,
+                "native_resolution": self.native_resolution,
                 "reference_count": len(context.characters),
             },
             result={
@@ -182,15 +191,19 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 for slot in range(1, 4)
             },
         }
+        source_size, source_megapixels = _source_geometry(assets.image_bytes)
+
+        def prepare_workflow(workflow: dict) -> None:
+            _bind_character_guide(workflow, guide)
+            if self.native_resolution:
+                _bind_native_resolution(workflow, source_megapixels)
+
         try:
             generated = self.transport.run(
                 loaded_workflow.prompt,
                 input_images=input_images,
                 output_prefix=f"comic-enhancer/{self.output_prefix}-{uuid.uuid4().hex}",
-                prepare_workflow=lambda workflow: _bind_character_guide(
-                    workflow,
-                    guide,
-                ),
+                prepare_workflow=prepare_workflow,
             )
         except Exception as error:
             log_operation(
@@ -217,14 +230,46 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 "workflow": str(loaded_workflow.source),
                 "model_profile": loaded_workflow.model_profile,
                 "context_digest": context.digest[:12],
+                "native_resolution": self.native_resolution,
             },
             result={
                 "status": "success",
                 "size": list(comfyui_size),
                 "comfyui_direct_output": options.comfyui_direct_output,
+                "source_size": list(source_size),
+                "source_megapixels": source_megapixels,
             },
         )
-        if not options.comfyui_direct_output:
+        if self.native_resolution:
+            if not options.comfyui_direct_output:
+                generated = protect_source_luminance_and_ink(
+                    assets.image_bytes,
+                    generated,
+                )
+            log_operation(
+                logger,
+                logging.INFO,
+                feature="角色稳定服务端二次处理",
+                parameters={
+                    "mode": str(options.mode),
+                    "comfyui_direct_output": options.comfyui_direct_output,
+                    "native_resolution": True,
+                },
+                result={
+                    "status": "skipped" if options.comfyui_direct_output else "success",
+                    "reason": (
+                        "comfyui_direct_output"
+                        if options.comfyui_direct_output
+                        else "structure_protection_only"
+                    ),
+                    "comfyui_size": list(comfyui_size),
+                    "output_size": list(generated.size),
+                    "geometry_restore": False,
+                    "structure_protection": not options.comfyui_direct_output,
+                    "realcugan_stage": "enabled_by_outer_pipeline",
+                },
+            )
+        elif not options.comfyui_direct_output:
             generated = restore_geometry(
                 assets.image_bytes,
                 generated,
@@ -242,6 +287,7 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                     "mode": str(options.mode),
                     "output_scale": FLUX2_OUTPUT_SCALE,
                     "comfyui_direct_output": False,
+                    "native_resolution": False,
                 },
                 result={
                     "status": "success",
@@ -258,6 +304,7 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 parameters={
                     "mode": str(options.mode),
                     "comfyui_direct_output": True,
+                    "native_resolution": False,
                 },
                 result={
                     "status": "skipped",
@@ -288,6 +335,7 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 "reference_profiles": len(references),
                 "reference_images_uploaded": 3,
                 "comfyui_direct_output": options.comfyui_direct_output,
+                "native_resolution": self.native_resolution,
                 "processed_panels": outcome.processed_panels,
                 "model_profile": outcome.model_profile,
             },
@@ -361,6 +409,65 @@ def _append_direct_output_revision(base: str, options: ProcessOptions) -> str:
     if options.comfyui_direct_output:
         return f"{base}:comfyui-direct-output"
     return base
+
+
+# 方法说明：读取原图尺寸并计算原图像素量，供原图分辨率工作流使用。
+def _source_geometry(image_bytes: bytes) -> tuple[tuple[int, int], float]:
+    with Image.open(BytesIO(image_bytes)) as source_file:
+        source = ImageOps.exif_transpose(source_file)
+        width, height = source.size
+    return (width, height), round(width * height / 1_000_000, 4)
+
+
+# 方法说明：把角色工作流的漫画输入和输出切换到原图分辨率路径。
+def _bind_native_resolution(workflow: dict, source_megapixels: float) -> None:
+    scale_nodes = [
+        (node_id, node)
+        for node_id, node in workflow.items()
+        if isinstance(node, dict)
+        and node.get("class_type") == "ImageScaleToTotalPixels"
+        and str(node.get("_meta", {}).get("title", "")).strip().upper()
+        == "SCALE MANGA PAGE"
+    ]
+    if len(scale_nodes) != 1:
+        raise RuntimeError("原图分辨率工作流缺少唯一的漫画输入缩放节点")
+    scale_nodes[0][1].setdefault("inputs", {})["megapixels"] = source_megapixels
+
+    size_nodes = [
+        (node_id, node)
+        for node_id, node in workflow.items()
+        if isinstance(node, dict)
+        and node.get("class_type") == "GetImageSize"
+        and str(node.get("_meta", {}).get("title", "")).strip().upper()
+        == "SOURCE_IMAGE_SIZE"
+    ]
+    output_scale_nodes = [
+        (node_id, node)
+        for node_id, node in workflow.items()
+        if isinstance(node, dict)
+        and node.get("class_type") == "ImageScale"
+        and str(node.get("_meta", {}).get("title", "")).strip().upper()
+        == "RESTORE SOURCE GEOMETRY"
+    ]
+    output_nodes = [
+        (node_id, node)
+        for node_id, node in workflow.items()
+        if isinstance(node, dict)
+        and node.get("class_type") == "SaveImage"
+        and str(node.get("_meta", {}).get("title", "")).strip().upper()
+        == "OUTPUT_IMAGE"
+    ]
+    if len(size_nodes) != 1 or len(output_scale_nodes) != 1 or len(output_nodes) != 1:
+        raise RuntimeError("原图分辨率工作流缺少尺寸校正节点")
+    size_id = size_nodes[0][0]
+    output_scale_id = output_scale_nodes[0][0]
+    output_nodes[0][1].setdefault("inputs", {})["images"] = [output_scale_id, 0]
+    output_scale_nodes[0][1].setdefault("inputs", {}).update(
+        {
+            "width": [size_id, 0],
+            "height": [size_id, 1],
+        }
+    )
 
 
 # 方法说明：把静态角色颜色指南追加到基础 FLUX.2 正向提示词节点。

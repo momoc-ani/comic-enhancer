@@ -67,7 +67,7 @@ CANDIDATE_DOWNLOAD_CONNECTIONS=4 \
 
 ComfyUI 调试地址为 `http://192.168.38.226:8192/`，API 内部地址始终是 `http://comfyui:8188`。要启用最高质量档 FLUX.2 Klein 4B，设置 `COMIC_ENHANCER_COMFYUI_FLUX2_ENABLED=true`；要启用量化实验档，同时设置 `COMIC_ENHANCER_COMFYUI_FLUX2_QUANT_ENABLED=true`。两个档位都由增强 API 处理参考图，任一 FLUX.2 或 Real-CUGAN 阶段失败都会直接返回失败，不回退质量档。ComfyUI 调试界面没有业务鉴权，只应在可信局域网使用；插件仍必须走 `8765` API。
 
-FLUX.2 最高质量档恢复旧基准的 `0.85MP` 四步空 latent 直出，以强化提示词锁定气泡、文字、标点、页面结构和网点。工作流不执行全页深色像素回注或颜色混合；API 先将未后处理结果按原图比例恢复为宽高各 2 倍，再交给 UPSCALE 策略使用 Real-CUGAN 放大 2 倍，最终输出原图宽高各 4 倍。三页冒烟中该方案恢复了旧版平滑动漫平涂效果，并完整保留测试页文字；至少 100 页准入完成前仍需保留文字变化风险说明。
+FLUX.2 最高质量档保持旧基准的 `0.85MP` 四步空 latent 生成参数，以强化提示词锁定气泡、文字、标点、页面结构和网点。工作流不执行全页深色像素回注或颜色混合；在 VAE 解码后使用工作流内 Lanczos 节点恢复到原图准确宽高，API 只校验尺寸，不再使用 Pillow 放大，再交给 UPSCALE 策略使用 Real-CUGAN 放大 2 倍，最终输出原图宽高各 2 倍。三页冒烟中该方案恢复了旧版平滑动漫平涂效果，并完整保留测试页文字；至少 100 页准入完成前仍需保留文字变化风险说明。
 
 插件配置：
 
@@ -97,11 +97,14 @@ API 主机 `.env` 使用与 key 文件相同的值，并显式启用新档位：
 ```text
 COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_ENABLED=true
 COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER=/app/workflows/flux2-klein-4b-qwen3-vl-character-colorize.json
+COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_NATIVE_RESOLUTION=false
 COMIC_ENHANCER_QWEN_VL_URL=http://<AMD主机内网IP>:8080
 COMIC_ENHANCER_QWEN_VL_API_KEY=<sidecar key>
 COMIC_ENHANCER_QWEN_VL_MODEL_ID=qwen3-vl-4b-instruct-q8_0
 COMIC_ENHANCER_QWEN_VL_DEPLOYMENT_REVISION=q8_0-054721f4-mmproj-f16-256f3a43
 ```
+
+开启 `COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_NATIVE_RESOLUTION=true` 后，API 会按每页原图像素量调整角色工作流的漫画输入，并在 ComfyUI 内按原图宽高做尺寸校正，避免服务端先插值到原图 2x 再交给 Real-CUGAN。该实验路径会增加 FLUX.2 显存和首阶段耗时，必须先做单页显存与质量验收；关闭后恢复当前 0.85MP 基线。`ComfyUI 原图直出` 仍是独立的服务端结构保护开关。
 
 能力接口只有在独立工作流存在、ComfyUI 可达、Qwen sidecar 健康、模型 ID 匹配且 Real-CUGAN 二阶段就绪时才返回 `flux2_character_available=true`。任何分析、JSON 校验、角色计划、FLUX.2 或放大阶段失败都直接让本档位失败，插件继续显示原图；不会回退到 `flux2`、`quality` 或其他档位。
 

@@ -26,7 +26,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 # 方法说明：写入测试使用的最小 ComfyUI 工作流。
-def write_workflow(path, *, marker, load_nodes=1, save_nodes=1):
+def write_workflow(
+    path,
+    *,
+    marker,
+    load_nodes=1,
+    save_nodes=1,
+    source_size_output=False,
+):
     workflow = {
         str(index): {
             "class_type": "LoadImage",
@@ -40,6 +47,26 @@ def write_workflow(path, *, marker, load_nodes=1, save_nodes=1):
             "class_type": "SaveImage",
             "inputs": {"images": ["marker", 0], "filename_prefix": "preset"},
         }
+    if source_size_output:
+        workflow["1"]["_meta"] = {"title": "INPUT_IMAGE"}
+        workflow["source-size"] = {
+            "class_type": "GetImageSize",
+            "inputs": {"image": ["1", 0]},
+            "_meta": {"title": "SOURCE_IMAGE_SIZE"},
+        }
+        workflow["restore-source"] = {
+            "class_type": "ImageScale",
+            "inputs": {
+                "image": ["marker", 0],
+                "width": ["source-size", 0],
+                "height": ["source-size", 1],
+                "upscale_method": "lanczos",
+                "crop": "disabled",
+            },
+            "_meta": {"title": "Restore Source Geometry"},
+        }
+        workflow["10"]["inputs"]["images"] = ["restore-source", 0]
+        workflow["10"]["_meta"] = {"title": "OUTPUT_IMAGE"}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(workflow), encoding="utf-8")
 
@@ -131,8 +158,8 @@ def test_flux2_strategies_do_not_fallback_to_quality(tmp_path, monkeypatch, mode
         )
 
 
-# 方法说明：验证 FLUX.2 使用三张参考图并精确恢复为原图两倍尺寸。
-def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
+# 方法说明：验证最高质量档使用三张参考图并由工作流恢复到原图尺寸。
+def test_flux2_backend_uses_three_references_and_restores_source_size(
     tmp_path, monkeypatch
 ):
     fast = tmp_path / "fast.json"
@@ -140,7 +167,12 @@ def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
     flux2 = tmp_path / "flux2.json"
     write_workflow(fast, marker="fast")
     write_workflow(quality, marker="quality")
-    write_workflow(flux2, marker="flux2", load_nodes=4)
+    write_workflow(
+        flux2,
+        marker="flux2",
+        load_nodes=4,
+        source_size_output=True,
+    )
     backend = ComfyUIBackend(
         base_url="http://comfy",
         timeout_seconds=10,
@@ -165,11 +197,13 @@ def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
         output_prefix,
         prepare_workflow=None,
     ):
+        if prepare_workflow is not None:
+            prepare_workflow(workflow)
         captured["input_images"] = input_images
         captured["workflow"] = workflow
         captured["output_prefix"] = output_prefix
         captured["prepare_workflow"] = prepare_workflow
-        return Image.new("RGB", (16, 24), (220, 80, 130))
+        return Image.new("RGB", (8, 12), (220, 80, 130))
 
     monkeypatch.setattr(backend.transport, "run", run_flux2)
     source = Image.new("RGB", (8, 12), "white")
@@ -198,14 +232,20 @@ def test_flux2_backend_uses_three_references_and_restores_source_size_at_two_x(
     }
     assert len(reference_values) == 3
     assert captured["workflow"]["marker"]["inputs"]["value"] == "flux2"
+    assert captured["prepare_workflow"] is not None
+    assert captured["workflow"]["source-size"]["inputs"]["image"] == ["1", 0]
+    assert captured["workflow"]["10"]["inputs"]["images"] == [
+        "restore-source",
+        0,
+    ]
     assert FLUX2_PROCESSING_REVISION in backend.cache_revision(
         ProcessOptions(mode="flux2"),
         assets,
     )
     with Image.open(output_path) as result:
-        assert result.size == (source.width * 2, source.height * 2)
-        # 后端只规范尺寸，不应再次混合原图而破坏 ComfyUI 工作流的最终颜色。
-        pixel = result.getpixel((8, 12))
+        assert result.size == source.size
+        # 服务端不再二次插值或混合原图，保留 ComfyUI 最终颜色。
+        pixel = result.getpixel((4, 6))
         assert pixel[0] > 180
         assert pixel[2] > 90
 
@@ -332,6 +372,13 @@ def test_flux2_candidate_workflow_has_baseline_direct_output_contract():
     assert workflow["32"]["inputs"]["sigmas"] == ["28", 0]
     assert workflow["32"]["inputs"]["latent_image"] == ["27", 0]
     assert workflow["29"]["inputs"]["cfg"] == 1.0
+    assert workflow["10"]["inputs"]["megapixels"] == 0.85
+    assert workflow["35"]["class_type"] == "ImageScale"
+    assert workflow["35"]["inputs"]["image"] == ["33", 0]
+    assert workflow["35"]["inputs"]["width"] == ["36", 0]
+    assert workflow["35"]["inputs"]["height"] == ["36", 1]
+    assert workflow["36"]["inputs"]["image"] == ["1", 0]
+    assert workflow["34"]["inputs"]["images"] == ["35", 0]
     assert outputs == ("34",)
 
 
@@ -342,7 +389,7 @@ def test_flux2_candidate_workflow_has_baseline_direct_output_contract():
         "flux2-klein-4b-reference-colorize-qwen3-fp8.json",
     ],
 )
-# 方法说明：验证两个 FLUX.2 工作流以提示词保护文字，并直接保存未后处理结果。
+# 方法说明：验证两个 FLUX.2 工作流以提示词保护文字并保持独立输出链路。
 def test_shipped_flux2_workflows_use_prompt_protection_and_direct_output(name):
     workflow = json.loads(
         (PROJECT_ROOT / "workflows" / name).read_text(encoding="utf-8")
@@ -368,7 +415,12 @@ def test_shipped_flux2_workflows_use_prompt_protection_and_direct_output(name):
         }
         for node in workflow.values()
     )
-    assert workflow["34"]["inputs"]["images"] == ["33", 0]
+    expected_output = (
+        ["35", 0]
+        if name == "flux2-klein-4b-reference-colorize.json"
+        else ["33", 0]
+    )
+    assert workflow["34"]["inputs"]["images"] == expected_output
 
 
 @pytest.mark.parametrize(

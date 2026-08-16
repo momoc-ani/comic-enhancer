@@ -271,13 +271,19 @@ def character_prompt_context(reference):
 
 # 方法说明：验证角色档位绑定原图、三张角色参考图与静态调色提示，并按开关选择后处理。
 @pytest.mark.parametrize(
-    ("comfyui_direct_output", "expected_size"),
-    [(False, (16, 24)), (True, (20, 20))],
+    ("comfyui_direct_output", "native_resolution", "expected_size"),
+    [
+        (False, False, (16, 24)),
+        (True, False, (20, 20)),
+        (False, True, (8, 12)),
+        (True, True, (8, 12)),
+    ],
 )
 def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
     tmp_path,
     monkeypatch,
     comfyui_direct_output,
+    native_resolution,
     expected_size,
 ):
     workflow = PROJECT_ROOT / "workflows" / "flux2-klein-4b-qwen3-vl-character-colorize.json"
@@ -299,6 +305,7 @@ def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
         workflow_loader=loader,
         flux2_character_enabled=True,
         flux2_character_workflow=workflow,
+        flux2_character_native_resolution=native_resolution,
         character_library=library,
     )
     strategy = backend.mode_strategy("flux2_character")
@@ -318,7 +325,8 @@ def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
         prepare_workflow(workflow_copy)
         captured["workflow"] = workflow_copy
         captured["inputs"] = input_images
-        return Image.new("RGB", (20, 20), (80, 120, 200))
+        output_size = (8, 12) if native_resolution else (20, 20)
+        return Image.new("RGB", output_size, (80, 120, 200))
 
     monkeypatch.setattr(backend.transport, "run", run_character)
     source_image = Image.new("RGB", (8, 12), "white")
@@ -380,15 +388,29 @@ def test_flux2_character_strategy_binds_static_palette_and_protects_structure(
         for node in captured["workflow"].values()
         if isinstance(node, dict)
     )
+    output_node = next(
+        node
+        for node in captured["workflow"].values()
+        if isinstance(node, dict)
+        and node.get("class_type") == "SaveImage"
+        and node.get("_meta", {}).get("title") == "OUTPUT_IMAGE"
+    )
+    if native_resolution:
+        assert output_node["inputs"]["images"] == ["35", 0]
+        assert captured["workflow"]["10"]["inputs"]["megapixels"] == 0.0001
+    else:
+        assert output_node["inputs"]["images"] == ["33", 0]
     with Image.open(output_path) as output:
         assert output.size == expected_size
         if comfyui_direct_output:
-            pixel = output.getpixel((10, 10))
+            pixel = output.getpixel(
+                (min(10, output.width - 1), min(10, output.height - 1))
+            )
             assert all(
                 abs(actual - expected) <= 2
                 for actual, expected in zip(pixel, (80, 120, 200))
             )
-        else:
+        elif not native_resolution:
             assert max(output.getpixel((8, 12))) <= 40
             red, green, blue = output.getpixel((6, 12))
             assert blue >= red + 10
@@ -420,6 +442,10 @@ def test_shipped_character_workflow_uses_three_references_and_empty_latent():
     assert sum(node.get("class_type") == "SplitSigmas" for node in workflow.values()) == 0
     assert sum(node.get("class_type") == "Flux2Scheduler" for node in workflow.values()) == 1
     assert sum(node.get("class_type") == "SaveImage" for node in workflow.values()) == 1
+    assert workflow["35"]["class_type"] == "ImageScale"
+    assert workflow["35"]["inputs"]["image"] == ["33", 0]
+    assert workflow["36"]["class_type"] == "GetImageSize"
+    assert workflow["36"]["_meta"]["title"] == "SOURCE_IMAGE_SIZE"
     sampler = next(
         node for node in workflow.values() if node.get("class_type") == "SamplerCustomAdvanced"
     )

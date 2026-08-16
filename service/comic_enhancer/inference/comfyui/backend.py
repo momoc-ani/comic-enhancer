@@ -54,6 +54,7 @@ class ComfyUIBackend(InferenceBackend):
         flux2_quant_workflow: Path | None = None,
         flux2_character_enabled: bool = False,
         flux2_character_workflow: Path | None = None,
+        flux2_character_native_resolution: bool = False,
         character_library: CharacterLibraryBuilder | None = None,
     ):
         self.base_url = base_url.rstrip("/")
@@ -88,6 +89,7 @@ class ComfyUIBackend(InferenceBackend):
             Flux2CharacterModeStrategy(
                 enabled=flux2_character_enabled,
                 workflow_path=flux2_character_workflow,
+                native_resolution=flux2_character_native_resolution,
                 character_library=character_library,
                 **shared_options,
             ),
