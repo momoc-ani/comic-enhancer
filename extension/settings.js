@@ -28,6 +28,11 @@ export const MODE_OPTIONS = Object.freeze([
     prefetchPages: 1,
   },
   {
+    value: "flux2_9b_fast_lowres",
+    label: "低分辨率快速实验模式（FLUX.2 Klein 9B 0.70MP）",
+    prefetchPages: 1,
+  },
+  {
     value: "flux2_4b_source",
     label: "结构稳定模式（FLUX.2 Klein 4B）",
     prefetchPages: 1,

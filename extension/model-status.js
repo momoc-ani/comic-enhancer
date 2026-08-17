@@ -14,6 +14,9 @@ const PROFILE_LABELS = Object.freeze({
   "flux2-klein-9b-fast": "FLUX.2 Klein 9B FP8 快速计算",
   "flux2-klein-9b-fast+realcugan-se-2x":
     "FLUX.2 Klein 9B FP8 快速计算 · Real-CUGAN 2x",
+  "flux2-klein-9b-fast-lowres": "FLUX.2 Klein 9B FP8 0.70MP",
+  "flux2-klein-9b-fast-lowres+realcugan-se-2x":
+    "FLUX.2 Klein 9B FP8 0.70MP · Real-CUGAN 2x",
   "flux2-klein-4b-source": "FLUX.2 Klein 4B source latent",
   "flux2-klein-4b-source+realcugan-se-2x":
     "FLUX.2 Klein 4B source latent · Real-CUGAN 2x",
@@ -33,6 +36,7 @@ const MODE_TITLES = Object.freeze({
   flux2_character_lineart: "角色线稿保真档",
   flux2_9b_lora: "9B LoRA 画质档",
   flux2_9b_fast: "9B FP8 快速档",
+  flux2_9b_fast_lowres: "9B FP8 低分辨率快速档",
   flux2_4b_source: "4B 结构稳定档",
   flux2_4b_color: "4B 色彩增强档",
 });
@@ -72,6 +76,8 @@ export function describeModelTier(settings, execution, capabilities = null) {
             capabilities.flux2_9b_lora_available === false) ||
           (mode === "flux2_9b_fast" &&
             capabilities.flux2_9b_fast_available === false) ||
+          (mode === "flux2_9b_fast_lowres" &&
+            capabilities.flux2_9b_fast_lowres_available === false) ||
           (mode === "flux2_4b_source" &&
             capabilities.flux2_4b_source_available === false) ||
           (mode === "flux2_4b_color" &&
@@ -144,6 +150,7 @@ function normalizeMode(value) {
     "flux2_character_lineart",
     "flux2_9b_lora",
     "flux2_9b_fast",
+    "flux2_9b_fast_lowres",
     "flux2_4b_source",
     "flux2_4b_color",
   ].includes(value)

@@ -184,6 +184,34 @@ test("shows 9B FP8 fast mode independently", () => {
 });
 
 
+// 方法说明：验证 9B FP8 低分辨率快速档按独立能力字段和模型展示。
+test("shows 9B FP8 low-resolution fast mode independently", () => {
+  const lowresSettings = {
+    ...settings,
+    profile: "remote-flux2_9b_fast_lowres",
+    mode: "flux2_9b_fast_lowres",
+  };
+  const unavailable = describeModelTier(lowresSettings, null, {
+    ready: true,
+    flux2_9b_fast_lowres_available: false,
+  });
+  assert.equal(unavailable.title, "9B FP8 低分辨率快速档");
+  assert.match(unavailable.detail, /未启用 9B FP8 低分辨率快速档/);
+
+  const execution = buildModelExecution(
+    {
+      model_profile: "flux2-klein-9b-fast-lowres+realcugan-se-2x",
+      reference_applied: true,
+      elapsed_ms: 6000,
+    },
+    lowresSettings,
+  );
+  const actual = describeModelTier(lowresSettings, execution);
+  assert.equal(actual.title, "9B FP8 低分辨率快速档 · 角色参考");
+  assert.match(actual.detail, /FLUX\.2 Klein 9B FP8 0\.70MP · Real-CUGAN 2x/);
+});
+
+
 // 方法说明：验证 4B 色彩增强档按独立能力字段和真实模型展示。
 test("shows 4B color mode independently", () => {
   const colorSettings = {

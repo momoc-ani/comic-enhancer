@@ -1,0 +1,229 @@
+{
+  "1": {
+    "inputs": {"image": "input.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "INPUT_IMAGE"}
+  },
+  "2": {
+    "inputs": {"image": "reference-1.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_1"}
+  },
+  "3": {
+    "inputs": {"image": "reference-2.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_2"}
+  },
+  "4": {
+    "inputs": {"image": "reference-3.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_3"}
+  },
+  "5": {
+    "inputs": {
+      "unet_name": "FLUX.2-klein-9b-fp8-v2_flux2 Klein b9.safetensors",
+      "weight_dtype": "fp8_e4m3fn_fast"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {"title": "FLUX.2 Klein 9B FP8 Fast 0.70MP"}
+  },
+  "6": {
+    "inputs": {
+      "clip_name": "qwen_3_8b_fp8mixed.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {"title": "Qwen3 8B FP8 Mixed Text Encoder"}
+  },
+  "7": {
+    "inputs": {"vae_name": "flux2-vae.safetensors"},
+    "class_type": "VAELoader",
+    "_meta": {"title": "FLUX.2 VAE"}
+  },
+  "8": {
+    "inputs": {
+      "text": "TASK: Faithfully colorize the first manga page using image editing only.SOURCE AUTHORITYThe first input image is the sole and absolute authority for composition, geometry, linework, luminance structure, and text. The output must remain pixel-aligned with the source and retain the exact same canvas size, aspect ratio, crop, panel layout, and whitespace.ALLOWED EDITAdd color only to regions that already exist in the source artwork. Apply professional anime-style cel coloring with natural skin tones, coherent character palettes, balanced saturation, flat base colors, and minimal restrained shading. Preserve the original black ink, grayscale values, screentones, hatching, texture, and contrast underneath the color.LOCKED VISUAL CONTENTPreserve every panel border, crop, contour, line, screentone dot, face, eye, pupil, eyebrow, mouth, expression, hairstyle, pose, anatomy, silhouette, hand, clothing fold, prop, background object, and empty area in exactly the same position, size, and shape.Do not redraw, reconstruct, reinterpret, beautify, correct, clean up, denoise, sharpen, upscale, smooth, erase, extend, crop, or add detail. Do not alter anatomy, perspective, proportions, expressions, line weight, screentone density, or background structure. Do not invent objects, highlights, shadows, textures, or missing information.TEXT AND GRAPHICS LOCKSpeech bubbles, caption boxes, narration boxes, signs, labels, and sound-effect regions are immutable source regions. Preserve their exact boundaries and white backgrounds. Copy every glyph, punctuation mark, numeral, letter, stroke, spacing, orientation, and line break exactly from the source. Keep all text and ink pure black and all text backgrounds pure white. Do not translate, rewrite, regenerate, restyle, move, distort, obscure, or color any text.REFERENCE IMAGE POLICYUse reference images only to determine the colors of characters, clothing, accessories, or objects already visible in the source page. References must never override the source image’s identity, anatomy, expression, pose, costume design, geometry, linework, or composition. If a color is not established by the references, choose a conservative color consistent with the visible grayscale values and surrounding palette.COLOR APPLICATIONColor beneath and within the existing line art without shifting or tinting black outlines. Retain every screentone and texture pattern visibly and precisely. Color existing backgrounds without simplifying or redesigning them. Avoid gradients, painterly rendering, glossy effects, dramatic relighting, bloom, rim light, excessive highlights, and heavy shadows.OUTPUT REQUIREMENTReturn the same manga page with color added, not a redraw or reconstruction. Except for the necessary addition of color, the result must match the first input image exactly.",
+      "clip": ["6", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Colorization Instruction"}
+  },
+  "9": {
+    "inputs": {
+      "text": "redesign, reinterpretation, full redraw, reconstruction, content generation,new content, invented content, hallucinated details, added details,extra character, extra person, extra body, extra limb, extra hand, extra face,new face, reconstructed face, invented eyes, invented mouth,changed identity, changed hairstyle, changed costume,changed expression, altered pose, altered anatomy, anatomy correction,new object, removed object, replaced object, simplified background,changed canvas size, changed aspect ratio, changed crop, shifted composition,changed panel layout, altered panel border, changed whitespace,warped line art, broken line art, altered line art, changed line weight,erased ink, softened ink, tinted black ink, color bleeding across outlines,removed screentone, altered screentone, replaced screentone,changed screentone density, removed hatching, altered texture,denoise, sharpening, smoothing, upscaling, cleanup, beautification,altered speech bubble, colored speech bubble, tinted text background,rewritten text, regenerated text, translated text, corrected text,missing text, added text, illegible text, changed glyph, changed punctuation,changed spacing, changed line break, distorted lettering,painterly rendering, photorealistic rendering, 3D rendering,dramatic relighting, heavy shadows, excessive highlights, bloom, rim light,glossy skin, gradients, overrendering, oversaturation,watermark, signature, logo",
+      "clip": ["6", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Negative Conditioning"}
+  },
+  "10": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.70,
+      "resolution_steps": 16,
+      "image": ["1", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {"title": "Scale Manga Page"}
+  },
+  "11": {
+    "inputs": {"pixels": ["10", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "12": {
+    "inputs": {"conditioning": ["8", 0], "latent": ["11", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "13": {
+    "inputs": {"conditioning": ["9", 0], "latent": ["11", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "14": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.25,
+      "resolution_steps": 16,
+      "image": ["2", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "15": {
+    "inputs": {"pixels": ["14", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "16": {
+    "inputs": {"conditioning": ["12", 0], "latent": ["15", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "17": {
+    "inputs": {"conditioning": ["13", 0], "latent": ["15", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "18": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.25,
+      "resolution_steps": 16,
+      "image": ["3", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "19": {
+    "inputs": {"pixels": ["18", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "20": {
+    "inputs": {"conditioning": ["16", 0], "latent": ["19", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "21": {
+    "inputs": {"conditioning": ["17", 0], "latent": ["19", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "22": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.25,
+      "resolution_steps": 16,
+      "image": ["4", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "23": {
+    "inputs": {"pixels": ["22", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "24": {
+    "inputs": {"conditioning": ["20", 0], "latent": ["23", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "25": {
+    "inputs": {"conditioning": ["21", 0], "latent": ["23", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "26": {
+    "inputs": {"image": ["10", 0]},
+    "class_type": "GetImageSize"
+  },
+  "27": {
+    "inputs": {
+      "width": ["26", 0],
+      "height": ["26", 1],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage"
+  },
+  "28": {
+    "inputs": {
+      "steps": 4,
+      "width": ["26", 0],
+      "height": ["26", 1]
+    },
+    "class_type": "Flux2Scheduler"
+  },
+  "29": {
+    "inputs": {
+      "model": ["37", 0],
+      "positive": ["24", 0],
+      "negative": ["25", 0],
+      "cfg": 1.0
+    },
+    "class_type": "CFGGuider"
+  },
+  "30": {
+    "inputs": {"sampler_name": "euler"},
+    "class_type": "KSamplerSelect"
+  },
+  "31": {
+    "inputs": {"noise_seed": 20260814},
+    "class_type": "RandomNoise"
+  },
+  "32": {
+    "inputs": {
+      "noise": ["31", 0],
+      "guider": ["29", 0],
+      "sampler": ["30", 0],
+      "sigmas": ["28", 0],
+      "latent_image": ["27", 0]
+    },
+    "class_type": "SamplerCustomAdvanced"
+  },
+  "33": {
+    "inputs": {"samples": ["32", 0], "vae": ["7", 0]},
+    "class_type": "VAEDecode"
+  },
+  "34": {
+    "inputs": {
+      "filename_prefix": "comic-enhancer/flux2-klein-9b-fast-lowres",
+      "images": ["35", 0]
+    },
+    "class_type": "SaveImage",
+    "_meta": {"title": "OUTPUT_IMAGE"}
+  },
+  "35": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "width": ["36", 0],
+      "height": ["36", 1],
+      "crop": "disabled",
+      "image": ["33", 0]
+    },
+    "class_type": "ImageScale",
+    "_meta": {"title": "Restore Source Geometry"}
+  },
+  "36": {
+    "inputs": {"image": ["1", 0]},
+    "class_type": "GetImageSize",
+    "_meta": {"title": "SOURCE_IMAGE_SIZE"}
+  },
+  "37": {
+    "inputs": {
+      "model": ["5", 0],
+      "lora_name": "Klein-9B/f2k_9B_lcs_consist_20260415.safetensors",
+      "strength_model": 0.6
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {"title": "FLUX.2 Klein 9B Consistency LoRA 0.6"}
+  }
+}
