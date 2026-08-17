@@ -47,7 +47,19 @@ COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
 COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
   --base-url http://192.168.38.226:8765 \
   --manifest benchmarks/works/exiled-reincarnated-heavy-knight.json \
+  --mode flux2_9b_fast --phase warm \
+  --resource-ssh-host holopix@192.168.38.226
+
+COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
+  --base-url http://192.168.38.226:8765 \
+  --manifest benchmarks/works/exiled-reincarnated-heavy-knight.json \
   --mode flux2_4b_source --phase warm \
+  --resource-ssh-host holopix@192.168.38.226
+
+COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
+  --base-url http://192.168.38.226:8765 \
+  --manifest benchmarks/works/exiled-reincarnated-heavy-knight.json \
+  --mode flux2_4b_color --phase warm \
   --resource-ssh-host holopix@192.168.38.226
 ```
 

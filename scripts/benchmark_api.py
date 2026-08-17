@@ -580,7 +580,9 @@ def main() -> None:
             "flux2",
             "flux2_quant",
             "flux2_9b_lora",
+            "flux2_9b_fast",
             "flux2_4b_source",
+            "flux2_4b_color",
         ),
         required=True,
     )

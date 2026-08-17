@@ -24,7 +24,9 @@ from .strategies import (
     Flux2CharacterLineartModeStrategy,
     Flux2QuantModeStrategy,
     Flux29BLoraModeStrategy,
+    Flux29BFastModeStrategy,
     Flux24BSourceModeStrategy,
+    Flux24BColorModeStrategy,
     QualityModeStrategy,
 )
 from .transport import ComfyUITransport, bind_io, comfy_path
@@ -44,7 +46,9 @@ class ComfyUIBackend(InferenceBackend):
         "flux2-klein-4b-qwen3-vl-character-lineart",
         "flux2-klein-4b-character-lineart-no-reference",
         "flux2-klein-9b-lora",
+        "flux2-klein-9b-fast",
         "flux2-klein-4b-source",
+        "flux2-klein-4b-color",
     )
 
     # 方法说明：初始化传输层并注册每个处理档位的独立策略实现。
@@ -69,8 +73,12 @@ class ComfyUIBackend(InferenceBackend):
         flux2_character_lineart_no_reference_workflow: Path | None = None,
         flux2_9b_lora_enabled: bool = False,
         flux2_9b_lora_workflow: Path | None = None,
+        flux2_9b_fast_enabled: bool = False,
+        flux2_9b_fast_workflow: Path | None = None,
         flux2_4b_source_enabled: bool = False,
         flux2_4b_source_workflow: Path | None = None,
+        flux2_4b_color_enabled: bool = False,
+        flux2_4b_color_workflow: Path | None = None,
         character_library: CharacterLibraryBuilder | None = None,
     ):
         self.base_url = base_url.rstrip("/")
@@ -125,9 +133,21 @@ class ComfyUIBackend(InferenceBackend):
                 reference_limit=flux2_reference_limit,
                 **shared_options,
             ),
+            Flux29BFastModeStrategy(
+                enabled=flux2_9b_fast_enabled,
+                workflow_path=flux2_9b_fast_workflow,
+                reference_limit=flux2_reference_limit,
+                **shared_options,
+            ),
             Flux24BSourceModeStrategy(
                 enabled=flux2_4b_source_enabled,
                 workflow_path=flux2_4b_source_workflow,
+                reference_limit=flux2_reference_limit,
+                **shared_options,
+            ),
+            Flux24BColorModeStrategy(
+                enabled=flux2_4b_color_enabled,
+                workflow_path=flux2_4b_color_workflow,
                 reference_limit=flux2_reference_limit,
                 **shared_options,
             ),
@@ -158,9 +178,17 @@ class ComfyUIBackend(InferenceBackend):
     def flux2_9b_lora_profile_ready(self) -> bool:
         return self.mode_available(ProcessingMode.FLUX2_9B_LORA)
 
+    # 方法说明：检查 9B FP8 快速计算档是否可用。
+    def flux2_9b_fast_profile_ready(self) -> bool:
+        return self.mode_available(ProcessingMode.FLUX2_9B_FAST)
+
     # 方法说明：检查 4B source latent 结构稳定档是否可用。
     def flux2_4b_source_profile_ready(self) -> bool:
         return self.mode_available(ProcessingMode.FLUX2_4B_SOURCE)
+
+    # 方法说明：检查 4B 色彩增强档是否可用。
+    def flux2_4b_color_profile_ready(self) -> bool:
+        return self.mode_available(ProcessingMode.FLUX2_4B_COLOR)
 
     # 方法说明：检查指定处理档位是否可用。
     def mode_available(self, mode: ProcessingMode | str) -> bool:

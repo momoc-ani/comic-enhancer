@@ -29,6 +29,14 @@
 
 2026-08-17 增加两个默认关闭的 FLUX.2 验收档位：`flux2_9b_lora` 固定 9B FP8 + Qwen3 8B FP8 mixed + 一致性 LoRA 0.6 + 四步空 latent，作为当前画质对照；`flux2_4b_source` 固定 4B FP8 + 一致性 LoRA 0.35 + 四步 source latent + CFG 1.3 + denoise 0.65，作为快速结构稳定对照。两档均使用最多三张角色参考图、ComfyUI 原图尺寸直出和 Real-CUGAN 2x，不依赖逐页 VLM 分析。ControlNet 仅作为后续结构约束实验，完成独立 A/B 前不合入这两个基线参数。
 
+同日追加 `flux2_4b_color` 色彩增强验收档：保持 4B source latent 链路和速度参数不变，仅将一致性 LoRA 从 0.35 调整为 0.25。既有四页扫描的平均饱和色覆盖为 36.34%，高于结构稳定档的 32.96%，暗线保留约 95.28%、白区保留约 85.26%。该档与 `flux2_4b_source` 并存，扩大授权集验证前不替换默认画质路线。
+
+同日完成 FLUX.2 Klein ControlNet 兼容性调研。远端已挂载的 FLUX.1 Union Pro 2.0 和 Canny v3 在 4B Klein 采样时触发张量维度错误，不能跨架构复用；公开模型仓库未找到 FLUX.2 Klein 4B 专用 ControlNet。FLUX.2-dev Union 是不同架构且权重约 8.23GB，并受 FLUX dev 非商用许可证限制；Klein 专用 RefControl Lineart/Canny LoRA 目前仅面向 9B。因此不增加必然失败的 4B ControlNet 挡位，等待架构和许可证均明确兼容的权重后再做独立 A/B。
+
+同日增加默认关闭的 `flux2_9b_fast` 独立实验档。它复用 9B FP8、Qwen3 8B FP8 mixed、一致性 LoRA 0.6、四步空 latent 和三张角色参考图，只将 ComfyUI `UNETLoader.weight_dtype` 从 `default` 切换为 `fp8_e4m3fn_fast`。四张不同漫画页的 ComfyUI 内部热执行均值由 6.856 秒降至 5.185 秒，约快 24.4%；饱和色覆盖均值由 31.28% 变为 30.93%，逐页平均绝对像素差为 1.85 到 2.73/255。第四页暗线保留下降约 3.07 个百分点，所以该档只作为速度候选并与 9B 画质基线并存。
+
+随后对公开 `unsloth/FLUX.2-klein-9B-GGUF` 的 `Q4_K_M`（5.91GB，SHA-256 已校验）进行了不接入实验。远端现有 `EasyUnetLoaderGGUF` 能识别模型并叠加现有 9B LoRA，但四页热执行均值为 8.615 秒，慢于 FP8 default 的 6.856 秒和 FP8 fast 的 5.185 秒；显存约 14.7GB，仅比 FP8 低约 0.9GB，第四页暗线保留降至 88.40%。因此 GGUF 只具备兼容性，不具备当前目标所需的提速/显存收益，不新增量化挡位。Nunchaku INT4 需要与当前 Python/Torch/CUDA 不匹配的社区运行时，列为未来独立 sidecar 路线。
+
 “开源可见”不等于“允许重新分发权重”。每个候选都必须单独登记代码许可证、权重许可证和训练数据声明。
 
 ## 性能目标

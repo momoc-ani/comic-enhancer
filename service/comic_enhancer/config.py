@@ -50,8 +50,12 @@ class Settings:
     comfyui_flux2_character_native_resolution: bool = False
     comfyui_flux2_9b_lora_enabled: bool = False
     comfyui_workflow_flux2_9b_lora: Path | None = None
+    comfyui_flux2_9b_fast_enabled: bool = False
+    comfyui_workflow_flux2_9b_fast: Path | None = None
     comfyui_flux2_4b_source_enabled: bool = False
     comfyui_workflow_flux2_4b_source: Path | None = None
+    comfyui_flux2_4b_color_enabled: bool = False
+    comfyui_workflow_flux2_4b_color: Path | None = None
     qwen_vl_base_url: str = "http://127.0.0.1:8080"
     qwen_vl_api_key: str = ""
     qwen_vl_model_id: str = "qwen3-vl-4b-instruct-q8_0"
@@ -97,7 +101,9 @@ def load_settings() -> Settings:
         "comfyui_workflow_flux2_character_lineart",
         "comfyui_workflow_flux2_character_lineart_no_reference",
         "comfyui_workflow_flux2_9b_lora",
+        "comfyui_workflow_flux2_9b_fast",
         "comfyui_workflow_flux2_4b_source",
+        "comfyui_workflow_flux2_4b_color",
         "character_library_root",
         "work_identity_index",
     ):
@@ -183,12 +189,28 @@ def load_settings() -> Settings:
             "comfyui_workflow_flux2_9b_lora",
             Path,
         ),
+        "COMIC_ENHANCER_COMFYUI_FLUX2_9B_FAST_ENABLED": (
+            "comfyui_flux2_9b_fast_enabled",
+            lambda value: value.lower() in {"1", "true", "yes", "on"},
+        ),
+        "COMIC_ENHANCER_WORKFLOW_FLUX2_9B_FAST": (
+            "comfyui_workflow_flux2_9b_fast",
+            Path,
+        ),
         "COMIC_ENHANCER_COMFYUI_FLUX2_4B_SOURCE_ENABLED": (
             "comfyui_flux2_4b_source_enabled",
             lambda value: value.lower() in {"1", "true", "yes", "on"},
         ),
         "COMIC_ENHANCER_WORKFLOW_FLUX2_4B_SOURCE": (
             "comfyui_workflow_flux2_4b_source",
+            Path,
+        ),
+        "COMIC_ENHANCER_COMFYUI_FLUX2_4B_COLOR_ENABLED": (
+            "comfyui_flux2_4b_color_enabled",
+            lambda value: value.lower() in {"1", "true", "yes", "on"},
+        ),
+        "COMIC_ENHANCER_WORKFLOW_FLUX2_4B_COLOR": (
+            "comfyui_workflow_flux2_4b_color",
             Path,
         ),
         "COMIC_ENHANCER_QWEN_VL_URL": ("qwen_vl_base_url", str),

@@ -172,8 +172,16 @@ def test_new_flux2_acceptance_modes_are_valid():
         == ProcessingMode.FLUX2_9B_LORA
     )
     assert (
+        ProcessOptions(mode="flux2_9b_fast").mode
+        == ProcessingMode.FLUX2_9B_FAST
+    )
+    assert (
         ProcessOptions(mode="flux2_4b_source").mode
         == ProcessingMode.FLUX2_4B_SOURCE
+    )
+    assert (
+        ProcessOptions(mode="flux2_4b_color").mode
+        == ProcessingMode.FLUX2_4B_COLOR
     )
 
 
@@ -181,7 +189,9 @@ def test_new_flux2_acceptance_modes_are_valid():
     ("mode", "detail"),
     [
         ("flux2_9b_lora", "9B LoRA"),
+        ("flux2_9b_fast", "9B FP8 快速"),
         ("flux2_4b_source", "4B 结构稳定"),
+        ("flux2_4b_color", "4B 色彩增强"),
     ],
 )
 # 方法说明：验证新增档位默认关闭时在准备参考图之前明确返回 409。
@@ -215,9 +225,19 @@ def test_new_flux2_modes_reject_when_disabled(tmp_path, mode, detail):
             "flux2_9b_lora_profile_ready",
         ),
         (
+            "flux2_9b_fast",
+            "flux2_9b_fast_available",
+            "flux2_9b_fast_profile_ready",
+        ),
+        (
             "flux2_4b_source",
             "flux2_4b_source_available",
             "flux2_4b_source_profile_ready",
+        ),
+        (
+            "flux2_4b_color",
+            "flux2_4b_color_available",
+            "flux2_4b_color_profile_ready",
         ),
     ],
 )
