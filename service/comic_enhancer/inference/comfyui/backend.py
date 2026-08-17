@@ -40,7 +40,9 @@ class ComfyUIBackend(InferenceBackend):
         "flux2-klein-4b",
         "flux2-klein-4b-qwen3-fp8",
         "flux2-klein-4b-qwen3-vl-character",
+        "flux2-klein-4b-character-no-reference",
         "flux2-klein-4b-qwen3-vl-character-lineart",
+        "flux2-klein-4b-character-lineart-no-reference",
         "flux2-klein-9b-lora",
         "flux2-klein-4b-source",
     )
@@ -60,9 +62,11 @@ class ComfyUIBackend(InferenceBackend):
         flux2_quant_workflow: Path | None = None,
         flux2_character_enabled: bool = False,
         flux2_character_workflow: Path | None = None,
+        flux2_character_no_reference_workflow: Path | None = None,
         flux2_character_native_resolution: bool = False,
         flux2_character_lineart_enabled: bool = False,
         flux2_character_lineart_workflow: Path | None = None,
+        flux2_character_lineart_no_reference_workflow: Path | None = None,
         flux2_9b_lora_enabled: bool = False,
         flux2_9b_lora_workflow: Path | None = None,
         flux2_4b_source_enabled: bool = False,
@@ -101,6 +105,7 @@ class ComfyUIBackend(InferenceBackend):
             Flux2CharacterModeStrategy(
                 enabled=flux2_character_enabled,
                 workflow_path=flux2_character_workflow,
+                no_reference_workflow_path=flux2_character_no_reference_workflow,
                 native_resolution=flux2_character_native_resolution,
                 character_library=character_library,
                 **shared_options,
@@ -108,6 +113,9 @@ class ComfyUIBackend(InferenceBackend):
             Flux2CharacterLineartModeStrategy(
                 enabled=flux2_character_lineart_enabled,
                 workflow_path=flux2_character_lineart_workflow,
+                no_reference_workflow_path=(
+                    flux2_character_lineart_no_reference_workflow
+                ),
                 character_library=character_library,
                 **shared_options,
             ),

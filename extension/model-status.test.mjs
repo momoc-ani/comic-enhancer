@@ -128,6 +128,27 @@ test("shows character lineart mode availability and execution", () => {
 });
 
 
+// 方法说明：验证角色参考不可用时显示真实的无参考模型档位。
+test("shows character no-reference fallback profile", () => {
+  const characterSettings = {
+    ...settings,
+    profile: "remote-flux2_character",
+    mode: "flux2_character",
+  };
+  const execution = buildModelExecution(
+    {
+      model_profile: "flux2-klein-4b-character-no-reference",
+      reference_applied: false,
+      elapsed_ms: 1200,
+    },
+    characterSettings,
+  );
+  const actual = describeModelTier(characterSettings, execution);
+
+  assert.equal(actual.title, "角色稳定档 · 无参考");
+  assert.match(actual.detail, /FLUX\.2 Klein 4B · 无参考降级/);
+});
+
 // 方法说明：验证新增验收档按独立能力字段和组合模型标识展示。
 test("shows new FLUX.2 acceptance modes independently", () => {
   const qualitySettings = {

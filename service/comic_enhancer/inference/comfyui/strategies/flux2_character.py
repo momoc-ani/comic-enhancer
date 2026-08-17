@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from dataclasses import dataclass
 import hashlib
 from io import BytesIO
 import logging
@@ -32,6 +33,19 @@ FLUX2_CHARACTER_PROCESSING_REVISION = (
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class _CharacterWorkflowPlan:
+    """保存一次请求选定的角色参考或无参考执行方案。"""
+
+    context: CharacterPromptContext | None
+    fallback_reason: str = ""
+
+    @property
+    def no_reference(self) -> bool:
+        """判断当前方案是否使用独立无参考工作流。"""
+        return self.context is None
+
+
 class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
     """使用静态角色颜色档案增强独立 FLUX.2 工作流。"""
 
@@ -45,28 +59,32 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
         enabled: bool,
         workflow_path: Path | None,
         character_library: CharacterLibraryBuilder | None,
+        no_reference_workflow_path: Path | None = None,
         native_resolution: bool = False,
         **options,
     ):
         super().__init__(**options)
         self.enabled = enabled
         self.workflow_path = workflow_path
+        self.no_reference_workflow_path = no_reference_workflow_path
         self.native_resolution = native_resolution
         self.character_library = character_library
         self._contexts: OrderedDict[str, CharacterPromptContext] = OrderedDict()
+        self._plans: OrderedDict[str, _CharacterWorkflowPlan] = OrderedDict()
         self._context_lock = threading.Lock()
 
-    # 方法说明：检查独立工作流、ComfyUI 和角色库是否可用；页面处理不强制依赖在线 VLM。
+    # 方法说明：检查参考或无参考工作流与 ComfyUI 是否至少有一条链路可用。
     def available(self) -> bool:
-        workflow_ready = self.workflow_loader.supports_flux2_character()
+        reference_workflow_ready = self._reference_workflow_ready()
+        no_reference_workflow_ready = self._no_reference_workflow_ready()
+        workflow_ready = reference_workflow_ready or no_reference_workflow_ready
         comfy_ready = self.transport.profile_ready(
             str(self.mode),
             enabled=self.enabled,
             workflow_supported=workflow_ready,
         )
         library_ready = self.character_library is not None
-        sidecar_ready = bool(library_ready and self.character_library.ready())
-        available = comfy_ready and library_ready
+        available = comfy_ready
         log_operation(
             logger,
             logging.INFO if available else logging.WARNING,
@@ -74,38 +92,63 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             parameters={
                 "enabled": self.enabled,
                 "workflow_ready": workflow_ready,
+                "reference_workflow_ready": reference_workflow_ready,
+                "no_reference_workflow_ready": no_reference_workflow_ready,
             },
             result={
                 "available": available,
                 "comfyui_ready": comfy_ready,
                 "character_library_ready": library_ready,
-                "qwen_sidecar_ready": sidecar_ready,
+                "qwen_sidecar_required": False,
             },
         )
         return available
 
-    # 方法说明：生成包含静态角色档案、提示词、工作流和模型版本的缓存标识。
+    # 方法说明：按实际执行方案生成与参考状态一致的缓存标识。
     def cache_revision(
         self,
         options: ProcessOptions,
         assets: InferenceAssets | None,
     ) -> str:
-        workflow_revision = self.workflow_loader.revision(options)
         model_revision = (
             self.character_library.model_revision
             if self.character_library is not None
             else "missing-character-library"
         )
-        base = (
-            f"{workflow_revision}:{FLUX2_CHARACTER_PROCESSING_REVISION}:"
-            f"{PROMPT_PLANNER_REVISION}:{model_revision}"
-        )
+        if assets is None:
+            reference_revision = (
+                self.workflow_loader.revision(options)
+                if self._reference_workflow_ready()
+                else "missing:flux2-character-reference"
+            )
+            no_reference_revision = (
+                self.workflow_loader.flux2_no_reference_revision()
+            )
+            base = (
+                f"{reference_revision}:{no_reference_revision}:"
+                f"{FLUX2_CHARACTER_PROCESSING_REVISION}:"
+                f"{PROMPT_PLANNER_REVISION}:{model_revision}"
+            )
+        else:
+            plan = self._execution_plan(assets)
+            if plan.no_reference:
+                workflow_revision = (
+                    self.workflow_loader.flux2_no_reference_revision()
+                )
+                base = (
+                    f"{workflow_revision}:{FLUX2_CHARACTER_PROCESSING_REVISION}:"
+                    f"no-reference:{plan.fallback_reason}"
+                )
+            else:
+                workflow_revision = self.workflow_loader.revision(options)
+                base = (
+                    f"{workflow_revision}:{FLUX2_CHARACTER_PROCESSING_REVISION}:"
+                    f"{PROMPT_PLANNER_REVISION}:{model_revision}:"
+                    f"{plan.context.digest}"
+                )
         if self.native_resolution:
             base = f"{base}:native-resolution-v1"
-        if assets is None:
-            return _append_direct_output_revision(base, options)
-        context = self._prepare(assets)
-        return _append_direct_output_revision(f"{base}:{context.digest}", options)
+        return _append_direct_output_revision(base, options)
 
     # 方法说明：执行独立角色提示工作流，直出 FLUX.2 结果并交给外层本地放大档。
     def process(
@@ -132,69 +175,74 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 elapsed_ms=(time.perf_counter() - started) * 1000,
             )
             raise RuntimeError("角色提示增强档未就绪")
-        if self.workflow_path is None:
-            log_operation(
-                logger,
-                logging.ERROR,
-                feature="角色提示增强工作流执行",
-                parameters=parameters,
-                result={"status": "failed", "stage": "workflow_config"},
-                elapsed_ms=(time.perf_counter() - started) * 1000,
-            )
-            raise RuntimeError("角色提示增强工作流未配置")
-
-        context = self._prepare(assets)
-        loaded_workflow = self.workflow_loader.load(options)
-        workflow_revision = self.workflow_loader.revision(options)
+        plan = self._execution_plan(assets)
+        context = plan.context
+        if plan.no_reference:
+            loaded_workflow = self.workflow_loader.load_flux2_no_reference()
+            workflow_revision = self.workflow_loader.flux2_no_reference_revision()
+        else:
+            loaded_workflow = self.workflow_loader.load(options)
+            workflow_revision = self.workflow_loader.revision(options)
         log_operation(
             logger,
             logging.INFO,
-            feature="角色稳定工作流加载",
+            feature=(
+                "角色无参考工作流加载"
+                if plan.no_reference
+                else "角色稳定工作流加载"
+            ),
             parameters={
                 "mode": str(options.mode),
                 "workflow": str(loaded_workflow.source),
                 "model_profile": loaded_workflow.model_profile,
                 "comfyui_direct_output": options.comfyui_direct_output,
                 "native_resolution": self.native_resolution,
-                "reference_count": len(context.characters),
+                "reference_count": 0 if context is None else len(context.characters),
+                "fallback_reason": plan.fallback_reason,
             },
             result={
                 "status": "loaded",
                 "workflow_revision": workflow_revision[:16],
-                "context_digest": context.digest[:12],
+                "context_digest": context.digest[:12] if context else "",
                 "input_bytes": len(assets.image_bytes),
             },
         )
-        guide = build_static_character_guide(
-            [
-                {
-                    "display_name": character.profile.display_name,
-                    "stable_traits": character.profile.stable_traits,
-                    "outfit_traits": character.profile.outfit_traits,
-                    "colors": [
-                        item.model_dump(mode="json")
-                        for item in character.profile.colors
-                    ],
-                }
-                for character in context.characters
-            ]
-        )
-        references = [
-            character.reference.image_bytes for character in context.characters
-        ]
-        input_images = {
-            "INPUT_IMAGE": assets.image_bytes,
-            **{
-                f"REFERENCE_IMAGE_{slot}": references[
-                    min(slot - 1, len(references) - 1)
+        guide = ""
+        references: list[bytes] = []
+        input_images = {"INPUT_IMAGE": assets.image_bytes}
+        if context is not None:
+            guide = build_static_character_guide(
+                [
+                    {
+                        "reference_slot": character.slot,
+                        "display_name": character.profile.display_name,
+                        "stable_traits": character.profile.stable_traits,
+                        "outfit_traits": character.profile.outfit_traits,
+                        "colors": [
+                            item.model_dump(mode="json")
+                            for item in character.profile.colors
+                        ],
+                    }
+                    for character in context.characters
                 ]
-                for slot in range(1, 4)
-            },
-        }
+            )
+            references = [
+                character.reference.image_bytes for character in context.characters
+            ]
+            input_images.update(
+                {
+                    f"REFERENCE_IMAGE_{slot}": references[
+                        min(slot - 1, len(references) - 1)
+                    ]
+                    for slot in range(1, 4)
+                }
+            )
         source_size, source_megapixels = _source_geometry(assets.image_bytes)
 
+        # 方法说明：按执行方案绑定角色指南，并按开关调整原图分辨率。
         def prepare_workflow(workflow: dict) -> None:
-            _bind_character_guide(workflow, guide)
+            if context is not None:
+                _bind_character_guide(workflow, guide)
             if self.native_resolution:
                 _bind_native_resolution(workflow, source_megapixels)
 
@@ -215,7 +263,8 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                     "status": "failed",
                     "stage": "comfyui",
                     "error": type(error).__name__,
-                    "context_digest": context.digest[:12],
+                    "context_digest": context.digest[:12] if context else "",
+                    "fallback_reason": plan.fallback_reason,
                 },
                 elapsed_ms=(time.perf_counter() - started) * 1000,
             )
@@ -229,7 +278,8 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
                 "mode": str(options.mode),
                 "workflow": str(loaded_workflow.source),
                 "model_profile": loaded_workflow.model_profile,
-                "context_digest": context.digest[:12],
+                "context_digest": context.digest[:12] if context else "",
+                "fallback_reason": plan.fallback_reason,
                 "native_resolution": self.native_resolution,
             },
             result={
@@ -315,7 +365,7 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             )
         save_output(generated, output_path)
         outcome = InferenceOutcome(
-            reference_applied=True,
+            reference_applied=not plan.no_reference,
             processed_panels=0,
             model_profile=loaded_workflow.model_profile,
         )
@@ -325,15 +375,17 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             feature="角色提示增强工作流执行",
             parameters={
                 **parameters,
-                "context_digest": context.digest[:12],
+                "context_digest": context.digest[:12] if context else "",
                 "guide_chars": len(guide),
+                "fallback_reason": plan.fallback_reason,
             },
             result={
                 "status": "success",
-                "profiles": len(context.characters),
-                "palette_profiles": len(context.characters),
+                "profiles": 0 if context is None else len(context.characters),
+                "palette_profiles": 0 if context is None else len(context.characters),
                 "reference_profiles": len(references),
-                "reference_images_uploaded": 3,
+                "reference_images_uploaded": 0 if plan.no_reference else 3,
+                "reference_applied": outcome.reference_applied,
                 "comfyui_direct_output": options.comfyui_direct_output,
                 "native_resolution": self.native_resolution,
                 "processed_panels": outcome.processed_panels,
@@ -342,6 +394,85 @@ class Flux2CharacterModeStrategy(ComfyUIModeStrategy):
             elapsed_ms=(time.perf_counter() - started) * 1000,
         )
         return outcome
+
+    # 方法说明：判断角色参考工作流是否已同时配置并存在。
+    def _reference_workflow_ready(self) -> bool:
+        return bool(
+            self.workflow_path
+            and self.workflow_loader.supports_flux2_character()
+        )
+
+    # 方法说明：判断角色无参考工作流是否已同时配置并存在。
+    def _no_reference_workflow_ready(self) -> bool:
+        return bool(
+            self.no_reference_workflow_path
+            and self.workflow_loader.supports_flux2_no_reference()
+        )
+
+    # 方法说明：只为同一组角色资源选择一次参考或无参考工作流方案。
+    def _execution_plan(self, assets: InferenceAssets) -> _CharacterWorkflowPlan:
+        model_revision = (
+            self.character_library.model_revision
+            if self.character_library is not None
+            else "missing-character-library"
+        )
+        key = _assets_key(assets, model_revision)
+        with self._context_lock:
+            cached = self._plans.get(key)
+            if cached is not None:
+                self._plans.move_to_end(key)
+                return cached
+
+        if not assets.character_reference_assets:
+            plan = _CharacterWorkflowPlan(None, "character_references_unavailable")
+        elif not self._reference_workflow_ready():
+            plan = _CharacterWorkflowPlan(None, "reference_workflow_unavailable")
+        elif self.character_library is None:
+            plan = _CharacterWorkflowPlan(None, "character_library_unavailable")
+        else:
+            try:
+                if not self.character_library.ready():
+                    plan = _CharacterWorkflowPlan(None, "qwen_sidecar_unavailable")
+                else:
+                    context = self._prepare(assets)
+                    if context.characters:
+                        plan = _CharacterWorkflowPlan(context)
+                    else:
+                        plan = _CharacterWorkflowPlan(None, "qwen_analysis_failed")
+            except Exception as error:
+                log_operation(
+                    logger,
+                    logging.WARNING,
+                    feature="角色静态档案准备",
+                    parameters={"work_key": assets.work_key},
+                    result={
+                        "status": "fallback",
+                        "fallback_reason": "qwen_analysis_failed",
+                        "error": type(error).__name__,
+                    },
+                )
+                plan = _CharacterWorkflowPlan(None, "qwen_analysis_failed")
+
+        with self._context_lock:
+            self._plans[key] = plan
+            self._plans.move_to_end(key)
+            while len(self._plans) > 64:
+                self._plans.popitem(last=False)
+        log_operation(
+            logger,
+            logging.WARNING if plan.no_reference else logging.INFO,
+            feature="角色稳定执行方案",
+            parameters={
+                "work_key": assets.work_key,
+                "references": len(assets.character_reference_assets),
+            },
+            result={
+                "status": "fallback" if plan.no_reference else "reference",
+                "fallback_reason": plan.fallback_reason,
+                "no_reference_workflow_ready": self._no_reference_workflow_ready(),
+            },
+        )
+        return plan
 
     # 方法说明：读取或构建作品级静态角色提示上下文并保留热点缓存。
     def _prepare(self, assets: InferenceAssets) -> CharacterPromptContext:

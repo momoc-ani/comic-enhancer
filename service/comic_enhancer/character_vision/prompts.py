@@ -5,7 +5,7 @@ import json
 
 PROFILE_TEMPLATE_REVISION = "qwen-profile-regions-v3-complete-character-palette"
 PAGE_TEMPLATE_REVISION = "qwen-page-character-grounding-v5-tight-regions"
-PROMPT_PLANNER_REVISION = "flux2-character-prompts-v6-complete-scene-color"
+PROMPT_PLANNER_REVISION = "flux2-character-prompts-v7-mode-priority-reference-map"
 
 
 # 方法说明：构造只提取角色稳定特征和采色区域的提示词。
@@ -142,7 +142,7 @@ def build_character_prompt(
     )
 
 
-# 方法说明：将静态角色档案压缩为只补充已有区域颜色的工作流提示词。
+# 方法说明：将参考槽位、角色特征和部件颜色压缩为只约束已有区域的工作流提示词。
 def build_static_character_guide(characters: list[dict[str, object]]) -> str:
     part_labels = {
         "hair": "hair",
@@ -177,7 +177,8 @@ def build_static_character_guide(characters: list[dict[str, object]]) -> str:
         "skin",
     }
     blocks = []
-    for item in characters[:3]:
+    for default_slot, item in enumerate(characters[:3], start=1):
+        reference_slot = int(item.get("reference_slot", default_slot))
         colors = list(item.get("colors", []))
         stable_palette = [
             f"{part_labels[str(color['part'])]} RGB{tuple(color['rgb'])}"
@@ -193,7 +194,8 @@ def build_static_character_guide(characters: list[dict[str, object]]) -> str:
         stable_traits = [str(value) for value in item.get("stable_traits", [])][:8]
         outfit_traits = [str(value) for value in item.get("outfit_traits", [])][:8]
         block = [
-            f"Character {item['display_name']} recognition-only anchors: "
+            f"REFERENCE_IMAGE_{reference_slot} = Character {item['display_name']}. "
+            "Recognition-only anchors: "
             + (", ".join(stable_traits) or "use the supplied reference identity")
             + ". These anchors only identify source regions; never draw, complete, or transfer them."
         ]
@@ -214,15 +216,16 @@ def build_static_character_guide(characters: list[dict[str, object]]) -> str:
         blocks.append(" ".join(block))
     guide = " ".join(blocks) or "No static character palette is available."
     return (
-        "CHARACTER PALETTE-ONLY GUIDE. The matching restrictions below apply only when copying a named "
-        "character palette; they must not leave backgrounds, architecture, furniture, floors, walls, "
-        "vegetation, sky, objects, or unmatched people grayscale. Fully color every existing non-text source "
-        "region with coherent anime colors. For named characters, change chroma only inside confidently "
-        "matching regions that already exist in the source manga page. Apply available colors to matching facial details, garment layers, "
-        "legwear, footwear, accessories, jewelry, and held props only when those exact parts are visibly "
-        "present. This guide must never add, remove, replace, reshape, reconstruct, complete, or move "
-        "any hairstyle, eye, face, garment, stocking, leg feature, shoe, armor, accessory, pose, line, "
-        "text, panel, background, or object. Do not create new pixels from a reference description. Do not "
-        "apply an absent or uncertain character or clothing feature; leave such source pixels unchanged. "
+        "CHARACTER REFERENCE MAP AND PALETTE GUIDE. Each REFERENCE_IMAGE slot below is palette evidence "
+        "for exactly one named character and is never a source of page structure. Apply a named palette only "
+        "inside confidently matching character regions already present in the source. Keep the same named "
+        "character's stable colors consistent across all panels. Apply garment, legwear, footwear, accessory, "
+        "jewelry, and held-prop colors only when those exact parts and matching structures are visibly present. "
+        "Never transfer a named palette to another person or the background. Never add, remove, replace, "
+        "reshape, reconstruct, complete, or move any hairstyle, face, garment, body part, pose, line, text, "
+        "panel, background, or object. If identity or clothing matching is uncertain, ignore the named palette "
+        "and color the existing person independently with a coherent local palette. Fully color all existing "
+        "non-text backgrounds, architecture, furniture, floors, walls, vegetation, sky, objects, and unmatched "
+        "people without importing content from a reference. "
         + guide
     )

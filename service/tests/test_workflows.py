@@ -262,7 +262,42 @@ def test_shipped_character_lineart_workflow_has_source_structure_contract():
     assert workflow["35"]["inputs"]["width"] == ["36", 0]
     assert workflow["35"]["inputs"]["height"] == ["36", 1]
     assert workflow["36"]["inputs"]["image"] == ["1", 0]
-    assert "strictly aligned color map" in workflow["8"]["inputs"]["text"]
+    assert (
+        "source-aligned low-frequency color and tone layer"
+        in workflow["8"]["inputs"]["text"]
+    )
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "flux2-klein-4b-character-no-reference-colorize.json",
+        "flux2-klein-4b-character-lineart-no-reference-colorize.json",
+    ],
+)
+# 方法说明：验证无参考工作流只接收原图并保留 FLUX.2 尺寸恢复采样链路。
+def test_shipped_character_no_reference_workflows_are_single_input(name):
+    workflow = json.loads(
+        (PROJECT_ROOT / "workflows" / name).read_text(encoding="utf-8")
+    )
+    titles = {
+        node.get("_meta", {}).get("title")
+        for node in workflow.values()
+        if isinstance(node, dict)
+    }
+
+    assert "INPUT_IMAGE" in titles
+    assert not any(title and title.startswith("REFERENCE_IMAGE_") for title in titles)
+    assert sum(node.get("class_type") == "LoadImage" for node in workflow.values()) == 1
+    assert sum(node.get("class_type") == "ReferenceLatent" for node in workflow.values()) == 2
+    assert workflow["27"]["class_type"] == "EmptyFlux2LatentImage"
+    assert workflow["28"]["class_type"] == "Flux2Scheduler"
+    assert workflow["28"]["inputs"]["steps"] == 4
+    assert workflow["29"]["inputs"]["positive"] == ["12", 0]
+    assert workflow["29"]["inputs"]["negative"] == ["13", 0]
+    assert workflow["35"]["class_type"] == "ImageScale"
+    assert workflow["36"]["inputs"]["image"] == ["1", 0]
+    assert "TEXT AND GRAPHICS LOCK" in workflow["8"]["inputs"]["text"]
 
 
 @pytest.mark.parametrize("mode", ["flux2", "flux2_quant"])
@@ -582,6 +617,60 @@ def test_shipped_flux2_workflows_use_prompt_protection_and_direct_output(name):
         else ["33", 0]
     )
     assert workflow["34"]["inputs"]["images"] == expected_output
+
+
+@pytest.mark.parametrize(
+    ("name", "positive_tokens", "negative_tokens"),
+    [
+        (
+            "flux2-klein-4b-reference-colorize.json",
+            (
+                "complete scene colorization",
+                "two or three restrained tonal levels",
+                "not as a requirement for the final image to remain gray",
+            ),
+            ("copied reference background", "new mountain", "grayscale wash"),
+        ),
+        (
+            "flux2-klein-4b-qwen3-vl-character-colorize.json",
+            (
+                "confirmed character identity and palette consistency",
+                "CHARACTER REFERENCE MAP AND PALETTE GUIDE",
+                "color the existing person independently",
+            ),
+            (
+                "wrong character palette",
+                "character palette drift",
+                "palette copied to background",
+            ),
+        ),
+        (
+            "flux2-klein-4b-qwen3-vl-character-lineart-colorize.json",
+            (
+                "source-aligned low-frequency color and tone layer",
+                "do not regenerate high-frequency detail",
+                "Do not leave the sky or major background surfaces as a gray wash",
+            ),
+            ("new contour", "new ridge", "gray sky"),
+        ),
+    ],
+)
+# 方法说明：验证三个 FLUX.2 档位的提示词分别承接画质、角色稳定和线稿保真职责。
+def test_shipped_flux2_mode_prompts_match_strategy(
+    name,
+    positive_tokens,
+    negative_tokens,
+):
+    workflow = json.loads(
+        (PROJECT_ROOT / "workflows" / name).read_text(encoding="utf-8")
+    )
+    positive = workflow["8"]["inputs"]["text"]
+    negative = workflow["9"]["inputs"]["text"]
+
+    assert "PRIORITY ORDER" in positive
+    assert "TEXT AND GRAPHICS LOCK" in positive
+    assert all(token in positive for token in positive_tokens)
+    assert all(token in negative for token in negative_tokens)
 
 
 @pytest.mark.parametrize(

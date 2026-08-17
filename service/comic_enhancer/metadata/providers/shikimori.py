@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 
 from ...domain import WorkIdentity, WorkMetadata
+from ...networking import external_http_client
 from ..base import MetadataProvider, confidence, now, text
 
 
@@ -20,7 +21,8 @@ class ShikimoriProvider(MetadataProvider):
             params = {}
         else:
             url = f"{self.api_url}/mangas"
-        with httpx.Client(
+        with external_http_client(
+            url,
             timeout=self.timeout_seconds,
             follow_redirects=True,
             headers={"User-Agent": "ComicEnhancer/0.1"},

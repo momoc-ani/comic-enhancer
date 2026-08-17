@@ -78,6 +78,17 @@ API Token: 与远端 .env 中 COMIC_ENHANCER_TOKEN 相同
 
 插件只配置漫画增强服务地址，不提供 ComfyUI、FLUX.2 或 Real-CUGAN 地址入口。服务端也只配置一个 `COMIC_ENHANCER_COMFYUI_URL`；Real-CUGAN 配置是 API 本地资源根目录，不是独立推理 URL。
 
+### Windows 系统代理
+
+Windows 本地服务通过 WinHTTP 读取当前用户的系统代理策略。外部作品元数据和第三方角色参考图支持
+手动分协议代理、`ProxyOverride`、`<local>`、PAC 地址和 WPAD 自动检测，并按每个目标 URL 选择代理
+或直连。系统代理关闭且未启用 PAC/WPAD 时，服务强制直连并忽略残留的 `HTTP_PROXY`、
+`HTTPS_PROXY` 和 `ALL_PROXY` 环境变量；非 Windows 平台继续使用 `httpx` 的环境代理行为。
+
+ComfyUI 与 Qwen3-VL sidecar 属于部署内网能力，始终设置 `trust_env=False` 并强制直连，不读取
+Windows 系统代理、PAC 或代理环境变量。代理决策日志只记录目标主机、策略来源和 `proxy/direct`
+结果，不记录代理地址、账号或密码。
+
 ### Qwen3-VL 角色稳定档
 
 角色稳定档使用独立 AMD Windows 主机常驻 `llama-server`，Comic Enhancer API 通过内网 OpenAI 兼容接口访问。插件仍只连接 Comic Enhancer API，不能直接连接 Qwen3-VL。当前已验证组合为 RX 7700 XT 12GB、`llamacpp-rocm b1311 gfx110X`、Qwen3-VL-4B-Instruct Q8_0 和 F16 mmproj。
@@ -97,9 +108,11 @@ API 主机 `.env` 使用与 key 文件相同的值，并显式启用新档位：
 ```text
 COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_ENABLED=true
 COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER=/app/workflows/flux2-klein-4b-qwen3-vl-character-colorize.json
+COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_NO_REFERENCE=/app/workflows/flux2-klein-4b-character-no-reference-colorize.json
 COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_NATIVE_RESOLUTION=false
 COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_LINEART_ENABLED=true
 COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_LINEART=/app/workflows/flux2-klein-4b-qwen3-vl-character-lineart-colorize.json
+COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_LINEART_NO_REFERENCE=/app/workflows/flux2-klein-4b-character-lineart-no-reference-colorize.json
 COMIC_ENHANCER_QWEN_VL_URL=http://<AMD主机内网IP>:8080
 COMIC_ENHANCER_QWEN_VL_API_KEY=<sidecar key>
 COMIC_ENHANCER_QWEN_VL_MODEL_ID=qwen3-vl-4b-instruct-q8_0
@@ -108,9 +121,9 @@ COMIC_ENHANCER_QWEN_VL_DEPLOYMENT_REVISION=q8_0-054721f4-mmproj-f16-256f3a43
 
 开启 `COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_NATIVE_RESOLUTION=true` 后，API 会按每页原图像素量调整角色工作流的漫画输入，并在 ComfyUI 内按原图宽高做尺寸校正，避免服务端先插值到原图 2x 再交给 Real-CUGAN。该实验路径会增加 FLUX.2 显存和首阶段耗时，必须先做单页显存与质量验收；关闭后恢复当前 0.85MP 基线。`ComfyUI 原图直出` 仍是独立的服务端结构保护开关。
 
-开启 `COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_LINEART_ENABLED=true` 后，插件会显示独立的“角色线稿保真模式”。该档位保持 `0.85MP`、4 steps 和三张角色参考图，ComfyUI 恢复原图尺寸，服务端保留 FLUX.2 明度和色度，仅回注原图深色墨线，最后由 Real-CUGAN 2x 输出。该档位不使用 `ComfyUI 原图直出`，并且不会改变 `flux2_character` 的默认行为。
+开启 `COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_LINEART_ENABLED=true` 后，插件会显示独立的“角色线稿保真模式”。该档位保持 `0.85MP`、4 steps 和三张角色参考图，ComfyUI 恢复原图尺寸，服务端保留原图高频线稿/网点并融合 FLUX.2 低频明度和色度，最后由 Real-CUGAN 2x 输出。该档位不使用 `ComfyUI 原图直出`，并且不会改变 `flux2_character` 的默认行为。
 
-能力接口只有在独立工作流存在、ComfyUI 可达、角色库可用且 Real-CUGAN 二阶段就绪时，才分别返回 `flux2_character_available=true` 或 `flux2_character_lineart_available=true`。任何分析、JSON 校验、角色计划、FLUX.2、结构保护或放大阶段失败都直接让对应档位失败，插件继续显示原图；不会回退到 `flux2`、`quality` 或其他档位。
+能力接口在角色参考或无参考工作流至少一条存在、ComfyUI 可达且 Real-CUGAN 二阶段就绪时，分别返回 `flux2_character_available=true` 或 `flux2_character_lineart_available=true`。没有角色图、角色图元数据失败、Qwen3-VL 不可用或角色档案分析失败时，服务改用对应的单输入无参考 FLUX.2 工作流；该工作流不上传角色图、不注入角色调色板，并返回 `reference_applied=false` 及带 `no-reference` 的真实 `model_profile`。FLUX.2、结构保护或放大阶段失败仍直接失败，插件继续显示原图；不会回退到 SD1.5、`quality` 或其他档位。
 
 替换其他 ComfyUI 工作流时，导出 API 格式 JSON，并在 `settings.json` 或环境变量中修改对应工作流路径。单输入工作流必须只有一个 `LoadImage`；多输入工作流使用 `_meta.title` 声明 `INPUT_IMAGE`、`REFERENCE_IMAGE` 等角色；所有工作流至少有一个 `SaveImage`，其余模型和参数必须全部预设。服务不依赖固定节点编号。
 

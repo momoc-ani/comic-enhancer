@@ -1,0 +1,273 @@
+{
+  "1": {
+    "inputs": {
+      "image": "input.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "INPUT_IMAGE"
+    }
+  },
+  "5": {
+    "inputs": {
+      "unet_name": "flux-2-klein-4b-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "FLUX.2 Klein 4B FP8"
+    }
+  },
+  "6": {
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Qwen3 4B Text Encoder"
+    }
+  },
+  "7": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "FLUX.2 VAE"
+    }
+  },
+  "8": {
+    "inputs": {
+      "text": "TASK: Colorize the first manga page using only the source image and conservative anime color reasoning.\n\nPRIORITY ORDER: 1) immutable source geometry and text, 2) linework and luminance structure, 3) consistent colors for repeated visible regions on this page, 4) complete background and object colorization. If instructions conflict, follow the higher priority.\n\nSOURCE AUTHORITY: The first input image is the sole authority for canvas, crop, panel layout, composition, perspective, anatomy, pose, facial features, hairstyle shape, clothing structure, props, architecture, terrain, effects, linework, screentones, hatching, and existing light-and-shadow boundaries. Preserve every existing region, contour, fold, expression, object, and empty area in the same position, size, and shape. Never add, remove, complete, repair, simplify, or redesign content.\n\nTEXT AND GRAPHICS LOCK: Speech bubbles, caption boxes, narration boxes, signs, labels, logos, and sound-effect regions are immutable source regions. Preserve their exact boundaries and white backgrounds. Copy every glyph, punctuation mark, numeral, letter, stroke, spacing, orientation, and line break exactly from the source. Keep text and black ink neutral black. Do not translate, rewrite, regenerate, restyle, move, distort, obscure, or color text.\n\nNO-REFERENCE COLOR POLICY: No external character reference image, named character palette, or Qwen3-VL character analysis is available. Do not invent canonical identity colors. Choose conservative, natural anime colors from the visible grayscale values and surrounding regions. Keep repeated appearances and adjacent parts of the same visible person internally consistent using only the source page. Do not transfer a color from one person to another. Apply outfit colors only to clothing regions already present in the source.\n\nCOLOR APPLICATION: Add color beneath existing ink and within existing boundaries. Preserve black outlines, screentones, hatching, texture, contrast, and relative luminance. Color every existing background and object region, including sky and terrain, with varied but restrained hues. Avoid gray wash, monochrome output, muddy colors, single-color casts, gradients, painterly effects, glossy rendering, dramatic relighting, bloom, rim light, and heavy shadows.\n\nOUTPUT REQUIREMENT: Return the same manga page with color added, not a redraw or reconstruction. Except for the necessary addition of color, the result must match the first input image exactly.",
+      "clip": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Colorization Instruction"
+    }
+  },
+  "9": {
+    "inputs": {
+      "text": "redesign, reinterpretation, full redraw, reconstruction, content generation, invented content, hallucinated detail, added detail, removed detail, extra character, extra person, duplicated person, extra body, extra limb, extra hand, extra face, reconstructed face, changed identity, changed hairstyle, changed costume, changed expression, altered pose, altered anatomy, anatomy correction, reference identity transfer, reference pose transfer, reference costume transfer, copied reference background, wrong character palette, character palette drift, inconsistent hair color, inconsistent eye color, inconsistent clothing color, character color bleeding, palette copied to another person, palette copied to background, new object, removed object, replaced object, new mountain, new hill, new terrain, new cloud, simplified background, uncolored background, changed canvas size, changed aspect ratio, changed crop, shifted composition, changed panel layout, altered panel border, changed whitespace, warped line art, broken line art, altered line art, changed line weight, erased ink, softened ink, tinted black ink, color bleeding across outlines, removed screentone, altered screentone, replaced screentone, changed screentone density, removed hatching, altered texture, denoise, sharpening, smoothing, cleanup, beautification, altered speech bubble, colored speech bubble, tinted text background, rewritten text, regenerated text, translated text, corrected text, missing text, added text, illegible text, changed glyph, changed punctuation, changed spacing, changed line break, distorted lettering, monochrome output, grayscale wash, desaturated palette, muddy colors, global sepia, single-color cast, painterly rendering, watercolor rendering, photorealistic rendering, 3D rendering, dramatic relighting, heavy shadows, excessive highlights, bloom, rim light, glossy skin, uncontrolled gradients, overrendering, oversaturation, watermark, signature, logo",
+      "clip": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Negative Conditioning"
+    }
+  },
+  "10": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.85,
+      "resolution_steps": 16,
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "Scale Manga Page"
+    }
+  },
+  "11": {
+    "inputs": {
+      "pixels": [
+        "10",
+        0
+      ],
+      "vae": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "VAEEncode"
+  },
+  "12": {
+    "inputs": {
+      "conditioning": [
+        "8",
+        0
+      ],
+      "latent": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent"
+  },
+  "13": {
+    "inputs": {
+      "conditioning": [
+        "9",
+        0
+      ],
+      "latent": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent"
+  },
+  "26": {
+    "inputs": {
+      "image": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "GetImageSize"
+  },
+  "27": {
+    "inputs": {
+      "width": [
+        "26",
+        0
+      ],
+      "height": [
+        "26",
+        1
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage"
+  },
+  "28": {
+    "inputs": {
+      "steps": 4,
+      "width": [
+        "26",
+        0
+      ],
+      "height": [
+        "26",
+        1
+      ]
+    },
+    "class_type": "Flux2Scheduler"
+  },
+  "29": {
+    "inputs": {
+      "model": [
+        "5",
+        0
+      ],
+      "positive": [
+        "12",
+        0
+      ],
+      "negative": [
+        "13",
+        0
+      ],
+      "cfg": 1.0
+    },
+    "class_type": "CFGGuider"
+  },
+  "30": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect"
+  },
+  "31": {
+    "inputs": {
+      "noise_seed": 20260814
+    },
+    "class_type": "RandomNoise"
+  },
+  "32": {
+    "inputs": {
+      "noise": [
+        "31",
+        0
+      ],
+      "guider": [
+        "29",
+        0
+      ],
+      "sampler": [
+        "30",
+        0
+      ],
+      "sigmas": [
+        "28",
+        0
+      ],
+      "latent_image": [
+        "27",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced"
+  },
+  "33": {
+    "inputs": {
+      "samples": [
+        "32",
+        0
+      ],
+      "vae": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "VAEDecode"
+  },
+  "34": {
+    "inputs": {
+      "filename_prefix": "comic-enhancer/flux2-character-no-reference",
+      "images": [
+        "33",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "OUTPUT_IMAGE"
+    }
+  },
+  "35": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "width": [
+        "36",
+        0
+      ],
+      "height": [
+        "36",
+        1
+      ],
+      "crop": "disabled",
+      "image": [
+        "33",
+        0
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Restore Source Geometry"
+    }
+  },
+  "36": {
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "SOURCE_IMAGE_SIZE"
+    }
+  }
+}

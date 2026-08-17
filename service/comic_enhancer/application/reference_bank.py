@@ -130,6 +130,33 @@ class ReferenceBankService:
                 "selected_characters": len(entry_groups),
                 "reference_views": len(selected_entries),
                 "truncated": truncated,
+                "metadata": [
+                    {
+                        "provider": candidate.provider,
+                        "provider_id": candidate.provider_id,
+                        "confidence": round(candidate.confidence, 3),
+                        "characters": len(candidate.characters),
+                        "character_images": sum(
+                            1 for item in candidate.characters if item.image_url
+                        ),
+                        "accepted": (
+                            candidate.confidence >= 0.6
+                            and any(item.image_url for item in candidate.characters)
+                        ),
+                        "filter_reason": (
+                            "low_confidence"
+                            if candidate.confidence < 0.6
+                            else "no_characters"
+                            if not candidate.characters
+                            else "no_character_images"
+                            if not any(
+                                item.image_url for item in candidate.characters
+                            )
+                            else "accepted"
+                        ),
+                    }
+                    for candidate in prioritized_metadata_candidates(resolution, work)
+                ],
             },
             elapsed_ms=(time.perf_counter() - started) * 1000,
         )

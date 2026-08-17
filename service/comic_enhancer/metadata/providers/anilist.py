@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from ...domain import CharacterReference, WorkIdentity, WorkMetadata
+from ...networking import external_http_client
 from ..base import MetadataProvider, confidence, cover, now, text, title_confidence
 
 
@@ -33,7 +34,8 @@ class AniListProvider(MetadataProvider):
             variables["id"] = int(value)
         else:
             variables["search"] = work.title
-        with httpx.Client(
+        with external_http_client(
+            self.api_url,
             timeout=self.timeout_seconds,
             headers={"User-Agent": "ComicEnhancer/0.1"},
         ) as client:
