@@ -39,14 +39,19 @@ class WorkIdentityRegistry:
 
     # 方法说明：查找与作品身份唯一匹配的登记项。
     def match(self, work: WorkIdentity) -> WorkIdentityEntry | None:
-        normalized_title = normalize_title(work.title)
-        if not normalized_title:
+        normalized_titles = {
+            normalized
+            for title in [work.title, *work.title_aliases]
+            if (normalized := normalize_title(title))
+        }
+        if not normalized_titles:
             return None
         matches = [
             entry
             for entry in self.entries
             if any(
-                alias_title_matches(normalized_title, normalize_title(alias))
+                alias_title_matches(title, normalize_title(alias))
+                for title in normalized_titles
                 for alias in entry.title_aliases
             )
         ]

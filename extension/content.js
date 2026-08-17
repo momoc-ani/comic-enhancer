@@ -499,7 +499,8 @@
     if (!settings?.enabled) return;
 
     const adapter = new CopyMangaAdapter();
-    scheduler = new Scheduler(adapter, adapter.getWork(), adapter.getChapter());
+    const work = await adapter.getEnrichedWork();
+    scheduler = new Scheduler(adapter, work, adapter.getChapter());
     scheduler.discover();
     scheduler.startOrderedPrefetch();
 

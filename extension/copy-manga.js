@@ -2,7 +2,9 @@
   if (globalThis.ComicEnhancerCopyManga) return;
 
   const COPY_MANGA_HOST_PATTERN =
-    /(^|\.)(copymanga\.(com|site|tv)|mangacopy\.com)$/i;
+    /(^|\.)(copymanga\.(com|site|tv)|mangacopy\.com|copy3000\.com)$/i;
+  const COPY_MANGA_CHAPTER_PATH_PATTERN =
+    /^\/comic\/[^/]+\/chapter\/[^/]+\/?$/i;
   const CHAPTER_IMAGE_SELECTORS = [
     ".comicContent-list img",
     ".comicContent img",
@@ -18,9 +20,12 @@
       this.pageLocation = pageLocation;
     }
 
-    // 方法说明：判断指定页面地址是否属于拷贝漫画站点。
+    // 方法说明：判断指定页面地址是否属于拷贝漫画章节阅读页。
     static matches(pageLocation = globalThis.location) {
-      return COPY_MANGA_HOST_PATTERN.test(pageLocation?.hostname || "");
+      return (
+        COPY_MANGA_HOST_PATTERN.test(pageLocation?.hostname || "") &&
+        COPY_MANGA_CHAPTER_PATH_PATTERN.test(pageLocation?.pathname || "")
+      );
     }
 
     // 方法说明：从当前页面提取稳定的作品身份信息。
@@ -32,17 +37,59 @@
           ? decodeURIComponent(pathParts[comicIndex + 1])
           : this.meta("property", "og:url") || this.pageLocation.pathname;
 
+      const rawTitle =
+        this.meta("property", "og:title") ||
+        this.pageDocument.querySelector("h1")?.textContent?.trim() ||
+        this.pageDocument.title;
       return {
         source: "copy_manga",
         source_work_id: sourceWorkId,
-        title:
-          this.meta("property", "og:title") ||
-          this.pageDocument.querySelector("h1")?.textContent?.trim() ||
-          this.pageDocument.title,
+        title: normalizeWorkTitle(rawTitle),
+        title_aliases: [],
         author: this.findAuthor(),
         tags: this.findTags(),
         cover_url: this.meta("property", "og:image") || null,
       };
+    }
+
+    // 方法说明：读取作品目录页并补全稳定标题、别名、作者和封面。
+    async getEnrichedWork() {
+      const work = this.getWork();
+      const detailDocument = await this.loadWorkDetail(work.source_work_id);
+      if (!detailDocument) return work;
+      const details = extractWorkDetails(detailDocument, this.pageLocation.href);
+      return {
+        ...work,
+        title: details.title || work.title,
+        title_aliases: details.title_aliases,
+        author: details.author || work.author,
+        tags: details.tags.length > 0 ? details.tags : work.tags,
+        cover_url: details.cover_url || work.cover_url,
+      };
+    }
+
+    // 方法说明：限时下载同站作品目录页，失败时允许继续使用章节页信息。
+    async loadWorkDetail(sourceWorkId) {
+      if (typeof globalThis.DOMParser !== "function") return null;
+      const controller = new AbortController();
+      const timer = globalThis.setTimeout(() => controller.abort(), 3000);
+      try {
+        const detailUrl = new URL(
+          `/comic/${encodeURIComponent(sourceWorkId)}`,
+          this.pageLocation.origin,
+        );
+        const response = await fetch(detailUrl, {
+          credentials: "include",
+          cache: "force-cache",
+          signal: controller.signal,
+        });
+        if (!response.ok) return null;
+        return new DOMParser().parseFromString(await response.text(), "text/html");
+      } catch {
+        return null;
+      } finally {
+        globalThis.clearTimeout(timer);
+      }
     }
 
     // 方法说明：从当前页面及地址中提取章节身份信息。
@@ -175,22 +222,76 @@
     }
 
     // 方法说明：从当前页面标注中提取作者名称。
-    findAuthor() {
-      const labelled = [...this.pageDocument.querySelectorAll("a, span, div")].find(
+    findAuthor(pageDocument = this.pageDocument) {
+      const labelled = [...pageDocument.querySelectorAll("a, span, div")].find(
         (node) => /^(作者|作者：|作者:)/.test(node.textContent?.trim() || ""),
       );
       return labelled?.textContent?.replace(/^作者[：:]?/, "").trim() || "";
     }
 
     // 方法说明：从当前页面中提取作品标签。
-    findTags() {
+    findTags(pageDocument = this.pageDocument) {
       return [
-        ...this.pageDocument.querySelectorAll("[class*='tag'] a, [class*='theme'] a"),
+        ...pageDocument.querySelectorAll("[class*='tag'] a, [class*='theme'] a"),
       ]
         .map((node) => node.textContent?.trim())
         .filter(Boolean)
         .slice(0, 20);
     }
+  }
+
+  // 方法说明：从作品目录页提取可用于跨元数据源检索的稳定作品信息。
+  function extractWorkDetails(pageDocument, baseUrl) {
+    const titleNode = pageDocument.querySelector(".comicParticulars-title h6");
+    const title = titleNode
+      ? normalizeWorkTitle(
+          titleNode.getAttribute("title") || titleNode.textContent,
+        )
+      : "";
+    const aliasRow = [
+      ...pageDocument.querySelectorAll(".comicParticulars-title li"),
+    ].find((item) => /^(別名|别名)[：:]?/.test(item.textContent?.trim() || ""));
+    const aliases = (aliasRow?.querySelector(".comicParticulars-right-txt")?.textContent || "")
+      .split(/[,，、]/)
+      .map((value) => normalizeWorkTitle(value))
+      .filter(Boolean);
+    const titleAliases = [...new Set(aliases)].filter((value) => value !== title);
+    const authorRow = [
+      ...pageDocument.querySelectorAll(".comicParticulars-title li"),
+    ].find((item) => /^(作者)[：:]?/.test(item.textContent?.trim() || ""));
+    const author = [...(authorRow?.querySelectorAll("a") || [])]
+      .map((item) => item.textContent?.trim())
+      .filter(Boolean)
+      .join("、");
+    const tags = [
+      ...pageDocument.querySelectorAll(".comicParticulars-tag a, [class*='theme'] a"),
+    ]
+      .map((item) => item.textContent?.trim()?.replace(/^#/, ""))
+      .filter(Boolean)
+      .slice(0, 20);
+    const coverNode = pageDocument.querySelector(".comicParticulars-left-img img");
+    const coverUrl = normalizeUrl(
+      coverNode?.dataset?.src || coverNode?.currentSrc || coverNode?.src,
+      baseUrl,
+    );
+    return {
+      title,
+      title_aliases: titleAliases,
+      author,
+      tags,
+      cover_url: coverUrl || null,
+    };
+  }
+
+  // 方法说明：移除章节编号和站点后缀以得到稳定作品标题。
+  function normalizeWorkTitle(value) {
+    return String(value || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\s*[-|｜]\s*(?:拷貝漫畫|拷贝漫画).*$/u, "")
+      .replace(/\s*[-|｜]\s*第[^-|｜]*(?:话|話|章).*$/u, "")
+      .replace(/\/\s*第[^/]*(?:话|話|章).*$/u, "")
+      .trim();
   }
 
   // 方法说明：从章节内联脚本中提取图片密文和 AES 密钥。
@@ -275,5 +376,7 @@
     CopyMangaAdapter,
     decryptChapterImageUrls,
     extractEncryptedChapter,
+    extractWorkDetails,
+    normalizeWorkTitle,
   });
 })();

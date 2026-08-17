@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from ...domain import WorkIdentity, WorkMetadata
+from ...networking import external_http_client
 from ..base import MetadataProvider, confidence, cover, now, text
 
 
@@ -21,7 +22,8 @@ class KitsuProvider(MetadataProvider):
             url = f"{self.api_url}/manga/{value}"
         else:
             url = f"{self.api_url}/manga"
-        with httpx.Client(
+        with external_http_client(
+            url,
             timeout=self.timeout_seconds,
             headers={"User-Agent": "ComicEnhancer/0.1"},
         ) as client:

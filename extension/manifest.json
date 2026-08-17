@@ -10,7 +10,8 @@
     "*://*.copymanga.com/*",
     "*://*.copymanga.site/*",
     "*://*.copymanga.tv/*",
-    "*://*.mangacopy.com/*"
+    "*://*.mangacopy.com/*",
+    "*://*.copy3000.com/*"
   ],
   "optional_host_permissions": [
     "https://*/*",
@@ -27,10 +28,11 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.copymanga.com/*",
-        "*://*.copymanga.site/*",
-        "*://*.copymanga.tv/*",
-        "*://*.mangacopy.com/*"
+        "*://*.copymanga.com/comic/*/chapter/*",
+        "*://*.copymanga.site/comic/*/chapter/*",
+        "*://*.copymanga.tv/comic/*/chapter/*",
+        "*://*.mangacopy.com/comic/*/chapter/*",
+        "*://*.copy3000.com/comic/*/chapter/*"
       ],
       "js": ["copy-manga.js", "content.js"],
       "css": ["content.css"],

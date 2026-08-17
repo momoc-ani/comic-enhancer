@@ -79,6 +79,18 @@ def test_registry_preserves_explicit_external_id(tmp_path):
     }
 
 
+# 方法说明：验证站点作品别名也能命中已确认的外部身份映射。
+def test_registry_matches_work_title_aliases(tmp_path):
+    item = work("未匹配的繁体标题")
+    item = item.model_copy(
+        update={"title_aliases": ["被追放的轉生重騎士用遊戲知識開無雙"]}
+    )
+
+    enriched = registry(tmp_path).enrich(item)
+
+    assert enriched.external_ids["anilist"] == "150193"
+
+
 # 方法说明：验证无关标题的局部重合不会产生错误匹配。
 def test_registry_does_not_match_partial_unrelated_title(tmp_path):
     enriched = registry(tmp_path).enrich(work("轉生重騎士"))

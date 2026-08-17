@@ -22,6 +22,10 @@ REFERENCE_MODES = {
     ProcessingMode.FLUX2_4B_SOURCE,
     ProcessingMode.FLUX2_4B_COLOR,
 }
+OPTIONAL_CHARACTER_REFERENCE_MODES = {
+    ProcessingMode.FLUX2_CHARACTER,
+    ProcessingMode.FLUX2_CHARACTER_LINEART,
+}
 
 
 # 方法说明：为同步页面和后台预生成统一准备角色参考图并执行推理。
@@ -41,23 +45,36 @@ async def process_page_with_references(
     if options.mode in REFERENCE_MODES:
         reference_started = time.perf_counter()
         reference_limit = settings.flux2_reference_limit
+        metadata_candidates = 0
+        entries = []
+        reference_fallback = False
         try:
             resolution = await asyncio.to_thread(metadata.resolve, work)
             entries = await reference_bank.build(resolution, work)
+            metadata_candidates = len(resolution.candidates)
         except Exception as error:
+            optional_references = options.mode in OPTIONAL_CHARACTER_REFERENCE_MODES
             log_operation(
                 logger,
-                logging.ERROR,
+                logging.WARNING if optional_references else logging.ERROR,
                 feature="页面角色参考图准备",
                 parameters={
                     "work_key": work.key,
                     "mode": str(options.mode),
                     "reference_limit": reference_limit,
                 },
-                result={"status": "failed", "error": type(error).__name__},
+                result={
+                    "status": "fallback" if optional_references else "failed",
+                    "fallback": "no_reference" if optional_references else "",
+                    "error": type(error).__name__,
+                },
                 elapsed_ms=(time.perf_counter() - reference_started) * 1000,
             )
-            raise
+            if optional_references:
+                entries = []
+                reference_fallback = True
+            else:
+                raise
         for entry, reference in entries[:reference_limit]:
             if entry.character_id in character_references:
                 continue
@@ -81,10 +98,16 @@ async def process_page_with_references(
                 "reference_limit": reference_limit,
             },
             result={
-                "status": "success",
-                "metadata_candidates": len(resolution.candidates),
+                "status": "fallback" if reference_fallback else "success",
+                "metadata_candidates": metadata_candidates,
                 "bank_entries": len(entries),
                 "selected_characters": len(character_reference_assets),
+                "fallback": (
+                    "no_reference"
+                    if options.mode in OPTIONAL_CHARACTER_REFERENCE_MODES
+                    and not character_reference_assets
+                    else ""
+                ),
             },
             elapsed_ms=(time.perf_counter() - reference_started) * 1000,
         )

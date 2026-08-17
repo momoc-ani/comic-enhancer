@@ -94,8 +94,14 @@ def _create_backend(settings: Settings) -> InferenceBackend:
             flux2_workflow=settings.comfyui_workflow_flux2,
             flux2_quant_workflow=settings.comfyui_workflow_flux2_quant,
             flux2_character_workflow=settings.comfyui_workflow_flux2_character,
+            flux2_character_no_reference_workflow=(
+                settings.comfyui_workflow_flux2_character_no_reference
+            ),
             flux2_character_lineart_workflow=(
                 settings.comfyui_workflow_flux2_character_lineart
+            ),
+            flux2_character_lineart_no_reference_workflow=(
+                settings.comfyui_workflow_flux2_character_lineart_no_reference
             ),
             flux2_9b_lora_workflow=settings.comfyui_workflow_flux2_9b_lora,
             flux2_9b_fast_workflow=settings.comfyui_workflow_flux2_9b_fast,
@@ -115,6 +121,9 @@ def _create_backend(settings: Settings) -> InferenceBackend:
                 "flux2_quant_workflow": settings.comfyui_workflow_flux2_quant,
                 "flux2_character_enabled": settings.comfyui_flux2_character_enabled,
                 "flux2_character_workflow": settings.comfyui_workflow_flux2_character,
+                "flux2_character_no_reference_workflow": (
+                    settings.comfyui_workflow_flux2_character_no_reference
+                ),
                 "flux2_character_native_resolution": (
                     settings.comfyui_flux2_character_native_resolution
                 ),
@@ -123,6 +132,9 @@ def _create_backend(settings: Settings) -> InferenceBackend:
                 ),
                 "flux2_character_lineart_workflow": (
                     settings.comfyui_workflow_flux2_character_lineart
+                ),
+                "flux2_character_lineart_no_reference_workflow": (
+                    settings.comfyui_workflow_flux2_character_lineart_no_reference
                 ),
                 "flux2_9b_lora_enabled": settings.comfyui_flux2_9b_lora_enabled,
                 "flux2_9b_lora_workflow": (

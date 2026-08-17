@@ -46,6 +46,7 @@ async def process_page(
             "source": work.source,
             "source_work_id": work.source_work_id,
             "title": work.title,
+            "title_aliases": work.title_aliases,
             "author": work.author,
             "tags": work.tags,
             "external_ids": work.external_ids,

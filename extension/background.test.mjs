@@ -47,7 +47,16 @@ test("recognizes supported CopyManga chapter URLs", () => {
     ),
     true,
   );
-  assert.equal(isSupportedPage("https://www.copymanga.com/comic/work"), true);
+  assert.equal(
+    isSupportedPage("https://www.copy3000.com/comic/work/chapter/456"),
+    true,
+  );
+  assert.equal(isSupportedPage("https://www.copymanga.com/comic/work"), false);
+  assert.equal(
+    isSupportedPage("https://www.mangacopy.com/rank?type=male&table=month"),
+    false,
+  );
+  assert.equal(isSupportedPage("https://www.copy3000.com/"), false);
   assert.equal(isSupportedPage("https://example.com/comic/work"), false);
   assert.equal(isSupportedPage("not a URL"), false);
 });

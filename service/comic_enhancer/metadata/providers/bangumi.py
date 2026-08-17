@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from ...domain import CharacterReference, WorkIdentity, WorkMetadata
+from ...networking import external_http_client
 from ..base import (
     MetadataProvider,
     cover,
@@ -25,7 +26,8 @@ class BangumiProvider(MetadataProvider):
     def search(self, work: WorkIdentity) -> WorkMetadata | None:
         subject_id = work.external_ids.get(self.name)
         headers = {"User-Agent": "ComicEnhancer/0.1 (metadata aggregation)"}
-        with httpx.Client(
+        with external_http_client(
+            self.api_url,
             timeout=self.timeout_seconds,
             follow_redirects=True,
             headers=headers,

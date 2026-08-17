@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 
 from ...domain import WorkIdentity, WorkMetadata
+from ...networking import external_http_client
 from ..base import MetadataProvider, confidence, now, text
 
 
@@ -31,7 +32,11 @@ class MangaUpdatesProvider(MetadataProvider):
         headers = {"User-Agent": "ComicEnhancer/0.1"}
         if self.api_token:
             headers["Authorization"] = f"Bearer {self.api_token}"
-        with httpx.Client(timeout=self.timeout_seconds, headers=headers) as client:
+        with external_http_client(
+            self.api_url,
+            timeout=self.timeout_seconds,
+            headers=headers,
+        ) as client:
             response = client.post(
                 self.api_url,
                 json={"search": work.title, "page": 1, "perpage": 5},

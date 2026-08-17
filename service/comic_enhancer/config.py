@@ -36,8 +36,18 @@ class Settings:
     comfyui_workflow_flux2_quant: Path | None = None
     comfyui_flux2_character_enabled: bool = False
     comfyui_workflow_flux2_character: Path | None = None
+    comfyui_workflow_flux2_character_no_reference: Path = (
+        PROJECT_ROOT
+        / "workflows"
+        / "flux2-klein-4b-character-no-reference-colorize.json"
+    )
     comfyui_flux2_character_lineart_enabled: bool = False
     comfyui_workflow_flux2_character_lineart: Path | None = None
+    comfyui_workflow_flux2_character_lineart_no_reference: Path = (
+        PROJECT_ROOT
+        / "workflows"
+        / "flux2-klein-4b-character-lineart-no-reference-colorize.json"
+    )
     comfyui_flux2_character_native_resolution: bool = False
     comfyui_flux2_9b_lora_enabled: bool = False
     comfyui_workflow_flux2_9b_lora: Path | None = None
@@ -90,7 +100,9 @@ def load_settings() -> Settings:
         "comfyui_workflow_flux2",
         "comfyui_workflow_flux2_quant",
         "comfyui_workflow_flux2_character",
+        "comfyui_workflow_flux2_character_no_reference",
         "comfyui_workflow_flux2_character_lineart",
+        "comfyui_workflow_flux2_character_lineart_no_reference",
         "comfyui_workflow_flux2_9b_lora",
         "comfyui_workflow_flux2_9b_fast",
         "comfyui_workflow_flux2_9b_fast_lowres",
@@ -154,6 +166,10 @@ def load_settings() -> Settings:
             "comfyui_workflow_flux2_character",
             Path,
         ),
+        "COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_NO_REFERENCE": (
+            "comfyui_workflow_flux2_character_no_reference",
+            Path,
+        ),
         "COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_NATIVE_RESOLUTION": (
             "comfyui_flux2_character_native_resolution",
             lambda value: value.lower() in {"1", "true", "yes", "on"},
@@ -164,6 +180,10 @@ def load_settings() -> Settings:
         ),
         "COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_LINEART": (
             "comfyui_workflow_flux2_character_lineart",
+            Path,
+        ),
+        "COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_LINEART_NO_REFERENCE": (
+            "comfyui_workflow_flux2_character_lineart_no_reference",
             Path,
         ),
         "COMIC_ENHANCER_COMFYUI_FLUX2_9B_LORA_ENABLED": (
