@@ -1,0 +1,204 @@
+{
+  "1": {
+    "inputs": {
+      "image": "input.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "INPUT_IMAGE"
+    }
+  },
+  "2": {
+    "inputs": {
+      "unet_name": "Anima-2.9B-preview-v1.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Anima-2.9B Preview v1"
+    }
+  },
+  "3": {
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Qwen3 0.6B Text Encoder"
+    }
+  },
+  "4": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Qwen Image VAE"
+    }
+  },
+  "5": {
+    "inputs": {
+      "model": [
+        "2",
+        0
+      ],
+      "shift": 3.0
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "Anima AuraFlow Sampling"
+    }
+  },
+  "6": {
+    "inputs": {
+      "clip": [
+        "3",
+        0
+      ],
+      "text": "masterpiece, best quality, fully colored manga page, anime illustration, coherent flat cel colors, natural skin tones, vivid hair and clothing colors, balanced saturation, clean original black ink line art, preserve exact page composition, preserve panel borders and speech bubbles, preserve character identity, preserve pose and anatomy, preserve background objects, color existing artwork only"
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Anima Colorization Prompt"
+    }
+  },
+  "7": {
+    "inputs": {
+      "clip": [
+        "3",
+        0
+      ],
+      "text": "monochrome, grayscale, black and white, changed composition, changed crop, changed panel layout, changed panel borders, changed pose, changed face, changed identity, changed hairstyle, changed anatomy, extra person, extra limbs, deformed hands, distorted line art, redraw, new object, removed object, altered background, altered speech bubble, changed text, missing text, unreadable text, watermark, logo, photorealistic, 3d rendering, painterly rendering, dramatic relighting, oversaturation"
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Anima Colorization Negative"
+    }
+  },
+  "8": {
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "megapixels": 0.85,
+      "resolution_steps": 16
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "Scale Manga Page"
+    }
+  },
+  "9": {
+    "inputs": {
+      "pixels": [
+        "8",
+        0
+      ],
+      "vae": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "Encode Source Latent"
+    }
+  },
+  "10": {
+    "inputs": {
+      "model": [
+        "5",
+        0
+      ],
+      "seed": 20260816,
+      "steps": 32,
+      "cfg": 4.0,
+      "sampler_name": "euler",
+      "scheduler": "sgm_uniform",
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "9",
+        0
+      ],
+      "denoise": 0.35
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Anima Img2Img Colorize"
+    }
+  },
+  "11": {
+    "inputs": {
+      "samples": [
+        "10",
+        0
+      ],
+      "vae": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Decode Colorized Page"
+    }
+  },
+  "12": {
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "SOURCE_IMAGE_SIZE"
+    }
+  },
+  "13": {
+    "inputs": {
+      "image": [
+        "11",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "width": [
+        "12",
+        0
+      ],
+      "height": [
+        "12",
+        1
+      ],
+      "crop": "disabled"
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "Restore Source Geometry"
+    }
+  },
+  "14": {
+    "inputs": {
+      "images": [
+        "13",
+        0
+      ],
+      "filename_prefix": "comic-enhancer/anima-2.9b"
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "OUTPUT_IMAGE"
+    }
+  }
+}

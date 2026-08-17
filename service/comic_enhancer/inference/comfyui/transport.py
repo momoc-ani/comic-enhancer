@@ -184,6 +184,38 @@ class ComfyUITransport:
                 "/prompt",
                 json={"prompt": workflow, "client_id": uuid.uuid4().hex},
             )
+            if reused_uploads and _is_stale_input_response(queued):
+                recovery_started = time.perf_counter()
+                uploaded_inputs, refreshed_uploads = self._refresh_upload_cache(
+                    client,
+                    input_images,
+                )
+                output_nodes = bind_io(
+                    workflow,
+                    input_images=uploaded_inputs,
+                    output_prefix=output_prefix,
+                )
+                submitted_workflow_digest = _workflow_digest(workflow)
+                log_operation(
+                    logger,
+                    logging.WARNING,
+                    feature="ComfyUI输入缓存恢复",
+                    parameters={
+                        "workflow_digest": submitted_workflow_digest,
+                        "input_roles": sorted(input_images),
+                        "reused_uploads": reused_uploads,
+                    },
+                    result={
+                        "status": "reuploaded",
+                        "refreshed_uploads": refreshed_uploads,
+                        "retry_count": 1,
+                    },
+                    elapsed_ms=(time.perf_counter() - recovery_started) * 1000,
+                )
+                queued = client.post(
+                    "/prompt",
+                    json={"prompt": workflow, "client_id": uuid.uuid4().hex},
+                )
             queued.raise_for_status()
             prompt_id = queued.json()["prompt_id"]
             log_operation(
@@ -246,6 +278,25 @@ class ComfyUITransport:
         )
         upload.raise_for_status()
         return comfy_path(upload.json())
+
+    # 方法说明：重新上传本次请求的唯一输入，并用新路径替换失效缓存。
+    def _refresh_upload_cache(
+        self,
+        client: httpx.Client,
+        input_images: dict[str, bytes],
+    ) -> tuple[dict[str, str], int]:
+        refreshed_by_digest: dict[str, str] = {}
+        refreshed_inputs: dict[str, str] = {}
+        for role, image_bytes in input_images.items():
+            digest = hashlib.sha256(image_bytes).hexdigest()
+            uploaded = refreshed_by_digest.get(digest)
+            if uploaded is None:
+                uploaded = self._upload(client, image_bytes, role.lower())
+                refreshed_by_digest[digest] = uploaded
+                with self._input_upload_cache_lock:
+                    self._input_upload_cache[digest] = uploaded
+            refreshed_inputs[role] = uploaded
+        return refreshed_inputs, len(refreshed_by_digest)
 
     # 方法说明：轮询 ComfyUI 历史记录直到获得输出或超时。
     def _wait_for_output(
@@ -394,6 +445,18 @@ def comfy_path(uploaded: dict) -> str:
     name = uploaded["name"]
     subfolder = uploaded.get("subfolder", "")
     return f"{subfolder}/{name}" if subfolder else name
+
+
+# 方法说明：识别 ComfyUI 重启后缓存上传路径失效产生的输入校验错误。
+def _is_stale_input_response(response: httpx.Response) -> bool:
+    if response.status_code != 400:
+        return False
+    try:
+        payload = response.json()
+    except (TypeError, ValueError):
+        return False
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    return "invalid image file" in serialized
 
 
 # 方法说明：生成已提交 ComfyUI 工作流的短摘要，避免记录完整提示词和图片内容。

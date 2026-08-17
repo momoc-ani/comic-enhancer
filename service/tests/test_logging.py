@@ -1,6 +1,8 @@
 from io import BytesIO
+import hashlib
 import logging
 
+import httpx
 from PIL import Image
 
 from comic_enhancer.api.app import _configure_application_logging
@@ -12,12 +14,21 @@ class FakeResponse:
     """提供 ComfyUI 传输日志测试使用的最小 HTTP 响应。"""
 
     # 方法说明：保存测试响应的 JSON 和图片内容。
-    def __init__(self, payload=None, content=b""):
+    def __init__(self, payload=None, content=b"", status_code=200):
         self.payload = payload or {}
         self.content = content
+        self.status_code = status_code
 
-    # 方法说明：模拟成功响应的状态校验。
+    # 方法说明：模拟 HTTP 成功或失败响应的状态校验。
     def raise_for_status(self):
+        if self.status_code >= 400:
+            request = httpx.Request("POST", "http://comfy/prompt")
+            response = httpx.Response(
+                self.status_code,
+                request=request,
+                json=self.payload,
+            )
+            response.raise_for_status()
         return None
 
     # 方法说明：返回测试配置的 JSON 响应。
@@ -72,6 +83,51 @@ class FakeComfyClient:
         if path == "/view":
             return FakeResponse(content=self.image_bytes)
         raise AssertionError(f"unexpected GET path: {path}")
+
+
+class StaleInputComfyClient(FakeComfyClient):
+    """模拟 ComfyUI 重启后旧上传路径失效并接受重新上传。"""
+
+    # 方法说明：保存跨请求共享的上传和提交次数。
+    def __init__(self, image_bytes, state, **kwargs):
+        super().__init__(image_bytes, **kwargs)
+        self.state = state
+
+    # 方法说明：首次拒绝缓存旧路径，重新上传后返回可执行任务。
+    def post(self, path, **kwargs):
+        if path == "/upload/image":
+            self.state["upload_count"] += 1
+            return FakeResponse(
+                {
+                    "name": f"fresh-{self.state['upload_count']}.png",
+                    "subfolder": "",
+                }
+            )
+        if path == "/prompt":
+            self.state["prompt_count"] += 1
+            input_name = kwargs["json"]["prompt"]["1"]["inputs"]["image"]
+            if input_name == "stale.png":
+                return FakeResponse(
+                    {
+                        "error": {
+                            "type": "prompt_outputs_failed_validation",
+                            "message": "Prompt outputs failed validation",
+                        },
+                        "node_errors": {
+                            "1": {
+                                "errors": [
+                                    {
+                                        "type": "custom_validation_failed",
+                                        "message": "Invalid image file: stale.png",
+                                    }
+                                ]
+                            }
+                        },
+                    },
+                    status_code=400,
+                )
+            return FakeResponse({"prompt_id": "prompt-1"})
+        raise AssertionError(f"unexpected POST path: {path}")
 
 
 # 方法说明：生成 ComfyUI 传输日志测试使用的 PNG 图片。
@@ -216,3 +272,54 @@ def test_comfyui_transport_logs_workflow_progress_and_full_prompt(
     assert '"prompt_id":"prompt-1"' in messages
     assert '"size":[8,12]' in messages
     assert final_prompt in messages
+
+
+# 方法说明：验证 ComfyUI 重启导致上传缓存失效时仅重新上传并重试一次。
+def test_comfyui_transport_recovers_stale_upload_cache(caplog, monkeypatch):
+    image = png_bytes()
+    state = {"upload_count": 0, "prompt_count": 0}
+
+    # 方法说明：为缓存恢复测试注入共享计数的模拟客户端。
+    def build_client(**kwargs):
+        return StaleInputComfyClient(image, state, **kwargs)
+
+    monkeypatch.setattr(
+        "comic_enhancer.inference.comfyui.transport.httpx.Client",
+        build_client,
+    )
+    transport = ComfyUITransport(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+    )
+    digest = hashlib.sha256(image).hexdigest()
+    transport._input_upload_cache[digest] = "stale.png"
+    workflow = {
+        "1": {
+            "class_type": "LoadImage",
+            "inputs": {"image": "preset.png"},
+            "_meta": {"title": "INPUT_IMAGE"},
+        },
+        "2": {
+            "class_type": "SaveImage",
+            "inputs": {"images": ["1", 0]},
+            "_meta": {"title": "OUTPUT_IMAGE"},
+        },
+    }
+
+    with caplog.at_level(
+        logging.INFO,
+        logger="comic_enhancer.inference.comfyui.transport",
+    ):
+        result = transport.run(
+            workflow,
+            input_images={"INPUT_IMAGE": image},
+            output_prefix="comic-enhancer/cache-recovery",
+        )
+
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert result.size == (8, 12)
+    assert state == {"upload_count": 1, "prompt_count": 2}
+    assert transport._input_upload_cache[digest] == "fresh-1.png"
+    assert "功能=ComfyUI输入缓存恢复" in messages
+    assert '"retry_count":1' in messages

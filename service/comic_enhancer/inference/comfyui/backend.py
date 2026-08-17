@@ -17,6 +17,8 @@ from .image_ops import (
     restore_geometry,
 )
 from .strategies import (
+    Anima29BModeStrategy,
+    AnimaBaseModeStrategy,
     ComfyUIModeStrategy,
     FastModeStrategy,
     Flux2ModeStrategy,
@@ -39,6 +41,8 @@ class ComfyUIBackend(InferenceBackend):
         "flux2-klein-4b-qwen3-fp8",
         "flux2-klein-4b-qwen3-vl-character",
         "flux2-klein-4b-qwen3-vl-character-lineart",
+        "anima-base-v1.0-lllite-lineart",
+        "anima-2.9b-preview-v1",
     )
 
     # 方法说明：初始化传输层并注册每个处理档位的独立策略实现。
@@ -59,6 +63,10 @@ class ComfyUIBackend(InferenceBackend):
         flux2_character_native_resolution: bool = False,
         flux2_character_lineart_enabled: bool = False,
         flux2_character_lineart_workflow: Path | None = None,
+        anima_base_enabled: bool = False,
+        anima_base_workflow: Path | None = None,
+        anima_2_9b_enabled: bool = False,
+        anima_2_9b_workflow: Path | None = None,
         character_library: CharacterLibraryBuilder | None = None,
     ):
         self.base_url = base_url.rstrip("/")
@@ -103,6 +111,16 @@ class ComfyUIBackend(InferenceBackend):
                 character_library=character_library,
                 **shared_options,
             ),
+            AnimaBaseModeStrategy(
+                enabled=anima_base_enabled,
+                workflow_path=anima_base_workflow,
+                **shared_options,
+            ),
+            Anima29BModeStrategy(
+                enabled=anima_2_9b_enabled,
+                workflow_path=anima_2_9b_workflow,
+                **shared_options,
+            ),
         )
         self._mode_strategies = {strategy.mode: strategy for strategy in strategies}
 
@@ -125,6 +143,14 @@ class ComfyUIBackend(InferenceBackend):
     # 方法说明：检查角色线稿保真档是否可用。
     def flux2_character_lineart_profile_ready(self) -> bool:
         return self.mode_available(ProcessingMode.FLUX2_CHARACTER_LINEART)
+
+    # 方法说明：检查 Anima Base 线稿上色档是否可用。
+    def anima_base_profile_ready(self) -> bool:
+        return self.mode_available(ProcessingMode.ANIMA_BASE)
+
+    # 方法说明：检查 Anima-2.9B 图生图档是否可用。
+    def anima_2_9b_profile_ready(self) -> bool:
+        return self.mode_available(ProcessingMode.ANIMA_2_9B)
 
     # 方法说明：检查指定处理档位是否可用。
     def mode_available(self, mode: ProcessingMode | str) -> bool:

@@ -19,6 +19,8 @@ MODE_LABELS = {
         "角色线稿保真模式（Qwen3-VL + FLUX.2）",
         1,
     ),
+    ProcessingMode.ANIMA_BASE: ("Anima Base 线稿上色实验", 1),
+    ProcessingMode.ANIMA_2_9B: ("Anima-2.9B 图生图实验", 1),
 }
 
 
@@ -50,6 +52,8 @@ async def capabilities(
         ProcessingMode.FLUX2_CHARACTER_LINEART: (
             backend.flux2_character_lineart_profile_ready()
         ),
+        ProcessingMode.ANIMA_BASE: backend.anima_base_profile_ready(),
+        ProcessingMode.ANIMA_2_9B: backend.anima_2_9b_profile_ready(),
     }
     processing_modes = [
         mode
@@ -77,6 +81,8 @@ async def capabilities(
         flux2_character_lineart_available=availability[
             ProcessingMode.FLUX2_CHARACTER_LINEART
         ],
+        anima_base_available=availability[ProcessingMode.ANIMA_BASE],
+        anima_2_9b_available=availability[ProcessingMode.ANIMA_2_9B],
         prefetch_pages=settings.prefetch_pages,
         max_parallel_inference=settings.max_parallel_inference,
     )

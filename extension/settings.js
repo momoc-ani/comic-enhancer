@@ -17,6 +17,8 @@ export const MODE_OPTIONS = Object.freeze([
     label: "角色线稿保真模式（Qwen3-VL + FLUX.2）",
     prefetchPages: 1,
   },
+  { value: "anima_base", label: "Anima Base 线稿上色实验", prefetchPages: 1 },
+  { value: "anima_2_9b", label: "Anima-2.9B 图生图实验", prefetchPages: 1 },
 ]);
 
 const MODE_VALUES = new Set(MODE_OPTIONS.map((option) => option.value));

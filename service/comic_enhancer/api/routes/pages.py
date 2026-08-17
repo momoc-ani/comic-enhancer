@@ -101,6 +101,16 @@ async def process_page(
         and not context.backend.flux2_character_lineart_profile_ready()
     ):
         unavailable_detail = "角色线稿保真档未启用"
+    elif (
+        options.mode == ProcessingMode.ANIMA_BASE
+        and not context.backend.anima_base_profile_ready()
+    ):
+        unavailable_detail = "Anima Base 线稿上色实验档未启用"
+    elif (
+        options.mode == ProcessingMode.ANIMA_2_9B
+        and not context.backend.anima_2_9b_profile_ready()
+    ):
+        unavailable_detail = "Anima-2.9B 图生图实验档未启用"
     if unavailable_detail:
         log_operation(
             logger,

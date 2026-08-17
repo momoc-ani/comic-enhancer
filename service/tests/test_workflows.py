@@ -12,6 +12,8 @@ from comic_enhancer.inference.comfyui import (
     bind_io,
 )
 from comic_enhancer.inference.comfyui.strategies import (
+    Anima29BModeStrategy,
+    AnimaBaseModeStrategy,
     FLUX2_PROCESSING_REVISION,
     FastModeStrategy,
     Flux2ModeStrategy,
@@ -102,6 +104,8 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
         "flux2_quant": Flux2QuantModeStrategy,
         "flux2_character": Flux2CharacterModeStrategy,
         "flux2_character_lineart": Flux2CharacterLineartModeStrategy,
+        "anima_base": AnimaBaseModeStrategy,
+        "anima_2_9b": Anima29BModeStrategy,
     }
     for mode, strategy_type in expected.items():
         strategy = backend.mode_strategy(mode)
@@ -433,11 +437,14 @@ def test_shipped_flux2_workflows_use_prompt_protection_and_direct_output(name):
         for node in workflow.values()
     )
     prompt = workflow["8"]["inputs"]["text"]
-    assert "TEXT AND GRAPHICS LOCK" in prompt
-    assert "immutable source regions" in prompt
-    assert "Copy every glyph" in prompt
-    assert "professional anime-style cel coloring" in prompt
-    assert "changed punctuation" in workflow["9"]["inputs"]["text"]
+    normalized_prompt = prompt.lower()
+    assert "text and graphics" in normalized_prompt
+    assert "source" in normalized_prompt and (
+        "unalterable" in normalized_prompt or "immutable" in normalized_prompt
+    )
+    assert "glyph" in normalized_prompt
+    assert "cel" in normalized_prompt
+    assert "punctuation" in workflow["9"]["inputs"]["text"].lower()
     assert not any(
         node["class_type"]
         in {

@@ -23,6 +23,48 @@ curl http://127.0.0.1:8765/v1/health
 
 API 容器只配置 `COMIC_ENHANCER_COMFYUI_URL=http://comfyui:8188`，不挂载 ComfyUI 模型目录。4090 主机统一使用 `/data1/models/ComfyUI/models` 作为模型根目录，并只挂载到统一 ComfyUI 的 `/root/sd/ComfyUI/models`。ComfyUI 的 checkpoint、ControlNet 和放大模型都不打进 API 镜像；Real-CUGAN 平台包也不打进镜像，只能从显式挂载的资源目录读取。
 
+### Anima 实验档
+
+Anima 权重遵循 CircleStone Labs Non-Commercial License，只允许非商业实验。模型下载必须从 `https://hf-mirror.com` 开始，完成后校验 SHA-256；权重不提交仓库。4090 主机目录如下：
+
+```text
+/data1/models/ComfyUI/models/diffusion_models/anima-base-v1.0.safetensors
+/data1/models/ComfyUI/models/diffusion_models/Anima-2.9B-preview-v1.safetensors
+/data1/models/ComfyUI/models/text_encoders/qwen_3_06b_base.safetensors
+/data1/models/ComfyUI/models/vae/qwen_image_vae.safetensors
+/data1/models/ComfyUI/models/controlnet/anima-lllite-lineart-1.safetensors
+```
+
+当前 RTX 4090 容器基线尚未包含内置 `AnimaLLLiteApply`，因此使用上游 `kohya-ss/ComfyUI-Anima-LLLite` custom node 的只读挂载方式，不增加 Python 依赖或重打镜像。先在主机准备：
+
+```bash
+mkdir -p /data1/models/ComfyUI/models/custom_nodes
+git clone --depth 1 https://github.com/kohya-ss/ComfyUI-Anima-LLLite.git \
+  /data1/models/ComfyUI/models/custom_nodes/ComfyUI-Anima-LLLite
+```
+
+`compose.nvidia-remote.yaml` 将该目录挂载到 `/root/sd/ComfyUI/custom_nodes/ComfyUI-Anima-LLLite:ro`。工作流使用 `AnimaLLLiteApply_sdscripts`，不会依赖当前旧容器不存在的内置节点。启用实验档：
+
+```text
+COMIC_ENHANCER_COMFYUI_ANIMA_BASE_ENABLED=true
+COMIC_ENHANCER_WORKFLOW_ANIMA_BASE=/app/workflows/anima-base-v1-lineart-colorize.json
+COMIC_ENHANCER_COMFYUI_ANIMA_2_9B_ENABLED=true
+COMIC_ENHANCER_WORKFLOW_ANIMA_2_9B=/app/workflows/anima-2.9b-img2img-colorize.json
+```
+
+Anima-2.9B 还需要官方 loader patch 才能动态识别扩展后的 Transformer block 数量。当前固定使用 `gazingstars123/ComfyUI-Anima-2.9B@2de99f23e31ccf75d1a0f3d04c16ac5cfcd320e6`，通过只读挂载接入，不重打 ComfyUI 镜像：
+
+```bash
+git clone --depth 1 https://github.com/gazingstars123/ComfyUI-Anima-2.9B.git \
+  /data1/models/ComfyUI/models/custom_nodes/ComfyUI-Anima-2.9B
+git -C /data1/models/ComfyUI/models/custom_nodes/ComfyUI-Anima-2.9B \
+  checkout 2de99f23e31ccf75d1a0f3d04c16ac5cfcd320e6
+```
+
+对应挂载变量为 `COMFYUI_ANIMA_29B_NODE_ROOT`。ComfyUI 重启后日志必须出现 `Anima 2.9B Patch` 加载信息；重启 ComfyUI 后也要重启 API，清空 API 内存中的输入上传缓存。
+
+两个档位不访问 Qwen3-VL sidecar，不读取角色参考图，ComfyUI 工作流恢复原图尺寸后直出；任一模型、节点、工作流或推理失败都保留原图。实验档只能作为独立对比，不会回退或改写快速、质量、FLUX.2 和角色档。
+
 ### Real-CUGAN 放大档
 
 平台资源统一放在 `resource/realcugan/<platform>/`。Windows x64 本地服务使用：

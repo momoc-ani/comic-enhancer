@@ -1,0 +1,216 @@
+{
+  "1": {
+    "inputs": {"image": "input.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "INPUT_IMAGE"}
+  },
+  "2": {
+    "inputs": {"image": "reference-1.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_1"}
+  },
+  "3": {
+    "inputs": {"image": "reference-2.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_2"}
+  },
+  "4": {
+    "inputs": {"image": "reference-3.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_3"}
+  },
+  "5": {
+    "inputs": {
+      "unet_name": "flux-2-klein-4b-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {"title": "FLUX.2 Klein 4B FP8"}
+  },
+  "6": {
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {"title": "Qwen3 4B Text Encoder"}
+  },
+  "7": {
+    "inputs": {"vae_name": "flux2-vae.safetensors"},
+    "class_type": "VAELoader",
+    "_meta": {"title": "FLUX.2 VAE"}
+  },
+  "8": {
+    "inputs": {
+      "text": "TASK: Colorize the first manga page as a strictly aligned color map for the supplied line art.\n\nSOURCE AUTHORITY: The first input image is the sole authority for canvas, panels, crop, geometry, anatomy, poses, faces, clothing shapes, props, architecture, backgrounds, text, line art, screentones, hatching, luminance, shadows, highlights, textures, and whitespace.\n\nALLOWED EDIT: Add color only. Keep every color boundary aligned to regions already present in the source. Preserve dense screentones and distant small characters without reconstructing or simplifying them. Use balanced anime colors, natural skin tones, coherent character palettes, readable background colors, and restrained shading.\n\nREFERENCE POLICY: Reference images only establish colors for matching characters, clothing, accessories, or objects already visible in the source. Never import a reference pose, face, silhouette, costume shape, object, line, highlight, shadow, or background. If identity is uncertain, preserve the source and use a conservative local color.\n\nSTRUCTURE LOCK: Do not redraw, regenerate, reinterpret, beautify, correct, clean, denoise, sharpen, smooth, upscale, erase, extend, crop, add detail, remove detail, or invent content. Do not alter any panel border, contour, line weight, screentone density, facial feature, hairstyle, expression, anatomy, hand, clothing fold, prop, building, terrain, smoke, effect line, or empty region.\n\nTEXT LOCK: Speech bubbles, caption boxes, signs, labels, sound effects, glyphs, punctuation, spacing, orientation, line breaks, black ink, and white text backgrounds are immutable. Do not translate, rewrite, regenerate, move, distort, obscure, or color text.\n\nCOLOR APPLICATION: Color beneath the existing ink. Keep black ink neutral black. Color existing backgrounds as well as characters without replacing grayscale structure. Avoid gradients, painterly rendering, glossy effects, dramatic relighting, bloom, rim light, excessive highlights, heavy shadows, and oversaturation.\n\nOUTPUT: Return the same manga page with aligned color added. The result is a color guide; source geometry and source line art must remain unchanged.",
+      "clip": ["6", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Colorization Instruction"}
+  },
+  "9": {
+    "inputs": {
+      "text": "redraw, reconstruction, reinterpretation, content generation, invented content, added detail, removed detail, extra character, extra person, extra face, extra limb, new object, changed identity, changed face, changed hairstyle, changed costume, changed expression, changed pose, changed anatomy, altered silhouette, altered perspective, simplified background, replaced background, changed architecture, changed terrain, changed smoke, changed panel layout, changed crop, changed canvas, altered line art, broken line art, softened ink, tinted ink, removed screentone, altered screentone, removed hatching, changed texture, denoise, sharpening, smoothing, cleanup, beautification, altered speech bubble, colored speech bubble, rewritten text, regenerated text, translated text, missing text, added text, illegible text, changed glyph, changed punctuation, distorted lettering, painterly rendering, photorealistic rendering, 3D rendering, dramatic relighting, heavy shadows, excessive highlights, bloom, rim light, glossy skin, gradients, oversaturation, watermark, signature, logo",
+      "clip": ["6", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Negative Conditioning"}
+  },
+  "10": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.85,
+      "resolution_steps": 16,
+      "image": ["1", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {"title": "Scale Manga Page"}
+  },
+  "11": {
+    "inputs": {"pixels": ["10", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "12": {
+    "inputs": {"conditioning": ["8", 0], "latent": ["11", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "13": {
+    "inputs": {"conditioning": ["9", 0], "latent": ["11", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "14": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.25,
+      "resolution_steps": 16,
+      "image": ["2", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "15": {
+    "inputs": {"pixels": ["14", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "16": {
+    "inputs": {"conditioning": ["12", 0], "latent": ["15", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "17": {
+    "inputs": {"conditioning": ["13", 0], "latent": ["15", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "18": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.25,
+      "resolution_steps": 16,
+      "image": ["3", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "19": {
+    "inputs": {"pixels": ["18", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "20": {
+    "inputs": {"conditioning": ["16", 0], "latent": ["19", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "21": {
+    "inputs": {"conditioning": ["17", 0], "latent": ["19", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "22": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.25,
+      "resolution_steps": 16,
+      "image": ["4", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "23": {
+    "inputs": {"pixels": ["22", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "24": {
+    "inputs": {"conditioning": ["20", 0], "latent": ["23", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "25": {
+    "inputs": {"conditioning": ["21", 0], "latent": ["23", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "26": {
+    "inputs": {"image": ["10", 0]},
+    "class_type": "GetImageSize"
+  },
+  "27": {
+    "inputs": {
+      "width": ["26", 0],
+      "height": ["26", 1],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage"
+  },
+  "28": {
+    "inputs": {"steps": 4, "width": ["26", 0], "height": ["26", 1]},
+    "class_type": "Flux2Scheduler"
+  },
+  "29": {
+    "inputs": {
+      "model": ["5", 0],
+      "positive": ["24", 0],
+      "negative": ["25", 0],
+      "cfg": 1.0
+    },
+    "class_type": "CFGGuider"
+  },
+  "30": {
+    "inputs": {"sampler_name": "euler"},
+    "class_type": "KSamplerSelect"
+  },
+  "31": {
+    "inputs": {"noise_seed": 20260814},
+    "class_type": "RandomNoise"
+  },
+  "32": {
+    "inputs": {
+      "noise": ["31", 0],
+      "guider": ["29", 0],
+      "sampler": ["30", 0],
+      "sigmas": ["28", 0],
+      "latent_image": ["27", 0]
+    },
+    "class_type": "SamplerCustomAdvanced"
+  },
+  "33": {
+    "inputs": {"samples": ["32", 0], "vae": ["7", 0]},
+    "class_type": "VAEDecode"
+  },
+  "34": {
+    "inputs": {
+      "filename_prefix": "comic-enhancer/flux2-character-lineart",
+      "images": ["35", 0]
+    },
+    "class_type": "SaveImage",
+    "_meta": {"title": "OUTPUT_IMAGE"}
+  },
+  "35": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "width": ["36", 0],
+      "height": ["36", 1],
+      "crop": "disabled",
+      "image": ["33", 0]
+    },
+    "class_type": "ImageScale",
+    "_meta": {"title": "Restore Source Geometry"}
+  },
+  "36": {
+    "inputs": {"image": ["1", 0]},
+    "class_type": "GetImageSize",
+    "_meta": {"title": "SOURCE_IMAGE_SIZE"}
+  }
+}

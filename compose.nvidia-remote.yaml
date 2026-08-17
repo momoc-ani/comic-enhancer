@@ -14,6 +14,8 @@ services:
       - "192.168.38.226:8192:8188"
     volumes:
       - ${COMFYUI_MODELS_ROOT:-/data1/models/ComfyUI/models}:/root/sd/ComfyUI/models:ro
+      - ${COMFYUI_ANIMA_LLLITE_NODE_ROOT:-/data1/models/ComfyUI/models/custom_nodes/ComfyUI-Anima-LLLite}:/root/sd/ComfyUI/custom_nodes/ComfyUI-Anima-LLLite:ro
+      - ${COMFYUI_ANIMA_29B_NODE_ROOT:-/data1/models/ComfyUI/models/custom_nodes/ComfyUI-Anima-2.9B}:/root/sd/ComfyUI/custom_nodes/ComfyUI-Anima-2.9B:ro
 
   comic-enhancer-api:
     build:
@@ -39,6 +41,10 @@ services:
       COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER: ${COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER:-/app/workflows/flux2-klein-4b-qwen3-vl-character-colorize.json}
       COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_LINEART_ENABLED: ${COMIC_ENHANCER_COMFYUI_FLUX2_CHARACTER_LINEART_ENABLED:-false}
       COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_LINEART: ${COMIC_ENHANCER_WORKFLOW_FLUX2_CHARACTER_LINEART:-/app/workflows/flux2-klein-4b-qwen3-vl-character-lineart-colorize.json}
+      COMIC_ENHANCER_COMFYUI_ANIMA_BASE_ENABLED: ${COMIC_ENHANCER_COMFYUI_ANIMA_BASE_ENABLED:-false}
+      COMIC_ENHANCER_WORKFLOW_ANIMA_BASE: ${COMIC_ENHANCER_WORKFLOW_ANIMA_BASE:-/app/workflows/anima-base-v1-lineart-colorize.json}
+      COMIC_ENHANCER_COMFYUI_ANIMA_2_9B_ENABLED: ${COMIC_ENHANCER_COMFYUI_ANIMA_2_9B_ENABLED:-false}
+      COMIC_ENHANCER_WORKFLOW_ANIMA_2_9B: ${COMIC_ENHANCER_WORKFLOW_ANIMA_2_9B:-/app/workflows/anima-2.9b-img2img-colorize.json}
       COMIC_ENHANCER_QWEN_VL_URL: ${COMIC_ENHANCER_QWEN_VL_URL:-http://127.0.0.1:8080}
       COMIC_ENHANCER_QWEN_VL_API_KEY: ${COMIC_ENHANCER_QWEN_VL_API_KEY:-}
       COMIC_ENHANCER_QWEN_VL_MODEL_ID: ${COMIC_ENHANCER_QWEN_VL_MODEL_ID:-qwen3-vl-4b-instruct-q8_0}

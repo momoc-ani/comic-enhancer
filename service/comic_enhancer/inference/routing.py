@@ -64,6 +64,14 @@ class RoutedInferenceBackend(InferenceBackend):
             and self.upscale_profile_ready()
         )
 
+    # 方法说明：检查 Anima Base 独立档位是否可用。
+    def anima_base_profile_ready(self) -> bool:
+        return self.backend.anima_base_profile_ready()
+
+    # 方法说明：检查 Anima-2.9B 独立档位是否可用。
+    def anima_2_9b_profile_ready(self) -> bool:
+        return self.backend.anima_2_9b_profile_ready()
+
     # 方法说明：检查 Real-CUGAN 放大档位是否可用。
     def upscale_profile_ready(self) -> bool:
         return self.upscaler.available()
