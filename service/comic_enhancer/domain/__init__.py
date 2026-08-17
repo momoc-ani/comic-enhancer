@@ -13,6 +13,7 @@ from .processing import (
     ProcessingModeOption,
     ProcessOptions,
     ProcessResult,
+    PregenerationJob,
 )
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     "ProcessingModeOption",
     "ProcessOptions",
     "ProcessResult",
+    "PregenerationJob",
     "WorkIdentity",
     "WorkMetadata",
 ]

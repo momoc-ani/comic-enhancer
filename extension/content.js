@@ -20,7 +20,7 @@
   const retainedPagesBehind = 2;
   const minimumRetainedPagesAhead = 3;
   const currentChapterPrefetchPriority = 100;
-  const nextChapterPrefetchPriority = 200;
+  const nextChapterPrefetchPriorityStep = 100;
 
   class Scheduler {
     // 方法说明：初始化当前对象及其运行状态。
@@ -57,7 +57,7 @@
       this.prefetchAroundViewport(images);
     }
 
-    // 方法说明：为当前设置版本启动当前话和下一话的顺序缓存预热。
+    // 方法说明：为当前设置版本启动当前话和多话后续章节的顺序缓存预热。
     startOrderedPrefetch() {
       if (this.prefetchVersion === settingsVersion) return;
       const version = settingsVersion;
@@ -71,7 +71,7 @@
       });
     }
 
-    // 方法说明：先按页码加入当前话，再按页码加入紧邻下一话。
+    // 方法说明：先上传当前话，再按章节距离和页码上传后续章节。
     async scheduleOrderedPrefetch(version) {
       const currentUrls = await this.adapter.getChapterImageUrls();
       if (version !== settingsVersion) return;
@@ -82,19 +82,28 @@
           this.chapter,
           currentChapterPrefetchPriority,
           "current",
+          currentUrls.length,
         );
       });
 
-      const nextChapter = await this.adapter.loadNextChapter();
-      if (version !== settingsVersion || !nextChapter) return;
-      nextChapter.imageUrls.forEach((imageUrl, index) => {
-        this.enqueuePrefetch(
-          imageUrl,
-          index,
-          nextChapter.chapter,
-          nextChapterPrefetchPriority,
-          "next",
-        );
+      const following = await this.adapter.loadFollowingChapters(
+        settings.pregenerateChapters,
+      );
+      if (version !== settingsVersion) return;
+      following.forEach((chapterEntry, chapterOffset) => {
+        const priority =
+          currentChapterPrefetchPriority +
+          (chapterOffset + 1) * nextChapterPrefetchPriorityStep;
+        chapterEntry.imageUrls.forEach((imageUrl, index) => {
+          this.enqueuePrefetch(
+            imageUrl,
+            index,
+            chapterEntry.chapter,
+            priority,
+            `next-${chapterOffset + 1}`,
+            chapterEntry.imageUrls.length,
+          );
+        });
       });
     }
 
@@ -117,6 +126,7 @@
           this.chapter,
           currentChapterPrefetchPriority,
           "current",
+          images.length,
         );
       });
       this.releaseDistantResults(images, start, count);
@@ -208,7 +218,7 @@
     }
 
     // 方法说明：将无页面覆盖层的缓存预热任务加入统一优先级队列。
-    enqueuePrefetch(imageUrl, index, chapter, priority, chapterScope) {
+    enqueuePrefetch(imageUrl, index, chapter, priority, chapterScope, pageCount) {
       if (!imageUrl || warmedUrls.has(imageUrl) || queuedPrefetchUrls.has(imageUrl)) return;
       const displayEntry = entriesByUrl.get(imageUrl);
       if (displayEntry && displayEntry.state !== "idle") return;
@@ -220,6 +230,7 @@
         priority,
         chapter,
         chapterScope,
+        pageCount,
         sequence: sequence++,
         settingsVersion,
       });
@@ -318,7 +329,7 @@
           Date.now() - startedAt,
         );
         console.warn(
-          `Comic Enhancer ${task.chapterScope === "next" ? "下一话" : "当前话"}` +
+          `Comic Enhancer ${task.chapterScope.startsWith("next-") ? "后续话" : "当前话"}` +
             `第 ${task.index + 1} 页预生成失败:`,
           error instanceof Error ? error.message : String(error),
         );
@@ -346,6 +357,8 @@
             ),
           },
           prefetchOnly,
+          priority: task.priority,
+          pageCount: task.pageCount || 1,
         },
       });
       if (!response?.ok) throw new Error(response?.error || "Unknown error");
@@ -502,7 +515,8 @@
       settings?.mode !== message.settings.mode ||
       settings?.apiBaseUrl !== message.settings.apiBaseUrl ||
       settings?.apiToken !== message.settings.apiToken ||
-      settings?.comfyuiDirectOutput !== message.settings.comfyuiDirectOutput;
+      settings?.comfyuiDirectOutput !== message.settings.comfyuiDirectOutput ||
+      settings?.pregenerateChapters !== message.settings.pregenerateChapters;
     settings = { ...settings, ...message.settings };
     if (settings.enabled) {
       if (!scheduler) {

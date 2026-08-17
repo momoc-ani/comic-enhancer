@@ -7,6 +7,7 @@ import {
   activateDeployment,
   migrateSettings,
   normalizeMode,
+  normalizePregenerateChapters,
   normalizeUrl,
 } from "./settings.js";
 
@@ -16,6 +17,7 @@ const elements = {
   mode: document.getElementById("mode"),
   comfyuiDirectOutput: document.getElementById("comfyuiDirectOutput"),
   comfyuiDirectOutputField: document.getElementById("comfyuiDirectOutputField"),
+  pregenerateChapters: document.getElementById("pregenerateChapters"),
   apiBaseUrl: document.getElementById("apiBaseUrl"),
   apiBaseUrlLabel: document.getElementById("apiBaseUrlLabel"),
   apiToken: document.getElementById("apiToken"),
@@ -42,6 +44,7 @@ elements.deploymentTabs.forEach((tab) => {
 });
 elements.mode.addEventListener("change", renderSelection);
 elements.comfyuiDirectOutput.addEventListener("change", markConnectionDirty);
+elements.pregenerateChapters.addEventListener("input", markConnectionDirty);
 elements.apiBaseUrl.addEventListener("input", markConnectionDirty);
 elements.apiToken.addEventListener("input", markConnectionDirty);
 elements.save.addEventListener("click", save);
@@ -73,6 +76,7 @@ async function load() {
   };
   elements.enabled.checked = Boolean(storedSettings.enabled);
   elements.comfyuiDirectOutput.checked = Boolean(storedSettings.comfyuiDirectOutput);
+  elements.pregenerateChapters.value = String(storedSettings.pregenerateChapters);
   populateActiveForm();
   await checkService(resolveSettings(storedSettings));
 }
@@ -93,6 +97,7 @@ function populateActiveForm() {
   elements.apiBaseUrl.value = draft.apiBaseUrl;
   elements.apiToken.value = draft.apiToken;
   elements.comfyuiDirectOutput.checked = Boolean(storedSettings.comfyuiDirectOutput);
+  elements.pregenerateChapters.value = String(storedSettings.pregenerateChapters);
   elements.apiBaseUrlLabel.textContent =
     activeDeployment === "remote" ? "远端服务地址" : "本地服务地址";
   elements.apiBaseUrl.placeholder =
@@ -205,6 +210,7 @@ async function save() {
         apiBaseUrl: settings.apiBaseUrl,
         mode: settings.mode,
         prefetchPages: settings.prefetchPages,
+        pregenerateChapters: settings.pregenerateChapters,
         comfyuiDirectOutput: settings.comfyuiDirectOutput,
       },
     });
@@ -228,6 +234,9 @@ function resolveSettings(current = DEFAULT_SETTINGS) {
     localApiToken: drafts.local.apiToken,
     localMode: drafts.local.mode,
     comfyuiDirectOutput: Boolean(elements.comfyuiDirectOutput.checked),
+    pregenerateChapters: normalizePregenerateChapters(
+      elements.pregenerateChapters.value,
+    ),
   };
   return activateDeployment(merged, activeDeployment);
 }

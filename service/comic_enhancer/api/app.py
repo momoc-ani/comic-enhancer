@@ -11,6 +11,8 @@ from .. import __version__
 from ..character_library import CharacterLibraryBuilder, CharacterLibraryRepository
 from ..character_vision import LlamaCppCharacterVisionAnalyzer
 from ..application import (
+    PregenerationService,
+    PriorityInferenceGate,
     ProcessingService,
     ReferenceBankService,
 )
@@ -29,11 +31,12 @@ from ..metadata import (
     ShikimoriProvider,
 )
 from ..references import ReferenceImageStore
-from ..storage import ResultCache
+from ..storage import PregenerationStore, ResultCache
 from .context import ApplicationContext
 from .routes import (
     metadata_router,
     pages_router,
+    pregeneration_router,
     results_router,
     system_router,
 )
@@ -184,6 +187,18 @@ def _create_context(settings: Settings) -> ApplicationContext:
         cache=cache,
         backend=backend,
         semaphore=asyncio.Semaphore(settings.max_parallel_inference),
+        inference_gate=PriorityInferenceGate(settings.max_parallel_inference),
+    )
+    reference_bank = ReferenceBankService(references, identities)
+    pregeneration_store = PregenerationStore(settings.runtime_dir / "pregeneration")
+    pregeneration = PregenerationService(
+        store=pregeneration_store,
+        cache=cache,
+        processor=processor,
+        metadata=metadata,
+        reference_bank=reference_bank,
+        identities=identities,
+        settings=settings,
     )
     return ApplicationContext(
         settings=settings,
@@ -193,7 +208,9 @@ def _create_context(settings: Settings) -> ApplicationContext:
         metadata=metadata,
         identities=identities,
         processor=processor,
-        reference_bank=ReferenceBankService(references, identities),
+        reference_bank=reference_bank,
+        pregeneration_store=pregeneration_store,
+        pregeneration=pregeneration,
     )
 
 
@@ -239,8 +256,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             result={"status": "started"},
         )
         try:
+            await context.pregeneration.start()
             yield
         finally:
+            await context.pregeneration.stop()
             log_operation(
                 logger,
                 logging.INFO,
@@ -256,6 +275,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.metadata = context.metadata
     app.state.identities = context.identities
     app.state.references = context.references
+    app.state.pregeneration = context.pregeneration
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^(chrome-extension|moz-extension)://.*$",
@@ -264,6 +284,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(system_router)
     app.include_router(pages_router)
+    app.include_router(pregeneration_router)
     app.include_router(metadata_router)
     app.include_router(results_router)
     return app

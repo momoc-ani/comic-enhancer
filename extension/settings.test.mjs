@@ -6,6 +6,7 @@ import {
   migrateSettings,
   normalizeMode,
   prefetchPagesForMode,
+  normalizePregenerateChapters,
 } from "./settings.js";
 
 // 方法说明：验证旧版远端配置迁移时不会丢失 Token。
@@ -86,4 +87,13 @@ test("migrates the ComfyUI direct output switch", () => {
     migrateSettings({ comfyuiDirectOutput: "false" }).comfyuiDirectOutput,
     false,
   );
+});
+
+// 方法说明：验证后续章节预生成设置的默认值、迁移和范围限制。
+test("normalizes persistent chapter pre-generation count", () => {
+  assert.equal(migrateSettings({}).pregenerateChapters, 1);
+  assert.equal(migrateSettings({ pregenerateChapters: 7 }).pregenerateChapters, 7);
+  assert.equal(normalizePregenerateChapters(-2), 0);
+  assert.equal(normalizePregenerateChapters(99), 20);
+  assert.equal(normalizePregenerateChapters("bad"), 1);
 });

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import heapq
 import logging
 import time
 import uuid
@@ -17,11 +18,56 @@ from ..storage import ResultCache
 logger = logging.getLogger(__name__)
 
 
+class PriorityInferenceGate:
+    """按优先级分配有限 GPU 推理槽位。"""
+
+    # 方法说明：初始化并发上限、等待堆和异步条件变量。
+    def __init__(self, limit: int):
+        self.limit = max(1, int(limit))
+        self.active = 0
+        self.sequence = 0
+        self.waiting: list[tuple[int, int, asyncio.Future]] = []
+        self.condition = asyncio.Condition()
+
+    # 方法说明：等待当前最高优先级任务并执行一个推理协程。
+    async def run(self, priority: int, operation):
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        try:
+            async with self.condition:
+                heapq.heappush(self.waiting, (int(priority), self.sequence, future))
+                self.sequence += 1
+                while True:
+                    while self.waiting and self.waiting[0][2].cancelled():
+                        heapq.heappop(self.waiting)
+                    if (
+                        self.waiting
+                        and self.waiting[0][2] is future
+                        and self.active < self.limit
+                    ):
+                        heapq.heappop(self.waiting)
+                        self.active += 1
+                        break
+                    await self.condition.wait()
+        except asyncio.CancelledError:
+            async with self.condition:
+                future.cancel()
+                self.condition.notify_all()
+            raise
+        try:
+            return await operation()
+        finally:
+            async with self.condition:
+                self.active -= 1
+                self.condition.notify_all()
+
+
 @dataclass
 class ProcessingService:
     cache: ResultCache
     backend: InferenceBackend
     semaphore: asyncio.Semaphore
+    inference_gate: PriorityInferenceGate | None = None
 
     async def process(
         self,
@@ -31,6 +77,7 @@ class ProcessingService:
         options: ProcessOptions,
         character_references: dict[str, bytes] | None = None,
         character_reference_assets: tuple[CharacterReferenceAsset, ...] = (),
+        priority: int = 0,
     ) -> ProcessResult:
         """按当前策略处理输入并返回推理结果。"""
         started = time.perf_counter()
@@ -74,7 +121,7 @@ class ProcessingService:
         )
         output_path = self.cache.result_path(cache_key)
 
-        if output_path.exists():
+        if self.cache.is_complete(cache_key):
             metadata = self.cache.load_metadata(cache_key)
             return self._result(
                 cache_key,
@@ -89,17 +136,23 @@ class ProcessingService:
                 comfyui_direct_output=options.comfyui_direct_output,
             )
 
-        async with self.semaphore:
+        async def infer_once():
             outcome = None
-            if not output_path.exists():
+            if not self.cache.is_complete(cache_key):
+                temporary_output = self.cache.temporary_result_path(cache_key)
                 try:
                     outcome = await asyncio.to_thread(
                         self.backend.process,
                         assets,
-                        output_path,
+                        temporary_output,
                         options,
                     )
+                    output_path = self.cache.commit_result(
+                        cache_key,
+                        temporary_output,
+                    )
                 except Exception as error:
+                    temporary_output.unlink(missing_ok=True)
                     log_operation(
                         logger,
                         logging.ERROR,
@@ -127,6 +180,13 @@ class ProcessingService:
                         "comfyui_direct_output": options.comfyui_direct_output,
                     },
                 )
+            return outcome
+
+        if self.inference_gate is not None:
+            outcome = await self.inference_gate.run(priority, infer_once)
+        else:
+            async with self.semaphore:
+                outcome = await infer_once()
 
         if outcome is None:
             metadata = self.cache.load_metadata(cache_key)

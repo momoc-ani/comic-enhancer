@@ -134,6 +134,11 @@ async function processPage(payload) {
   const form = new FormData();
   form.append("image", sourceBlob, `page-${payload.options.page_index}.img`);
   form.append("work_json", JSON.stringify(payload.work));
+  if (payload.prefetchOnly) {
+    form.append("chapter_json", JSON.stringify(payload.chapter || {}));
+    form.append("page_count", String(payload.pageCount || 1));
+    form.append("priority", String(payload.priority ?? 100));
+  }
   form.append(
     "options_json",
     JSON.stringify({
@@ -143,7 +148,10 @@ async function processPage(payload) {
   );
 
   const apiBaseUrl = settings.apiBaseUrl.replace(/\/$/, "");
-  const response = await fetch(`${apiBaseUrl}/v1/pages/process`, {
+  const endpoint = payload.prefetchOnly
+    ? "/v1/pregeneration/pages"
+    : "/v1/pages/process";
+  const response = await fetch(`${apiBaseUrl}${endpoint}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${settings.apiToken}` },
     body: form,

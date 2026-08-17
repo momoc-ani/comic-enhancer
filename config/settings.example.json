@@ -4,6 +4,7 @@
   "api_token": "change-me",
   "backend": "passthrough",
   "prefetch_pages": 3,
+  "pregenerate_chapters": 1,
   "max_parallel_inference": 1,
   "realcugan_enabled": false,
   "realcugan_resource_root": "resource/realcugan",

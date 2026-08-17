@@ -54,6 +54,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   apiToken: "",
   mode: "fast",
   prefetchPages: 3,
+  pregenerateChapters: 1,
   remoteApiBaseUrl: REMOTE_API_URL,
   remoteApiToken: "",
   remoteMode: "fast",
@@ -82,6 +83,12 @@ export function normalizeMode(value) {
 export function prefetchPagesForMode(mode) {
   return MODE_OPTIONS.find((option) => option.value === normalizeMode(mode))
     ?.prefetchPages || 1;
+}
+
+// 方法说明：把后续章节预生成数量限制在插件支持的安全范围内。
+export function normalizePregenerateChapters(value) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(20, parsed)) : 1;
 }
 
 // 方法说明：从旧设置推断本地或远端部署。
@@ -128,6 +135,7 @@ export function migrateSettings(raw = {}) {
     ...DEFAULT_SETTINGS,
     ...retainedRaw,
     comfyuiDirectOutput: normalizeBoolean(raw.comfyuiDirectOutput),
+    pregenerateChapters: normalizePregenerateChapters(raw.pregenerateChapters),
     remoteApiBaseUrl: normalizeUrl(
       raw.remoteApiBaseUrl ||
         (deployment === "remote" ? legacyUrl : "") ||

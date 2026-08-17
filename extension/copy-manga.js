@@ -118,28 +118,52 @@
 
     // 方法说明：下载并解析紧邻下一话的章节身份和完整图片列表。
     async loadNextChapter() {
-      const nextUrl = this.getNextChapterUrl();
-      if (!nextUrl) return null;
-      const response = await fetch(nextUrl, {
-        credentials: "include",
-        cache: "no-cache",
-      });
-      if (!response.ok) {
-        throw new Error(`下一话页面下载失败：${response.status}`);
+      return (await this.loadFollowingChapters(1))[0] || null;
+    }
+
+    // 方法说明：逐话抓取指定数量的后续章节并阻止循环或跨域跳转。
+    async loadFollowingChapters(limit) {
+      const count = Math.max(0, Math.min(20, Number.parseInt(String(limit), 10) || 0));
+      const chapters = [];
+      const initialUrl = new URL(this.pageLocation.href);
+      const visitedUrls = new Set([initialUrl.href]);
+      const visitedChapters = new Set([this.getChapter().chapter_id]);
+      let currentAdapter = this;
+      for (let offset = 0; offset < count; offset += 1) {
+        const nextUrl = currentAdapter.getNextChapterUrl();
+        if (!nextUrl) break;
+        const requestedUrl = new URL(nextUrl);
+        if (requestedUrl.origin !== initialUrl.origin) {
+          throw new Error("下一话链接跨域，已停止预生成");
+        }
+        if (visitedUrls.has(requestedUrl.href)) break;
+        const response = await fetch(requestedUrl.href, {
+          credentials: "include",
+          cache: "no-cache",
+        });
+        if (!response.ok) {
+          throw new Error(`下一话页面下载失败：${response.status}`);
+        }
+        const resolvedUrl = new URL(response.url || requestedUrl.href);
+        if (resolvedUrl.origin !== initialUrl.origin) {
+          throw new Error("下一话响应跨域，已停止预生成");
+        }
+        if (visitedUrls.has(resolvedUrl.href)) break;
+        const parser = new DOMParser();
+        const nextDocument = parser.parseFromString(await response.text(), "text/html");
+        const nextAdapter = new CopyMangaAdapter(nextDocument, resolvedUrl);
+        const chapter = nextAdapter.getChapter();
+        if (visitedChapters.has(chapter.chapter_id)) break;
+        const imageUrls = await nextAdapter.getChapterImageUrls();
+        if (imageUrls.length === 0) {
+          throw new Error("下一话页面没有可预生成的漫画图片");
+        }
+        chapters.push({ url: resolvedUrl.href, chapter, imageUrls });
+        visitedUrls.add(resolvedUrl.href);
+        visitedChapters.add(chapter.chapter_id);
+        currentAdapter = nextAdapter;
       }
-      const resolvedUrl = response.url || nextUrl;
-      const parser = new DOMParser();
-      const nextDocument = parser.parseFromString(await response.text(), "text/html");
-      const nextAdapter = new CopyMangaAdapter(nextDocument, new URL(resolvedUrl));
-      const imageUrls = await nextAdapter.getChapterImageUrls();
-      if (imageUrls.length === 0) {
-        throw new Error("下一话页面没有可预生成的漫画图片");
-      }
-      return {
-        url: resolvedUrl,
-        chapter: nextAdapter.getChapter(),
-        imageUrls,
-      };
+      return chapters;
     }
 
     // 方法说明：读取当前页面指定元标签的内容。

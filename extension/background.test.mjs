@@ -78,7 +78,7 @@ test("prefetch processing skips result image download", async () => {
         headers: { "content-type": "image/webp" },
       });
     }
-    if (String(url) === "http://127.0.0.1:8765/v1/pages/process") {
+    if (String(url) === "http://127.0.0.1:8765/v1/pregeneration/pages") {
       return new Response(
         JSON.stringify({
           result_url: "/v1/results/cached.webp",
@@ -104,7 +104,7 @@ test("prefetch processing skips result image download", async () => {
     requests.map((request) => request.url),
     [
       "https://img.example/page-1.webp",
-      "http://127.0.0.1:8765/v1/pages/process",
+      "http://127.0.0.1:8765/v1/pregeneration/pages",
     ],
   );
   assert.equal(storageWrites.length, 0);

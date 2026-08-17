@@ -100,5 +100,6 @@ async def capabilities(
         flux2_4b_source_available=availability[ProcessingMode.FLUX2_4B_SOURCE],
         flux2_4b_color_available=availability[ProcessingMode.FLUX2_4B_COLOR],
         prefetch_pages=settings.prefetch_pages,
+        pregenerate_chapters=max(0, min(20, settings.pregenerate_chapters)),
         max_parallel_inference=settings.max_parallel_inference,
     )

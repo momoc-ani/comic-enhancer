@@ -40,6 +40,22 @@ class ProcessResult(BaseModel):
     comfyui_direct_output: bool = False
 
 
+class PregenerationJob(BaseModel):
+    """对外返回持久化章节预生成任务的安全状态。"""
+
+    job_id: str
+    work_key: str
+    chapter_id: str
+    page_index: int
+    page_count: int
+    priority: int
+    status: str
+    attempts: int = 0
+    cache_key: str = ""
+    result_url: str = ""
+    error: str = ""
+
+
 class ProcessingModeOption(BaseModel):
     value: ProcessingMode
     label: str
@@ -65,3 +81,4 @@ class Capabilities(BaseModel):
     flux2_4b_color_available: bool = False
     prefetch_pages: int
     max_parallel_inference: int
+    pregenerate_chapters: int = 1

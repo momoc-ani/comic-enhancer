@@ -22,6 +22,7 @@ class Settings:
     backend: str = "passthrough"
     prefetch_pages: int = 3
     max_parallel_inference: int = 1
+    pregenerate_chapters: int = 1
     realcugan_enabled: bool = False
     realcugan_resource_root: Path = PROJECT_ROOT / "resource" / "realcugan"
     realcugan_timeout_seconds: int = 180
@@ -109,6 +110,7 @@ def load_settings() -> Settings:
         "COMIC_ENHANCER_PORT": ("port", int),
         "COMIC_ENHANCER_TOKEN": ("api_token", str),
         "COMIC_ENHANCER_BACKEND": ("backend", str),
+        "COMIC_ENHANCER_PREGENERATE_CHAPTERS": ("pregenerate_chapters", int),
         "COMIC_ENHANCER_METADATA_ENABLED": ("metadata_enabled", lambda value: value.lower() in {"1", "true", "yes", "on"}),
         "COMIC_ENHANCER_METADATA_TTL": ("metadata_ttl_seconds", int),
         "COMIC_ENHANCER_METADATA_TIMEOUT": ("metadata_timeout_seconds", int),

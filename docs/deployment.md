@@ -23,6 +23,13 @@ curl http://127.0.0.1:8765/v1/health
 
 API 容器只配置 `COMIC_ENHANCER_COMFYUI_URL=http://comfyui:8188`，不挂载 ComfyUI 模型目录。4090 主机统一使用 `/data1/models/ComfyUI/models` 作为模型根目录，并只挂载到统一 ComfyUI 的 `/root/sd/ComfyUI/models`。ComfyUI 的 checkpoint、ControlNet 和放大模型都不打进 API 镜像；Real-CUGAN 平台包也不打进镜像，只能从显式挂载的资源目录读取。
 
+### 预生成队列和重启恢复
+
+API 的 `COMIC_ENHANCER_RUNTIME_DIR` 必须指向持久化卷（Compose 默认的 `comic-enhancer-runtime:/app/runtime`）。
+服务端会在该目录保存 `pregeneration/jobs.sqlite3`、原图断点文件、章节结果目录和 manifest。容器重建或服务重启后，
+后台队列会自动恢复；不要删除该卷或把 runtime 映射到容器可写临时层。插件设置中的“往后预生成话数”范围为 `0–20`，
+当前话页面仍由同步 `/v1/pages/process` 优先处理，后续页通过 `202/job_id` 异步入队。
+
 ### Real-CUGAN 放大档
 
 平台资源统一放在 `resource/realcugan/<platform>/`。Windows x64 本地服务使用：
