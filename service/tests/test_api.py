@@ -163,54 +163,6 @@ def test_flux2_character_lineart_mode_is_valid():
     assert options.mode == ProcessingMode.FLUX2_CHARACTER_LINEART
 
 
-# 方法说明：验证两个 Anima 实验档位都是合法且相互独立的处理模式。
-def test_anima_modes_are_valid():
-    assert ProcessOptions(mode="anima_base").mode == ProcessingMode.ANIMA_BASE
-    assert ProcessOptions(mode="anima_2_9b").mode == ProcessingMode.ANIMA_2_9B
-
-
-# 方法说明：验证能力接口独立声明 Anima 两个实验档位。
-def test_capabilities_advertise_anima_modes_independently(tmp_path, monkeypatch):
-    base_workflow = tmp_path / "anima-base.json"
-    two9_workflow = tmp_path / "anima-2.9b.json"
-    base_workflow.write_text("{}", encoding="utf-8")
-    two9_workflow.write_text("{}", encoding="utf-8")
-    settings = Settings(
-        api_token="test-token",
-        runtime_dir=tmp_path / "runtime",
-        backend="comfyui",
-        comfyui_anima_base_enabled=True,
-        comfyui_workflow_anima_base=base_workflow,
-        comfyui_anima_2_9b_enabled=True,
-        comfyui_workflow_anima_2_9b=two9_workflow,
-    )
-    app = create_app(settings)
-    monkeypatch.setattr(app.state.processor.backend, "ready", lambda: True)
-    monkeypatch.setattr(
-        app.state.processor.backend,
-        "anima_base_profile_ready",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        app.state.processor.backend,
-        "anima_2_9b_profile_ready",
-        lambda: True,
-    )
-    client = TestClient(app)
-
-    response = client.get(
-        "/v1/capabilities",
-        headers={"Authorization": "Bearer test-token"},
-    )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert "anima_base" in payload["processing_modes"]
-    assert "anima_2_9b" in payload["processing_modes"]
-    assert payload["anima_base_available"] is True
-    assert payload["anima_2_9b_available"] is True
-
-
 # 方法说明：验证能力接口独立声明 Qwen3-VL 角色稳定档。
 def test_capabilities_advertise_flux2_character_independently(tmp_path, monkeypatch):
     workflow = tmp_path / "flux2-character.json"

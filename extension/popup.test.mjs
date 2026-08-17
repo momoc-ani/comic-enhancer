@@ -20,8 +20,6 @@ test("popup renders the installed manifest version", () => {
   assert.match(html, /value="flux2_quant"/);
   assert.match(html, /value="flux2_character"/);
   assert.match(html, /value="flux2_character_lineart"/);
-  assert.match(html, /value="anima_base"/);
-  assert.match(html, /value="anima_2_9b"/);
   assert.match(html, /id="comfyuiDirectOutput"/);
   assert.match(html, /ComfyUI 原图直出/);
   assert.match(script, /chrome\.runtime\.getManifest\(\)\.version/);

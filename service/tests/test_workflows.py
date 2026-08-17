@@ -12,8 +12,6 @@ from comic_enhancer.inference.comfyui import (
     bind_io,
 )
 from comic_enhancer.inference.comfyui.strategies import (
-    Anima29BModeStrategy,
-    AnimaBaseModeStrategy,
     FLUX2_PROCESSING_REVISION,
     FastModeStrategy,
     Flux2ModeStrategy,
@@ -104,8 +102,6 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
         "flux2_quant": Flux2QuantModeStrategy,
         "flux2_character": Flux2CharacterModeStrategy,
         "flux2_character_lineart": Flux2CharacterLineartModeStrategy,
-        "anima_base": AnimaBaseModeStrategy,
-        "anima_2_9b": Anima29BModeStrategy,
     }
     for mode, strategy_type in expected.items():
         strategy = backend.mode_strategy(mode)

@@ -126,26 +126,3 @@ test("shows character lineart mode availability and execution", () => {
   assert.equal(actual.title, "角色线稿保真档 · 角色参考");
   assert.match(actual.detail, /FLUX\.2 线稿保真 · Real-CUGAN 2x/);
 });
-
-// 方法说明：验证 Anima 实验档位按独立能力和真实模型展示。
-test("shows Anima experimental mode availability and execution", () => {
-  const animaSettings = {
-    ...settings,
-    profile: "remote-anima_base",
-    mode: "anima_base",
-  };
-  const unavailable = describeModelTier(animaSettings, null, {
-    ready: true,
-    anima_base_available: false,
-  });
-  assert.equal(unavailable.title, "Anima Base 线稿上色实验档");
-  assert.match(unavailable.detail, /未启用 Anima Base 线稿上色实验档/);
-
-  const execution = buildModelExecution(
-    { model_profile: "anima-base-v1.0-lllite-lineart", elapsed_ms: 5000 },
-    animaSettings,
-  );
-  const actual = describeModelTier(animaSettings, execution);
-  assert.equal(actual.title, "Anima Base 线稿上色实验档 · 基础模型");
-  assert.match(actual.detail, /Anima Base v1\.0/);
-});
