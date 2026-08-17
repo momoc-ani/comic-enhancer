@@ -176,6 +176,10 @@ def test_new_flux2_acceptance_modes_are_valid():
         == ProcessingMode.FLUX2_9B_FAST
     )
     assert (
+        ProcessOptions(mode="flux2_9b_fast_lowres").mode
+        == ProcessingMode.FLUX2_9B_FAST_LOWRES
+    )
+    assert (
         ProcessOptions(mode="flux2_4b_source").mode
         == ProcessingMode.FLUX2_4B_SOURCE
     )
@@ -190,6 +194,7 @@ def test_new_flux2_acceptance_modes_are_valid():
     [
         ("flux2_9b_lora", "9B LoRA"),
         ("flux2_9b_fast", "9B FP8 快速"),
+        ("flux2_9b_fast_lowres", "9B FP8 低分辨率快速"),
         ("flux2_4b_source", "4B 结构稳定"),
         ("flux2_4b_color", "4B 色彩增强"),
     ],
@@ -228,6 +233,11 @@ def test_new_flux2_modes_reject_when_disabled(tmp_path, mode, detail):
             "flux2_9b_fast",
             "flux2_9b_fast_available",
             "flux2_9b_fast_profile_ready",
+        ),
+        (
+            "flux2_9b_fast_lowres",
+            "flux2_9b_fast_lowres_available",
+            "flux2_9b_fast_lowres_profile_ready",
         ),
         (
             "flux2_4b_source",

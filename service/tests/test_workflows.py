@@ -16,6 +16,7 @@ from comic_enhancer.inference.comfyui.strategies import (
     FLUX2_4B_SOURCE_PROCESSING_REVISION,
     FLUX2_9B_LORA_PROCESSING_REVISION,
     FLUX2_9B_FAST_PROCESSING_REVISION,
+    FLUX2_9B_FAST_LOWRES_PROCESSING_REVISION,
     FLUX2_PROCESSING_REVISION,
     FastModeStrategy,
     Flux2ModeStrategy,
@@ -26,6 +27,7 @@ from comic_enhancer.inference.comfyui.strategies import (
     Flux24BColorModeStrategy,
     Flux29BLoraModeStrategy,
     Flux29BFastModeStrategy,
+    Flux29BFastLowresModeStrategy,
     QualityModeStrategy,
 )
 from comic_enhancer.models import ProcessOptions
@@ -112,6 +114,7 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
         "flux2_character_lineart": Flux2CharacterLineartModeStrategy,
         "flux2_9b_lora": Flux29BLoraModeStrategy,
         "flux2_9b_fast": Flux29BFastModeStrategy,
+        "flux2_9b_fast_lowres": Flux29BFastLowresModeStrategy,
         "flux2_4b_source": Flux24BSourceModeStrategy,
         "flux2_4b_color": Flux24BColorModeStrategy,
     }
@@ -137,6 +140,13 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
             "flux2_9b_fast_workflow",
             "flux2-klein-9b-fast",
             FLUX2_9B_FAST_PROCESSING_REVISION,
+        ),
+        (
+            "flux2-klein-9b-fast-lowres-colorize.json",
+            "flux2_9b_fast_lowres",
+            "flux2_9b_fast_lowres_workflow",
+            "flux2-klein-9b-fast-lowres",
+            FLUX2_9B_FAST_LOWRES_PROCESSING_REVISION,
         ),
         (
             "flux2-klein-4b-source-latent-colorize.json",
@@ -247,6 +257,41 @@ def test_shipped_flux2_9b_fast_workflow_has_fast_dtype_contract():
     assert workflow["28"]["inputs"] == baseline["28"]["inputs"]
     assert workflow["29"]["inputs"] == baseline["29"]["inputs"]
     assert workflow["37"]["inputs"] == baseline["37"]["inputs"]
+
+
+# 方法说明：验证 9B 极速档只降低页面推理像素量并保持快速档其余参数。
+def test_shipped_flux2_9b_fast_lowres_workflow_has_resolution_contract():
+    baseline = json.loads(
+        (
+            PROJECT_ROOT / "workflows" / "flux2-klein-9b-fast-colorize.json"
+        ).read_text(encoding="utf-8")
+    )
+    workflow = json.loads(
+        (
+            PROJECT_ROOT
+            / "workflows"
+            / "flux2-klein-9b-fast-lowres-colorize.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert baseline["10"]["inputs"]["megapixels"] == 0.85
+    assert workflow["10"]["inputs"]["megapixels"] == 0.70
+    unchanged_nodes = (
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "14",
+        "18",
+        "22",
+        "27",
+        "28",
+        "29",
+        "37",
+    )
+    for node_id in unchanged_nodes:
+        assert workflow[node_id]["inputs"] == baseline[node_id]["inputs"]
 
 
 # 方法说明：验证 4B 结构稳定工作流固定使用 source latent 和低降噪参数。

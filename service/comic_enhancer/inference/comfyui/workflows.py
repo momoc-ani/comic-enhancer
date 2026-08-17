@@ -58,6 +58,10 @@ class WorkflowLoader(ABC):
     def supports_flux2_9b_fast(self) -> bool:
         return False
 
+    # 方法说明：判断工作流加载器是否支持 9B FP8 低分辨率快速档。
+    def supports_flux2_9b_fast_lowres(self) -> bool:
+        return False
+
     # 方法说明：判断工作流加载器是否支持 4B source latent 档。
     def supports_flux2_4b_source(self) -> bool:
         return False
@@ -94,6 +98,7 @@ class PresetWorkflowLoader(WorkflowLoader):
         flux2_character_lineart_no_reference_workflow: Path | None = None,
         flux2_9b_lora_workflow: Path | None = None,
         flux2_9b_fast_workflow: Path | None = None,
+        flux2_9b_fast_lowres_workflow: Path | None = None,
         flux2_4b_source_workflow: Path | None = None,
         flux2_4b_color_workflow: Path | None = None,
     ):
@@ -135,6 +140,11 @@ class PresetWorkflowLoader(WorkflowLoader):
         self.flux2_9b_fast_workflow = (
             flux2_9b_fast_workflow.resolve()
             if flux2_9b_fast_workflow is not None
+            else None
+        )
+        self.flux2_9b_fast_lowres_workflow = (
+            flux2_9b_fast_lowres_workflow.resolve()
+            if flux2_9b_fast_lowres_workflow is not None
             else None
         )
         self.flux2_4b_source_workflow = (
@@ -203,6 +213,13 @@ class PresetWorkflowLoader(WorkflowLoader):
         return bool(
             self.flux2_9b_fast_workflow
             and self.flux2_9b_fast_workflow.is_file()
+        )
+
+    # 方法说明：判断 9B FP8 低分辨率快速档完整工作流文件是否存在。
+    def supports_flux2_9b_fast_lowres(self) -> bool:
+        return bool(
+            self.flux2_9b_fast_lowres_workflow
+            and self.flux2_9b_fast_lowres_workflow.is_file()
         )
 
     # 方法说明：判断 4B source latent 档完整工作流文件是否存在。
@@ -286,6 +303,13 @@ class PresetWorkflowLoader(WorkflowLoader):
             if self.flux2_9b_fast_workflow is None:
                 raise RuntimeError("FLUX.2 Klein 9B FP8 快速计算工作流未配置")
             return self.flux2_9b_fast_workflow, "flux2-klein-9b-fast"
+        if mode == "flux2_9b_fast_lowres":
+            if self.flux2_9b_fast_lowres_workflow is None:
+                raise RuntimeError("FLUX.2 Klein 9B FP8 低分辨率快速工作流未配置")
+            return (
+                self.flux2_9b_fast_lowres_workflow,
+                "flux2-klein-9b-fast-lowres",
+            )
         if mode == "flux2_4b_source":
             if self.flux2_4b_source_workflow is None:
                 raise RuntimeError("FLUX.2 Klein 4B source latent 工作流未配置")

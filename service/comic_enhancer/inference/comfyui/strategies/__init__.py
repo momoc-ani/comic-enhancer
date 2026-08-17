@@ -19,6 +19,10 @@ from .flux2_9b_fast import (
     FLUX2_9B_FAST_PROCESSING_REVISION,
     Flux29BFastModeStrategy,
 )
+from .flux2_9b_fast_lowres import (
+    FLUX2_9B_FAST_LOWRES_PROCESSING_REVISION,
+    Flux29BFastLowresModeStrategy,
+)
 from .flux2_4b_source import (
     FLUX2_4B_SOURCE_PROCESSING_REVISION,
     Flux24BSourceModeStrategy,
@@ -46,6 +50,8 @@ __all__ = [
     "Flux29BLoraModeStrategy",
     "FLUX2_9B_FAST_PROCESSING_REVISION",
     "Flux29BFastModeStrategy",
+    "FLUX2_9B_FAST_LOWRES_PROCESSING_REVISION",
+    "Flux29BFastLowresModeStrategy",
     "FLUX2_4B_SOURCE_PROCESSING_REVISION",
     "Flux24BSourceModeStrategy",
     "FLUX2_4B_COLOR_PROCESSING_REVISION",

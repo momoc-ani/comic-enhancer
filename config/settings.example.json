@@ -26,6 +26,8 @@
   "comfyui_workflow_flux2_9b_lora": "workflows/flux2-klein-9b-lora-colorize.json",
   "comfyui_flux2_9b_fast_enabled": false,
   "comfyui_workflow_flux2_9b_fast": "workflows/flux2-klein-9b-fast-colorize.json",
+  "comfyui_flux2_9b_fast_lowres_enabled": false,
+  "comfyui_workflow_flux2_9b_fast_lowres": "workflows/flux2-klein-9b-fast-lowres-colorize.json",
   "comfyui_flux2_4b_source_enabled": false,
   "comfyui_workflow_flux2_4b_source": "workflows/flux2-klein-4b-source-latent-colorize.json",
   "comfyui_flux2_4b_color_enabled": false,
