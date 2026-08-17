@@ -1,0 +1,200 @@
+{
+  "1": {
+    "inputs": {"image": "input.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "INPUT_IMAGE"}
+  },
+  "2": {
+    "inputs": {"image": "reference-1.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_1"}
+  },
+  "3": {
+    "inputs": {"image": "reference-2.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_2"}
+  },
+  "4": {
+    "inputs": {"image": "reference-3.png"},
+    "class_type": "LoadImage",
+    "_meta": {"title": "REFERENCE_IMAGE_3"}
+  },
+  "5": {
+    "inputs": {
+      "unet_name": "flux-2-klein-4b-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {"title": "FLUX.2 Klein 4B FP8"}
+  },
+  "6": {
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {"title": "Qwen3 4B Text Encoder"}
+  },
+  "7": {
+    "inputs": {"vae_name": "flux2-vae.safetensors"},
+    "class_type": "VAELoader",
+    "_meta": {"title": "FLUX.2 VAE"}
+  },
+  "8": {
+    "inputs": {
+      "text": "Colorize this exact manga page using the source image as absolute authority. Add restrained anime cel colors only inside existing regions. Preserve the exact canvas, crop, panels, composition, silhouettes, anatomy, poses, clothing geometry, objects, backgrounds, screentones, hatching, textures, line weight, speech bubbles and every glyph. Do not redraw, reconstruct, complete, move, erase, beautify, sharpen, add or replace any person, face, eye, limb, hand, garment, prop, background detail or text. References are color palettes only and must never transfer their pose, shape or missing features. If a region is cropped, distant, obscured or uncertain, leave its structure unchanged. Keep black ink and text black, keep text backgrounds white, and return the same page with color added, never a redraw.",
+      "clip": ["6", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Source Latent Colorization Instruction"}
+  },
+  "9": {
+    "inputs": {
+      "text": "full redraw, reconstruction, new content, invented details, hallucinated details, extra person, extra face, extra body, extra limb, extra hand, new object, changed identity, changed hairstyle, changed costume, changed expression, altered pose, altered anatomy, changed crop, changed panel layout, warped line art, erased ink, softened ink, tinted black ink, removed screentone, altered texture, rewritten text, regenerated text, translated text, missing text, added text, illegible text, distorted lettering, painterly rendering, gradients, dramatic relighting, heavy shadows, bloom, oversaturation",
+      "clip": ["6", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "Source Latent Negative Conditioning"}
+  },
+  "10": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.85,
+      "resolution_steps": 16,
+      "image": ["1", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {"title": "Scale Manga Page"}
+  },
+  "11": {
+    "inputs": {"pixels": ["10", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode",
+    "_meta": {"title": "SOURCE_LATENT"}
+  },
+  "12": {
+    "inputs": {"conditioning": ["8", 0], "latent": ["11", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "13": {
+    "inputs": {"conditioning": ["9", 0], "latent": ["11", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "14": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.15,
+      "resolution_steps": 16,
+      "image": ["2", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "15": {
+    "inputs": {"pixels": ["14", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "16": {
+    "inputs": {"conditioning": ["12", 0], "latent": ["15", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "17": {
+    "inputs": {"conditioning": ["13", 0], "latent": ["15", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "18": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.15,
+      "resolution_steps": 16,
+      "image": ["3", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "19": {
+    "inputs": {"pixels": ["18", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "20": {
+    "inputs": {"conditioning": ["16", 0], "latent": ["19", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "21": {
+    "inputs": {"conditioning": ["17", 0], "latent": ["19", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "22": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 0.15,
+      "resolution_steps": 16,
+      "image": ["4", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels"
+  },
+  "23": {
+    "inputs": {"pixels": ["22", 0], "vae": ["7", 0]},
+    "class_type": "VAEEncode"
+  },
+  "24": {
+    "inputs": {"conditioning": ["20", 0], "latent": ["23", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "25": {
+    "inputs": {"conditioning": ["21", 0], "latent": ["23", 0]},
+    "class_type": "ReferenceLatent"
+  },
+  "26": {
+    "inputs": {
+      "model": ["31", 0],
+      "seed": 20260817,
+      "steps": 4,
+      "cfg": 1.3,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "positive": ["24", 0],
+      "negative": ["25", 0],
+      "latent_image": ["11", 0],
+      "denoise": 0.65
+    },
+    "class_type": "KSampler",
+    "_meta": {"title": "Source Latent KSampler 4 Steps"}
+  },
+  "27": {
+    "inputs": {"samples": ["26", 0], "vae": ["7", 0]},
+    "class_type": "VAEDecode",
+    "_meta": {"title": "Decode Colorized Page"}
+  },
+  "28": {
+    "inputs": {"image": ["1", 0]},
+    "class_type": "GetImageSize",
+    "_meta": {"title": "SOURCE_IMAGE_SIZE"}
+  },
+  "29": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "width": ["28", 0],
+      "height": ["28", 1],
+      "crop": "disabled",
+      "image": ["27", 0]
+    },
+    "class_type": "ImageScale",
+    "_meta": {"title": "Restore Source Geometry"}
+  },
+  "30": {
+    "inputs": {
+      "filename_prefix": "comic-enhancer/flux2-klein-4b-source-latent",
+      "images": ["29", 0]
+    },
+    "class_type": "SaveImage",
+    "_meta": {"title": "OUTPUT_IMAGE"}
+  },
+  "31": {
+    "inputs": {
+      "model": ["5", 0],
+      "lora_name": "f2k_4B_consist_20260314.safetensors",
+      "strength_model": 0.35
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {"title": "FLUX.2 Klein 4B Consistency LoRA 0.35"}
+  }
+}

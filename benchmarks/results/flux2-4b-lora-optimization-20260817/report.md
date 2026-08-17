@@ -14,9 +14,9 @@
 - 紧凑强锁定提示词和明确负面约束
 - ComfyUI 工作流直出，无本地结构后处理
 
-四页平均饱和色覆盖为 `32.96%`，接近 9B LoRA 的 `31.28%`；暗线保留为 `95.04%`，低于 9B 的 `96.80%`，但白区保留为 `86.12%`，高于 9B 的 `81.72%`。四页视觉检查未发现明显新增人物、补全裁切身体或破坏面板结构。
+四页平均饱和色覆盖为 `32.96%`，接近 9B LoRA 的 `31.28%`；暗线保留为 `95.04%`，低于 9B 的 `96.80%`，但白区保留为 `86.12%`，高于 9B 的 `81.72%`。扩大查看局部细节后，仍能观察到原空 latent 工作流凭空补充人物和服装信息，因此早期“未见明显新增内容”的判断不再成立。
 
-结论：4B 优化候选已经达到接近 9B LoRA 的整体色彩强度与结构稳定性，速度更快；9B 对复杂参考关系的理解能力仍然更强，4B 暂不能声明全面超过 9B。
+结论：原空 latent 4B 候选颜色和速度接近目标，但不能满足“尽可能少重绘”的硬约束。最终建议把 `4 steps / source latent / denoise=0.65` 定位为快速结构稳定档，把 9B LoRA 保留为当前画质档；Qwen Image Edit 2511 没有找到兼顾颜色覆盖和结构保真的参数窗口。追加验证见第 8 节。
 
 ![最终四页对照](images/final-strength-comparison-grid.jpg)
 
@@ -149,3 +149,45 @@ LoRA `0.6` 一致性较强，但平均饱和色覆盖从无 LoRA 的 `35.17%` �
 - [强锁定参数筛选数据](data/hardlock-sweep-report.json)
 - [早期颜色提示词筛选数据](data/prompt-sweep-report.json)
 - [原始模型对比数据](data/model-comparison-report.json)
+
+## 8. 结构约束与 Qwen Edit 追加验证
+
+### 8.1 最终排序
+
+| 排名 | 组合 | 定位 | 实测结论 |
+| ---: | --- | --- | --- |
+| 1 | FLUX.2 Klein 9B LoRA，4 步 | 当前画质档 | 色彩完成度和复杂参考关系理解最好，热推理平均 `7.799s` |
+| 2 | FLUX.2 Klein 4B LoRA，source latent，`denoise=0.65`，4 步 | 快速结构稳定档 | 原图 latent 明显减少新增内容；独立工作流热运行约 `5.287s`，颜色覆盖低于空 latent |
+| 3 | FLUX.2 Klein 4B LoRA，空 latent，4 步 | 仅保留实验 | 热推理平均 `6.077s`、颜色较强，但局部仍会凭空补充人物或服装信息 |
+| 4 | Qwen Image Edit 2511 Lightning，4 步 | 不采用 | `denoise=1.0` 重绘明显；`denoise=0.65` 仍改写文字和线条且颜色接近消失 |
+
+4B source latent 提高到 `6 steps / denoise=0.70` 后，四页平均耗时约 `8.332s`，已经慢于 9B 的热推理平均 `7.799s`，因此没有作为最终候选。其四页平均饱和色覆盖约 `27.25%`，仍未形成足以抵消耗时劣势的画质收益。
+
+### 8.2 Qwen Image Edit 2511
+
+可直接运行的工作流为 [`workflows/qwen-image-edit-2511-lightning-colorize.json`](../../../workflows/qwen-image-edit-2511-lightning-colorize.json)，模型组合如下：
+
+- `qwen_image_edit_2511_fp8mixed.safetensors`
+- `qwen_2.5_vl_7b_fp8_scaled.safetensors`
+- `qwen_image_vae.safetensors`
+- `Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors`
+- `4 steps / CFG 1.0 / Euler / simple`
+
+`denoise=1.0` 时颜色完成度高，但四页都表现为重新解释原图：人物脸部和服装、建筑轮廓、背景细节及文字均存在变化。把输入改为 source latent 并降低到 `denoise=0.65` 后，四页仍全部成功运行，平均耗时 `14.561s`，但质量指标和人工检查都未通过：
+
+| 页面 | 耗时 | 灰度 MAE ↓ | 暗线保留 ↑ | 白区保留 ↑ | 饱和色覆盖 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 原图 1 | 14.724s | 41.463 | 70.95% | 83.50% | 0.63% |
+| 原图 2 | 14.518s | 45.845 | 44.58% | 82.06% | 1.69% |
+| 原图 3 | 14.541s | 31.323 | 59.10% | 87.61% | 1.14% |
+| 原图 4 | 14.461s | 36.885 | 56.87% | 84.73% | 0.78% |
+
+原图 3 的右侧文本框在 `denoise=0.65` 下仍被改写，原图 1、3 则基本退回灰度。Qwen Edit 这组低降噪测试平均 `14.561s`，明显慢于 4B source latent 热运行约 `5.287s` 和 9B Klein 热推理约 `7.799s`。继续提高到 `0.75/0.85` 只会沿着“颜色增加、重绘增强”的方向移动，因此按停止条件不再扩大扫描。Qwen Edit 可以作为通用重绘式图片编辑器使用，但不适合本项目“只上色、不修改线稿、文字和页面内容”的主链路。
+
+### 8.3 选型建议
+
+- 默认画质优先：9B LoRA，4 步。
+- 需要更快且优先减少新增内容：4B LoRA，source latent，`denoise=0.65`，4 步。
+- 可直接导入的 4B source latent 工作流：`workflows/flux2-klein-4b-source-latent-colorize.json`。
+- 4B 空 latent 只用于可接受少量重绘、强调色彩覆盖的实验场景。
+- Qwen Image Edit 2511、Anima Base 和 Anima 2.9B 均不进入默认路由。
