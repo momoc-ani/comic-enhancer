@@ -40,6 +40,8 @@ class Settings:
     comfyui_flux2_character_native_resolution: bool = False
     comfyui_flux2_9b_lora_enabled: bool = False
     comfyui_workflow_flux2_9b_lora: Path | None = None
+    comfyui_flux2_9b_fast_enabled: bool = False
+    comfyui_workflow_flux2_9b_fast: Path | None = None
     comfyui_flux2_4b_source_enabled: bool = False
     comfyui_workflow_flux2_4b_source: Path | None = None
     comfyui_flux2_4b_color_enabled: bool = False
@@ -87,6 +89,7 @@ def load_settings() -> Settings:
         "comfyui_workflow_flux2_character",
         "comfyui_workflow_flux2_character_lineart",
         "comfyui_workflow_flux2_9b_lora",
+        "comfyui_workflow_flux2_9b_fast",
         "comfyui_workflow_flux2_4b_source",
         "comfyui_workflow_flux2_4b_color",
         "character_library_root",
@@ -164,6 +167,14 @@ def load_settings() -> Settings:
         ),
         "COMIC_ENHANCER_WORKFLOW_FLUX2_9B_LORA": (
             "comfyui_workflow_flux2_9b_lora",
+            Path,
+        ),
+        "COMIC_ENHANCER_COMFYUI_FLUX2_9B_FAST_ENABLED": (
+            "comfyui_flux2_9b_fast_enabled",
+            lambda value: value.lower() in {"1", "true", "yes", "on"},
+        ),
+        "COMIC_ENHANCER_WORKFLOW_FLUX2_9B_FAST": (
+            "comfyui_workflow_flux2_9b_fast",
             Path,
         ),
         "COMIC_ENHANCER_COMFYUI_FLUX2_4B_SOURCE_ENABLED": (

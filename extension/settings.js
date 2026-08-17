@@ -23,6 +23,11 @@ export const MODE_OPTIONS = Object.freeze([
     prefetchPages: 1,
   },
   {
+    value: "flux2_9b_fast",
+    label: "快速画质模式（FLUX.2 Klein 9B FP8）",
+    prefetchPages: 1,
+  },
+  {
     value: "flux2_4b_source",
     label: "结构稳定模式（FLUX.2 Klein 4B）",
     prefetchPages: 1,

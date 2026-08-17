@@ -21,6 +21,7 @@ REFERENCE_MODES = {
     ProcessingMode.FLUX2_CHARACTER,
     ProcessingMode.FLUX2_CHARACTER_LINEART,
     ProcessingMode.FLUX2_9B_LORA,
+    ProcessingMode.FLUX2_9B_FAST,
     ProcessingMode.FLUX2_4B_SOURCE,
     ProcessingMode.FLUX2_4B_COLOR,
 }
@@ -114,6 +115,11 @@ async def process_page(
         and not context.backend.flux2_4b_source_profile_ready()
     ):
         unavailable_detail = "FLUX.2 Klein 4B 结构稳定档未启用"
+    elif (
+        options.mode == ProcessingMode.FLUX2_9B_FAST
+        and not context.backend.flux2_9b_fast_profile_ready()
+    ):
+        unavailable_detail = "FLUX.2 Klein 9B FP8 快速档未启用"
     elif (
         options.mode == ProcessingMode.FLUX2_4B_COLOR
         and not context.backend.flux2_4b_color_profile_ready()

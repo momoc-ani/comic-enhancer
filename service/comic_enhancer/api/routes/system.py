@@ -20,6 +20,7 @@ MODE_LABELS = {
         1,
     ),
     ProcessingMode.FLUX2_9B_LORA: ("FLUX.2 Klein 9B LoRA 画质模式", 1),
+    ProcessingMode.FLUX2_9B_FAST: ("FLUX.2 Klein 9B FP8 快速模式", 1),
     ProcessingMode.FLUX2_4B_SOURCE: ("FLUX.2 Klein 4B 结构稳定模式", 1),
     ProcessingMode.FLUX2_4B_COLOR: ("FLUX.2 Klein 4B 色彩增强模式", 1),
 }
@@ -54,6 +55,7 @@ async def capabilities(
             backend.flux2_character_lineart_profile_ready()
         ),
         ProcessingMode.FLUX2_9B_LORA: backend.flux2_9b_lora_profile_ready(),
+        ProcessingMode.FLUX2_9B_FAST: backend.flux2_9b_fast_profile_ready(),
         ProcessingMode.FLUX2_4B_SOURCE: backend.flux2_4b_source_profile_ready(),
         ProcessingMode.FLUX2_4B_COLOR: backend.flux2_4b_color_profile_ready(),
     }
@@ -84,6 +86,7 @@ async def capabilities(
             ProcessingMode.FLUX2_CHARACTER_LINEART
         ],
         flux2_9b_lora_available=availability[ProcessingMode.FLUX2_9B_LORA],
+        flux2_9b_fast_available=availability[ProcessingMode.FLUX2_9B_FAST],
         flux2_4b_source_available=availability[ProcessingMode.FLUX2_4B_SOURCE],
         flux2_4b_color_available=availability[ProcessingMode.FLUX2_4B_COLOR],
         prefetch_pages=settings.prefetch_pages,

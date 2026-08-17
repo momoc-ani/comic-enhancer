@@ -24,6 +24,7 @@ from .strategies import (
     Flux2CharacterLineartModeStrategy,
     Flux2QuantModeStrategy,
     Flux29BLoraModeStrategy,
+    Flux29BFastModeStrategy,
     Flux24BSourceModeStrategy,
     Flux24BColorModeStrategy,
     QualityModeStrategy,
@@ -43,6 +44,7 @@ class ComfyUIBackend(InferenceBackend):
         "flux2-klein-4b-qwen3-vl-character",
         "flux2-klein-4b-qwen3-vl-character-lineart",
         "flux2-klein-9b-lora",
+        "flux2-klein-9b-fast",
         "flux2-klein-4b-source",
         "flux2-klein-4b-color",
     )
@@ -67,6 +69,8 @@ class ComfyUIBackend(InferenceBackend):
         flux2_character_lineart_workflow: Path | None = None,
         flux2_9b_lora_enabled: bool = False,
         flux2_9b_lora_workflow: Path | None = None,
+        flux2_9b_fast_enabled: bool = False,
+        flux2_9b_fast_workflow: Path | None = None,
         flux2_4b_source_enabled: bool = False,
         flux2_4b_source_workflow: Path | None = None,
         flux2_4b_color_enabled: bool = False,
@@ -121,6 +125,12 @@ class ComfyUIBackend(InferenceBackend):
                 reference_limit=flux2_reference_limit,
                 **shared_options,
             ),
+            Flux29BFastModeStrategy(
+                enabled=flux2_9b_fast_enabled,
+                workflow_path=flux2_9b_fast_workflow,
+                reference_limit=flux2_reference_limit,
+                **shared_options,
+            ),
             Flux24BSourceModeStrategy(
                 enabled=flux2_4b_source_enabled,
                 workflow_path=flux2_4b_source_workflow,
@@ -159,6 +169,10 @@ class ComfyUIBackend(InferenceBackend):
     # 方法说明：检查 9B LoRA 画质档是否可用。
     def flux2_9b_lora_profile_ready(self) -> bool:
         return self.mode_available(ProcessingMode.FLUX2_9B_LORA)
+
+    # 方法说明：检查 9B FP8 快速计算档是否可用。
+    def flux2_9b_fast_profile_ready(self) -> bool:
+        return self.mode_available(ProcessingMode.FLUX2_9B_FAST)
 
     # 方法说明：检查 4B source latent 结构稳定档是否可用。
     def flux2_4b_source_profile_ready(self) -> bool:

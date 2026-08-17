@@ -60,6 +60,7 @@ test("accepts experimental modes with conservative prefetch", () => {
     "flux2_character_lineart",
   );
   assert.equal(normalizeMode("flux2_9b_lora"), "flux2_9b_lora");
+  assert.equal(normalizeMode("flux2_9b_fast"), "flux2_9b_fast");
   assert.equal(normalizeMode("flux2_4b_source"), "flux2_4b_source");
   assert.equal(normalizeMode("flux2_4b_color"), "flux2_4b_color");
   assert.equal(prefetchPagesForMode("cobra"), 2);
@@ -67,6 +68,7 @@ test("accepts experimental modes with conservative prefetch", () => {
   assert.equal(prefetchPagesForMode("flux2"), 1);
   assert.equal(prefetchPagesForMode("flux2_character_lineart"), 1);
   assert.equal(prefetchPagesForMode("flux2_9b_lora"), 1);
+  assert.equal(prefetchPagesForMode("flux2_9b_fast"), 1);
   assert.equal(prefetchPagesForMode("flux2_4b_source"), 1);
   assert.equal(prefetchPagesForMode("flux2_4b_color"), 1);
 });

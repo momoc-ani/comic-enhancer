@@ -156,6 +156,34 @@ test("shows new FLUX.2 acceptance modes independently", () => {
 });
 
 
+// 方法说明：验证 9B FP8 快速档按独立能力字段和真实模型展示。
+test("shows 9B FP8 fast mode independently", () => {
+  const fastSettings = {
+    ...settings,
+    profile: "remote-flux2_9b_fast",
+    mode: "flux2_9b_fast",
+  };
+  const unavailable = describeModelTier(fastSettings, null, {
+    ready: true,
+    flux2_9b_fast_available: false,
+  });
+  assert.equal(unavailable.title, "9B FP8 快速档");
+  assert.match(unavailable.detail, /未启用 9B FP8 快速档/);
+
+  const execution = buildModelExecution(
+    {
+      model_profile: "flux2-klein-9b-fast+realcugan-se-2x",
+      reference_applied: true,
+      elapsed_ms: 7000,
+    },
+    fastSettings,
+  );
+  const actual = describeModelTier(fastSettings, execution);
+  assert.equal(actual.title, "9B FP8 快速档 · 角色参考");
+  assert.match(actual.detail, /FLUX\.2 Klein 9B FP8 快速计算 · Real-CUGAN 2x/);
+});
+
+
 // 方法说明：验证 4B 色彩增强档按独立能力字段和真实模型展示。
 test("shows 4B color mode independently", () => {
   const colorSettings = {
