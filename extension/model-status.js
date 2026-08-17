@@ -8,6 +8,12 @@ const PROFILE_LABELS = Object.freeze({
     "Qwen3-VL 角色分析 · FLUX.2 线稿保真",
   "flux2-klein-4b-qwen3-vl-character-lineart+realcugan-se-2x":
     "Qwen3-VL 角色分析 · FLUX.2 线稿保真 · Real-CUGAN 2x",
+  "flux2-klein-9b-lora": "FLUX.2 Klein 9B LoRA",
+  "flux2-klein-9b-lora+realcugan-se-2x":
+    "FLUX.2 Klein 9B LoRA · Real-CUGAN 2x",
+  "flux2-klein-4b-source": "FLUX.2 Klein 4B source latent",
+  "flux2-klein-4b-source+realcugan-se-2x":
+    "FLUX.2 Klein 4B source latent · Real-CUGAN 2x",
   passthrough: "开发透传后端",
 });
 
@@ -19,6 +25,8 @@ const MODE_TITLES = Object.freeze({
   flux2_quant: "质量档（FLUX.2 量化实验）",
   flux2_character: "角色稳定档",
   flux2_character_lineart: "角色线稿保真档",
+  flux2_9b_lora: "9B LoRA 画质档",
+  flux2_4b_source: "4B 结构稳定档",
 });
 
 // 方法说明：记录最近一次真实模型执行信息。
@@ -51,7 +59,11 @@ export function describeModelTier(settings, execution, capabilities = null) {
           (mode === "flux2_character" &&
             capabilities.flux2_character_available === false) ||
           (mode === "flux2_character_lineart" &&
-            capabilities.flux2_character_lineart_available === false)),
+            capabilities.flux2_character_lineart_available === false) ||
+          (mode === "flux2_9b_lora" &&
+            capabilities.flux2_9b_lora_available === false) ||
+          (mode === "flux2_4b_source" &&
+            capabilities.flux2_4b_source_available === false)),
     );
     return {
       title: configuredTitle,
@@ -118,6 +130,8 @@ function normalizeMode(value) {
     "flux2_quant",
     "flux2_character",
     "flux2_character_lineart",
+    "flux2_9b_lora",
+    "flux2_4b_source",
   ].includes(value)
     ? value
     : "fast";

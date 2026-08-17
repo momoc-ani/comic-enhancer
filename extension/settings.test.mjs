@@ -59,10 +59,14 @@ test("accepts experimental modes with conservative prefetch", () => {
     normalizeMode("flux2_character_lineart"),
     "flux2_character_lineart",
   );
+  assert.equal(normalizeMode("flux2_9b_lora"), "flux2_9b_lora");
+  assert.equal(normalizeMode("flux2_4b_source"), "flux2_4b_source");
   assert.equal(prefetchPagesForMode("cobra"), 2);
   assert.equal(prefetchPagesForMode("upscale"), 1);
   assert.equal(prefetchPagesForMode("flux2"), 1);
   assert.equal(prefetchPagesForMode("flux2_character_lineart"), 1);
+  assert.equal(prefetchPagesForMode("flux2_9b_lora"), 1);
+  assert.equal(prefetchPagesForMode("flux2_4b_source"), 1);
 });
 
 // 方法说明：验证 ComfyUI 直出开关默认关闭且能从存储中迁移。

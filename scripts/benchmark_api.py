@@ -573,7 +573,15 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument(
         "--mode",
-        choices=("fast", "quality", "upscale", "flux2", "flux2_quant"),
+        choices=(
+            "fast",
+            "quality",
+            "upscale",
+            "flux2",
+            "flux2_quant",
+            "flux2_9b_lora",
+            "flux2_4b_source",
+        ),
         required=True,
     )
     parser.add_argument(

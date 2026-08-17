@@ -5,6 +5,7 @@ import subprocess
 import sys
 
 from fastapi.testclient import TestClient
+import pytest
 from PIL import Image
 
 from comic_enhancer.config import Settings
@@ -161,6 +162,88 @@ def test_flux2_character_lineart_mode_is_valid():
     options = ProcessOptions(mode="flux2_character_lineart")
 
     assert options.mode == ProcessingMode.FLUX2_CHARACTER_LINEART
+
+
+# 方法说明：验证新增的 9B 画质档和 4B 结构稳定档是独立合法档位。
+def test_new_flux2_acceptance_modes_are_valid():
+    assert (
+        ProcessOptions(mode="flux2_9b_lora").mode
+        == ProcessingMode.FLUX2_9B_LORA
+    )
+    assert (
+        ProcessOptions(mode="flux2_4b_source").mode
+        == ProcessingMode.FLUX2_4B_SOURCE
+    )
+
+
+@pytest.mark.parametrize(
+    ("mode", "detail"),
+    [
+        ("flux2_9b_lora", "9B LoRA"),
+        ("flux2_4b_source", "4B 结构稳定"),
+    ],
+)
+# 方法说明：验证新增档位默认关闭时在准备参考图之前明确返回 409。
+def test_new_flux2_modes_reject_when_disabled(tmp_path, mode, detail):
+    settings = Settings(
+        api_token="test-token",
+        runtime_dir=tmp_path / "runtime",
+    )
+    client = TestClient(create_app(settings))
+
+    response = client.post(
+        "/v1/pages/process",
+        headers={"Authorization": "Bearer test-token"},
+        data={
+            "work_json": '{"source":"copy_manga","source_work_id":"123"}',
+            "options_json": f'{{"mode":"{mode}"}}',
+        },
+        files={"image": ("page.png", png_bytes(), "image/png")},
+    )
+
+    assert response.status_code == 409
+    assert detail in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("mode", "field", "ready_method"),
+    [
+        (
+            "flux2_9b_lora",
+            "flux2_9b_lora_available",
+            "flux2_9b_lora_profile_ready",
+        ),
+        (
+            "flux2_4b_source",
+            "flux2_4b_source_available",
+            "flux2_4b_source_profile_ready",
+        ),
+    ],
+)
+# 方法说明：验证新增档位通过独立能力字段对外声明。
+def test_capabilities_advertise_new_flux2_modes_independently(
+    tmp_path,
+    monkeypatch,
+    mode,
+    field,
+    ready_method,
+):
+    settings = Settings(
+        api_token="test-token",
+        runtime_dir=tmp_path / "runtime",
+    )
+    app = create_app(settings)
+    monkeypatch.setattr(app.state.processor.backend, ready_method, lambda: True)
+    client = TestClient(app)
+
+    response = client.get(
+        "/v1/capabilities",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert mode in response.json()["processing_modes"]
+    assert response.json()[field] is True
 
 
 # 方法说明：验证能力接口独立声明 Qwen3-VL 角色稳定档。

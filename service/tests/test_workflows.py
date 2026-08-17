@@ -12,12 +12,16 @@ from comic_enhancer.inference.comfyui import (
     bind_io,
 )
 from comic_enhancer.inference.comfyui.strategies import (
+    FLUX2_4B_SOURCE_PROCESSING_REVISION,
+    FLUX2_9B_LORA_PROCESSING_REVISION,
     FLUX2_PROCESSING_REVISION,
     FastModeStrategy,
     Flux2ModeStrategy,
     Flux2CharacterModeStrategy,
     Flux2CharacterLineartModeStrategy,
     Flux2QuantModeStrategy,
+    Flux24BSourceModeStrategy,
+    Flux29BLoraModeStrategy,
     QualityModeStrategy,
 )
 from comic_enhancer.models import ProcessOptions
@@ -102,11 +106,132 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
         "flux2_quant": Flux2QuantModeStrategy,
         "flux2_character": Flux2CharacterModeStrategy,
         "flux2_character_lineart": Flux2CharacterLineartModeStrategy,
+        "flux2_9b_lora": Flux29BLoraModeStrategy,
+        "flux2_4b_source": Flux24BSourceModeStrategy,
     }
     for mode, strategy_type in expected.items():
         strategy = backend.mode_strategy(mode)
         assert isinstance(strategy, strategy_type)
     assert len({type(backend.mode_strategy(mode)) for mode in expected}) == len(expected)
+
+
+@pytest.mark.parametrize(
+    ("name", "model_profile", "revision"),
+    [
+        (
+            "flux2-klein-9b-lora-colorize.json",
+            "flux2-klein-9b-lora",
+            FLUX2_9B_LORA_PROCESSING_REVISION,
+        ),
+        (
+            "flux2-klein-4b-source-latent-colorize.json",
+            "flux2-klein-4b-source",
+            FLUX2_4B_SOURCE_PROCESSING_REVISION,
+        ),
+    ],
+)
+# 方法说明：验证新增档位使用独立工作流、模型标识和缓存版本。
+def test_new_flux2_modes_use_independent_workflow_contracts(
+    tmp_path,
+    monkeypatch,
+    name,
+    model_profile,
+    revision,
+):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    workflow_path = PROJECT_ROOT / "workflows" / name
+    loader_options = {
+        "fast_workflow": fast,
+        "quality_workflow": quality,
+        (
+            "flux2_9b_lora_workflow"
+            if "9b" in name
+            else "flux2_4b_source_workflow"
+        ): workflow_path,
+    }
+    mode = "flux2_9b_lora" if "9b" in name else "flux2_4b_source"
+    backend_options = {
+        f"{mode}_enabled": True,
+        f"{mode}_workflow": workflow_path,
+    }
+    loader = PresetWorkflowLoader(**loader_options)
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=loader,
+        **backend_options,
+    )
+    options = ProcessOptions(mode=mode)
+
+    loaded = loader.load(options)
+    monkeypatch.setattr(backend.transport, "ready", lambda: True)
+
+    assert loaded.source == workflow_path.resolve()
+    assert loaded.model_profile == model_profile
+    assert backend.mode_available(mode) is True
+    assert revision in backend.cache_revision(options)
+
+
+# 方法说明：验证 9B LoRA 工作流固定使用四步空 latent 和三张参考图。
+def test_shipped_flux2_9b_lora_workflow_has_quality_contract():
+    workflow = json.loads(
+        (
+            PROJECT_ROOT / "workflows" / "flux2-klein-9b-lora-colorize.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert workflow["5"]["inputs"]["unet_name"] == (
+        "FLUX.2-klein-9b-fp8-v2_flux2 Klein b9.safetensors"
+    )
+    assert workflow["6"]["inputs"]["clip_name"] == "qwen_3_8b_fp8mixed.safetensors"
+    assert workflow["37"]["inputs"]["lora_name"] == (
+        "Klein-9B/f2k_9B_lcs_consist_20260415.safetensors"
+    )
+    assert workflow["37"]["inputs"]["strength_model"] == 0.6
+    assert workflow["27"]["class_type"] == "EmptyFlux2LatentImage"
+    assert workflow["28"]["inputs"]["steps"] == 4
+    assert workflow["29"]["inputs"]["cfg"] == 1.0
+    assert [workflow[str(node)]["inputs"]["megapixels"] for node in (14, 18, 22)] == [
+        0.25,
+        0.25,
+        0.25,
+    ]
+    assert workflow["34"]["inputs"]["images"] == ["35", 0]
+    assert workflow["35"]["inputs"]["width"] == ["36", 0]
+    assert workflow["35"]["inputs"]["height"] == ["36", 1]
+
+
+# 方法说明：验证 4B 结构稳定工作流固定使用 source latent 和低降噪参数。
+def test_shipped_flux2_4b_source_workflow_has_structure_contract():
+    workflow = json.loads(
+        (
+            PROJECT_ROOT
+            / "workflows"
+            / "flux2-klein-4b-source-latent-colorize.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert workflow["31"]["inputs"]["lora_name"] == (
+        "f2k_4B_consist_20260314.safetensors"
+    )
+    assert workflow["31"]["inputs"]["strength_model"] == 0.35
+    assert workflow["11"]["class_type"] == "VAEEncode"
+    assert workflow["26"]["inputs"]["latent_image"] == ["11", 0]
+    assert workflow["26"]["inputs"]["steps"] == 4
+    assert workflow["26"]["inputs"]["cfg"] == 1.3
+    assert workflow["26"]["inputs"]["denoise"] == 0.65
+    assert [workflow[str(node)]["inputs"]["megapixels"] for node in (14, 18, 22)] == [
+        0.15,
+        0.15,
+        0.15,
+    ]
+    assert workflow["30"]["inputs"]["images"] == ["29", 0]
+    assert workflow["29"]["inputs"]["width"] == ["28", 0]
+    assert workflow["29"]["inputs"]["height"] == ["28", 1]
 
 
 # 方法说明：验证线稿保真工作流保持 0.85MP 四步生成并在末端恢复原图尺寸。

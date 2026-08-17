@@ -126,3 +126,31 @@ test("shows character lineart mode availability and execution", () => {
   assert.equal(actual.title, "角色线稿保真档 · 角色参考");
   assert.match(actual.detail, /FLUX\.2 线稿保真 · Real-CUGAN 2x/);
 });
+
+
+// 方法说明：验证新增验收档按独立能力字段和组合模型标识展示。
+test("shows new FLUX.2 acceptance modes independently", () => {
+  const qualitySettings = {
+    ...settings,
+    profile: "remote-flux2_9b_lora",
+    mode: "flux2_9b_lora",
+  };
+  const unavailable = describeModelTier(qualitySettings, null, {
+    ready: true,
+    flux2_9b_lora_available: false,
+  });
+  assert.equal(unavailable.title, "9B LoRA 画质档");
+  assert.match(unavailable.detail, /未启用 9B LoRA 画质档/);
+
+  const execution = buildModelExecution(
+    {
+      model_profile: "flux2-klein-9b-lora+realcugan-se-2x",
+      reference_applied: true,
+      elapsed_ms: 9000,
+    },
+    qualitySettings,
+  );
+  const actual = describeModelTier(qualitySettings, execution);
+  assert.equal(actual.title, "9B LoRA 画质档 · 角色参考");
+  assert.match(actual.detail, /FLUX\.2 Klein 9B LoRA · Real-CUGAN 2x/);
+});

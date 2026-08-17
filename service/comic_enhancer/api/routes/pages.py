@@ -20,6 +20,8 @@ REFERENCE_MODES = {
     ProcessingMode.FLUX2_QUANT,
     ProcessingMode.FLUX2_CHARACTER,
     ProcessingMode.FLUX2_CHARACTER_LINEART,
+    ProcessingMode.FLUX2_9B_LORA,
+    ProcessingMode.FLUX2_4B_SOURCE,
 }
 
 
@@ -101,6 +103,16 @@ async def process_page(
         and not context.backend.flux2_character_lineart_profile_ready()
     ):
         unavailable_detail = "角色线稿保真档未启用"
+    elif (
+        options.mode == ProcessingMode.FLUX2_9B_LORA
+        and not context.backend.flux2_9b_lora_profile_ready()
+    ):
+        unavailable_detail = "FLUX.2 Klein 9B LoRA 画质档未启用"
+    elif (
+        options.mode == ProcessingMode.FLUX2_4B_SOURCE
+        and not context.backend.flux2_4b_source_profile_ready()
+    ):
+        unavailable_detail = "FLUX.2 Klein 4B 结构稳定档未启用"
     if unavailable_detail:
         log_operation(
             logger,

@@ -94,6 +94,8 @@ def _create_backend(settings: Settings) -> InferenceBackend:
             flux2_character_lineart_workflow=(
                 settings.comfyui_workflow_flux2_character_lineart
             ),
+            flux2_9b_lora_workflow=settings.comfyui_workflow_flux2_9b_lora,
+            flux2_4b_source_workflow=settings.comfyui_workflow_flux2_4b_source,
         )
         backend_options.update(
             {
@@ -113,6 +115,14 @@ def _create_backend(settings: Settings) -> InferenceBackend:
                 ),
                 "flux2_character_lineart_workflow": (
                     settings.comfyui_workflow_flux2_character_lineart
+                ),
+                "flux2_9b_lora_enabled": settings.comfyui_flux2_9b_lora_enabled,
+                "flux2_9b_lora_workflow": (
+                    settings.comfyui_workflow_flux2_9b_lora
+                ),
+                "flux2_4b_source_enabled": settings.comfyui_flux2_4b_source_enabled,
+                "flux2_4b_source_workflow": (
+                    settings.comfyui_workflow_flux2_4b_source
                 ),
                 "character_library": character_library,
                 "timeout_seconds": settings.comfyui_timeout_seconds,
@@ -190,6 +200,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
                 "flux2_character_lineart_enabled": (
                     context.settings.comfyui_flux2_character_lineart_enabled
+                ),
+                "flux2_9b_lora_enabled": (
+                    context.settings.comfyui_flux2_9b_lora_enabled
+                ),
+                "flux2_4b_source_enabled": (
+                    context.settings.comfyui_flux2_4b_source_enabled
                 ),
             },
             result={"status": "started"},

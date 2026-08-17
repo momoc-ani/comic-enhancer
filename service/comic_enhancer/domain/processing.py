@@ -12,6 +12,8 @@ class ProcessingMode(StrEnum):
     FLUX2_QUANT = "flux2_quant"
     FLUX2_CHARACTER = "flux2_character"
     FLUX2_CHARACTER_LINEART = "flux2_character_lineart"
+    FLUX2_9B_LORA = "flux2_9b_lora"
+    FLUX2_4B_SOURCE = "flux2_4b_source"
 
 
 class ProcessOptions(BaseModel):
@@ -53,5 +55,7 @@ class Capabilities(BaseModel):
     flux2_quant_available: bool = False
     flux2_character_available: bool = False
     flux2_character_lineart_available: bool = False
+    flux2_9b_lora_available: bool = False
+    flux2_4b_source_available: bool = False
     prefetch_pages: int
     max_parallel_inference: int

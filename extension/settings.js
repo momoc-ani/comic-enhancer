@@ -17,6 +17,16 @@ export const MODE_OPTIONS = Object.freeze([
     label: "角色线稿保真模式（Qwen3-VL + FLUX.2）",
     prefetchPages: 1,
   },
+  {
+    value: "flux2_9b_lora",
+    label: "画质模式（FLUX.2 Klein 9B LoRA）",
+    prefetchPages: 1,
+  },
+  {
+    value: "flux2_4b_source",
+    label: "结构稳定模式（FLUX.2 Klein 4B）",
+    prefetchPages: 1,
+  },
 ]);
 
 const MODE_VALUES = new Set(MODE_OPTIONS.map((option) => option.value));

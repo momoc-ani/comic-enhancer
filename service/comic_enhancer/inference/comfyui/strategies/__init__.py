@@ -11,6 +11,14 @@ from .flux2_character_lineart import (
 )
 from .flux2_base import FLUX2_OUTPUT_SCALE
 from .flux2_quant import Flux2QuantModeStrategy
+from .flux2_9b_lora import (
+    FLUX2_9B_LORA_PROCESSING_REVISION,
+    Flux29BLoraModeStrategy,
+)
+from .flux2_4b_source import (
+    FLUX2_4B_SOURCE_PROCESSING_REVISION,
+    Flux24BSourceModeStrategy,
+)
 from .preset import PresetModeStrategy
 from .quality import QualityModeStrategy
 
@@ -26,6 +34,10 @@ __all__ = [
     "Flux2CharacterModeStrategy",
     "Flux2CharacterLineartModeStrategy",
     "Flux2QuantModeStrategy",
+    "FLUX2_9B_LORA_PROCESSING_REVISION",
+    "Flux29BLoraModeStrategy",
+    "FLUX2_4B_SOURCE_PROCESSING_REVISION",
+    "Flux24BSourceModeStrategy",
     "PresetModeStrategy",
     "QualityModeStrategy",
 ]
