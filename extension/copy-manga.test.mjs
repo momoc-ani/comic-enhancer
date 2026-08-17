@@ -86,6 +86,23 @@ function chapterDocument(chapterId, nextHref = "") {
   };
 }
 
+// 方法说明：验证章节标题缺少独立标题节点时可从页面标题提取话数。
+test("extracts readable chapter title from document title", () => {
+  const pageDocument = {
+    title: "测试漫画 - 第 12 话 - 拷贝漫画",
+    // 方法说明：模拟页面没有独立章节标题节点。
+    querySelector() { return null; },
+  };
+  const adapter = new CopyMangaAdapter(pageDocument, {
+    pathname: "/comic/work/chapter/chapter-id",
+  });
+
+  assert.deepEqual(adapter.getChapter(), {
+    chapter_id: "chapter-id",
+    title: "第 12 话",
+  });
+});
+
 // 方法说明：验证章节密文解密后保持图片原始顺序并去重。
 test("decrypts ordered CopyManga chapter image URLs", async () => {
   const cipherKey = "op0zzpvv.nmn.00p";

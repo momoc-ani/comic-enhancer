@@ -122,6 +122,32 @@ async function processPage(payload) {
     throw new Error("漫画增强功能已关闭");
   }
 
+  const options = {
+    ...payload.options,
+    mode: settings.mode,
+  };
+  let cachedResult = null;
+  const cacheStarted = performance.now();
+  try {
+    cachedResult = await resolveChapterCache(payload, options, settings);
+  } catch (error) {
+    console.warn(
+      "功能=章节缓存查询 参数=" +
+        JSON.stringify({
+          章节: payload.chapter?.chapter_id || "",
+          章节标题: payload.chapter?.title || "",
+          页码: options.page_index + 1,
+          模式: settings.mode,
+        }) +
+        " 结果=" + JSON.stringify({ 状态: "回退生成", 错误: normalizeError(error) }) +
+        ` 耗时_ms=${Math.round(performance.now() - cacheStarted)}`,
+    );
+  }
+  if (cachedResult) {
+    if (payload.prefetchOnly) return cachedResult;
+    return downloadResult(cachedResult, settings);
+  }
+
   const imageOrigin = new URL(payload.imageUrl).origin;
   const hasImageAccess = await chrome.permissions.contains({
     origins: [`${imageOrigin}/*`],
@@ -149,10 +175,7 @@ async function processPage(payload) {
   }
   form.append(
     "options_json",
-    JSON.stringify({
-      ...payload.options,
-      mode: settings.mode,
-    }),
+    JSON.stringify(options),
   );
 
   const apiBaseUrl = settings.apiBaseUrl.replace(/\/$/, "");
@@ -171,6 +194,50 @@ async function processPage(payload) {
 
   const result = await response.json();
   if (payload.prefetchOnly) return result;
+
+  return downloadResult(result, settings);
+}
+
+// 方法说明：按作品、章节、页码和模式查询服务端已完成缓存。
+async function resolveChapterCache(payload, options, settings) {
+  const started = performance.now();
+  const form = new FormData();
+  form.append("work_json", JSON.stringify(payload.work));
+  form.append("chapter_json", JSON.stringify(payload.chapter || {}));
+  form.append("options_json", JSON.stringify(options));
+  const apiBaseUrl = settings.apiBaseUrl.replace(/\/$/, "");
+  const response = await fetch(`${apiBaseUrl}/v1/pregeneration/cache/resolve`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${settings.apiToken}` },
+    body: form,
+  });
+  if (response.status === 404) {
+    logCacheLookup(payload, options, "未命中", performance.now() - started);
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`缓存服务失败：${response.status}`);
+  }
+  const result = await response.json();
+  logCacheLookup(payload, options, "命中", performance.now() - started);
+  return result;
+}
+
+// 方法说明：输出不包含图片地址和令牌的缓存查询日志。
+function logCacheLookup(payload, options, status, elapsedMs) {
+  console.info(
+    `功能=章节缓存查询 参数=${JSON.stringify({
+      章节: payload.chapter?.chapter_id || "",
+      章节标题: payload.chapter?.title || "",
+      页码: Number(options.page_index) + 1,
+      模式: options.mode,
+    })} 结果=${JSON.stringify({ 状态: status })} 耗时_ms=${Math.round(elapsedMs)}`,
+  );
+}
+
+// 方法说明：鉴权下载命中的增强结果并转换为页面可显示的数据地址。
+async function downloadResult(result, settings) {
+  const apiBaseUrl = settings.apiBaseUrl.replace(/\/$/, "");
 
   const imageResponse = await fetch(`${apiBaseUrl}${result.result_url}`, {
     headers: { Authorization: `Bearer ${settings.apiToken}` },

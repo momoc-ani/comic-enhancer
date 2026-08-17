@@ -96,15 +96,15 @@
     getChapter() {
       const parts = this.pageLocation.pathname.split("/").filter(Boolean);
       const chapterIndex = parts.indexOf("chapter");
+      const heading = this.pageDocument
+        .querySelector("[class*='chapter'] h1, [class*='chapter'] h2")
+        ?.textContent?.trim();
       return {
         chapter_id:
           chapterIndex >= 0 && parts[chapterIndex + 1]
             ? decodeURIComponent(parts[chapterIndex + 1])
             : this.pageLocation.pathname,
-        title:
-          this.pageDocument
-            .querySelector("[class*='chapter'] h1, [class*='chapter'] h2")
-            ?.textContent?.trim() || "",
+        title: heading || extractChapterTitle(this.pageDocument.title),
       };
     }
 
@@ -238,6 +238,11 @@
         .filter(Boolean)
         .slice(0, 20);
     }
+  }
+
+  // 方法说明：从页面标题中提取“第 N 话/章/回”作为可读章节名称。
+  function extractChapterTitle(value) {
+    return String(value || "").match(/第\s*[^|｜/\\-]{1,40}(?:话|話|章|回)/u)?.[0]?.trim() || "";
   }
 
   // 方法说明：从作品目录页提取可用于跨元数据源检索的稳定作品信息。

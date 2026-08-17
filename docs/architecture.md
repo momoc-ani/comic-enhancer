@@ -208,13 +208,17 @@ service/comic_enhancer/
 预生成接口为 `POST /v1/pregeneration/pages`，使用 multipart 上传 `image`、`work_json`、`chapter_json`、
 `options_json`、`page_count` 和 `priority`，返回 `202` 与 `job_id`。任务存储在 `runtime/pregeneration/jobs.sqlite3`，
 SQLite 使用 WAL；原图保存在 `runtime/pregeneration/source/<work>/<chapter>/`，完成结果按
-`runtime/chapter-cache/<work>/<chapter>/<mode>/` 保存并生成 `manifest.json`。`GET /v1/pregeneration/jobs/{job_id}`
+`runtime/chapter-cache/<作品标题>/<章节标题>/<mode>/` 保存为 `01.webp`、`02.webp` 等并生成 `manifest.json`。
+目录中的 `mode` 是强隔离边界，不同处理档位不会互相复用。插件显示页面前先调用
+`POST /v1/pregeneration/cache/resolve`；只有返回 404 未命中时才下载原图并调用处理接口。`GET /v1/pregeneration/jobs/{job_id}`
 可查询状态，`GET /v1/pregeneration/works/{work_key}` 可查询作品任务。
 
 服务启动时会把 `processing` 任务恢复为 `queued`，检查原图和内容寻址结果缓存；结果缺失但原图存在时重新排队，
 原图缺失则标记失败。结果 WebP 先写临时文件再原子替换，元数据和 manifest 也原子替换，避免重启时把半成品
-误判为命中。章节源图默认保留以支持断点恢复；Compose 的 `comic-enhancer-runtime:/app/runtime` 卷必须保持不变，
-不能改成容器临时目录。
+误判为命中。服务启动恢复时先补齐所有已完成页的章节文件，再原子发布 manifest；未完成或失败页的 `result_path` 保持为空。
+章节源图默认保留以支持断点恢复；Compose 的 `comic-enhancer-runtime:/app/runtime` 卷必须保持不变，不能改成容器临时目录。
+
+缓存查询、命中/未命中、回退生成、预生成入队和章节页面完成日志均包含作品、章节 ID、章节标题、当前/后续话序、页码、模式和结果状态，统一使用“功能 + 参数 + 结果 + 耗时”格式。
 
 ## 安全边界
 

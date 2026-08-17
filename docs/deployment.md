@@ -27,8 +27,9 @@ API 容器只配置 `COMIC_ENHANCER_COMFYUI_URL=http://comfyui:8188`，不挂载
 
 API 的 `COMIC_ENHANCER_RUNTIME_DIR` 必须指向持久化卷（Compose 默认的 `comic-enhancer-runtime:/app/runtime`）。
 服务端会在该目录保存 `pregeneration/jobs.sqlite3`、原图断点文件、章节结果目录和 manifest。容器重建或服务重启后，
-后台队列会自动恢复；不要删除该卷或把 runtime 映射到容器可写临时层。插件设置中的“往后预生成话数”范围为 `0–20`，
-当前话页面仍由同步 `/v1/pages/process` 优先处理，后续页通过 `202/job_id` 异步入队。
+后台队列会自动恢复；不要删除该卷或把 runtime 映射到容器可写临时层。缓存目录按
+`作品标题/章节标题/模式/01.webp` 组织，模式目录严格隔离。插件显示页面前先查询缓存，命中直接取结果，未命中才上传原图。
+插件设置中的“往后预生成话数”范围为 `0–20`，当前话页面仍由同步 `/v1/pages/process` 优先处理，后续页通过 `202/job_id` 异步入队。
 
 ### Real-CUGAN 放大档
 

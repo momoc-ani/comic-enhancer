@@ -85,10 +85,20 @@ class PregenerationService:
             "job_id": job["job_id"],
             "work_key": job["work_key"],
             "chapter_id": job["chapter_id"],
+            "chapter_title": job.get("chapter_title", ""),
             "page_index": job["page_index"],
+            "page_number": int(job["page_index"]) + 1,
+            "mode": job.get("mode", ""),
             "priority": job["priority"],
             "attempt": job["attempts"],
         }
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="章节页面预生成开始",
+            parameters=parameters,
+            result={"status": "processing"},
+        )
         try:
             source_path = Path(job["source_path"])
             image_bytes = await asyncio.to_thread(source_path.read_bytes)

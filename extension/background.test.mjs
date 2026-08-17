@@ -87,6 +87,9 @@ test("prefetch processing skips result image download", async () => {
         headers: { "content-type": "image/webp" },
       });
     }
+    if (String(url) === "http://127.0.0.1:8765/v1/pregeneration/cache/resolve") {
+      return new Response("not found", { status: 404 });
+    }
     if (String(url) === "http://127.0.0.1:8765/v1/pregeneration/pages") {
       return new Response(
         JSON.stringify({
@@ -112,9 +115,60 @@ test("prefetch processing skips result image download", async () => {
   assert.deepEqual(
     requests.map((request) => request.url),
     [
+      "http://127.0.0.1:8765/v1/pregeneration/cache/resolve",
       "https://img.example/page-1.webp",
       "http://127.0.0.1:8765/v1/pregeneration/pages",
     ],
   );
   assert.equal(storageWrites.length, 0);
+});
+
+// 方法说明：验证章节缓存命中时跳过原图上传和重新推理。
+test("uses completed chapter cache before downloading source image", async () => {
+  storedSettings = {
+    enabled: true,
+    deployment: "local",
+    localApiBaseUrl: "http://127.0.0.1:8765",
+    localApiToken: "test-token",
+    localMode: "quality",
+  };
+  storageWrites.length = 0;
+  const requests = [];
+  globalThis.fetch = async (url) => {
+    requests.push(String(url));
+    if (String(url).endsWith("/v1/pregeneration/cache/resolve")) {
+      return new Response(
+        JSON.stringify({
+          result_url: "/v1/results/chapter-cache.webp",
+          model_profile: "passthrough",
+          cached: true,
+          reference_applied: false,
+          processed_panels: 0,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    if (String(url).endsWith("/v1/results/chapter-cache.webp")) {
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "image/webp" },
+      });
+    }
+    throw new Error(`不应访问未命中路径：${url}`);
+  };
+
+  const result = await processPage({
+    imageUrl: "https://img.example/page-1.webp",
+    work: { source: "copy_manga", source_work_id: "work" },
+    chapter: { chapter_id: "chapter-1" },
+    options: { page_index: 0, palette_version: "default" },
+    prefetchOnly: false,
+  });
+
+  assert.equal(result.cached, true);
+  assert.deepEqual(requests, [
+    "http://127.0.0.1:8765/v1/pregeneration/cache/resolve",
+    "http://127.0.0.1:8765/v1/results/chapter-cache.webp",
+  ]);
+  assert.equal(storageWrites.length, 1);
 });

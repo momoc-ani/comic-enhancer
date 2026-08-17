@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -11,6 +12,7 @@ from ...domain import (
     PregenerationJob,
     ProcessingMode,
     ProcessOptions,
+    ProcessResult,
     WorkIdentity,
 )
 from ...logging_utils import log_operation
@@ -111,9 +113,13 @@ async def enqueue_page(
         feature="章节预生成入队",
         parameters={
             "work_key": work.key,
+            "work_title": work.title,
             "chapter_id": chapter.chapter_id,
+            "chapter_title": chapter.title,
             "page_index": options.page_index,
+            "page_number": options.page_index + 1,
             "page_count": page_count,
+            "mode": options.mode.value,
             "priority": priority,
             "bytes": len(image_bytes),
         },
@@ -121,6 +127,82 @@ async def enqueue_page(
         elapsed_ms=(time.perf_counter() - started) * 1000,
     )
     return _response(job)
+
+
+@router.post("/v1/pregeneration/cache/resolve", response_model=ProcessResult)
+async def resolve_cache(
+    request: Request,
+    work_json: str = Form(),
+    chapter_json: str = Form(),
+    options_json: str = Form(default="{}"),
+    _: None = Depends(authorize),
+) -> ProcessResult:
+    """按作品章节页码和处理档位返回已完成的持久化缓存。"""
+    started = time.perf_counter()
+    try:
+        context = get_context(request)
+        work = context.identities.enrich(WorkIdentity.model_validate(json.loads(work_json)))
+        chapter = ChapterIdentity.model_validate(json.loads(chapter_json))
+        options = ProcessOptions.model_validate(json.loads(options_json))
+    except (json.JSONDecodeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    job = await asyncio.to_thread(
+        context.pregeneration_store.resolve_completed,
+        work.key,
+        chapter.chapter_id,
+        options.page_index,
+        options.model_dump(mode="json"),
+        context.cache,
+    )
+    if job is None:
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="章节缓存查询",
+            parameters={
+                "work_key": work.key,
+                "work_title": work.title,
+                "chapter_id": chapter.chapter_id,
+                "chapter_title": chapter.title,
+                "page_index": options.page_index,
+                "page_number": options.page_index + 1,
+                "mode": options.mode.value,
+            },
+            result={"status": "miss"},
+            elapsed_ms=(time.perf_counter() - started) * 1000,
+        )
+        raise HTTPException(status_code=404, detail="chapter cache not found")
+    metadata = context.cache.load_metadata(job["cache_key"])
+    result = ProcessResult(
+        job_id=job["job_id"],
+        cache_key=job["cache_key"],
+        work_key=work.key,
+        mode=options.mode,
+        reference_applied=bool(metadata.get("reference_applied", False)),
+        processed_panels=int(metadata.get("processed_panels", 0)),
+        model_profile=str(metadata.get("model_profile", "")),
+        result_url=f"/v1/results/{job['cache_key']}.webp",
+        elapsed_ms=0,
+        cached=True,
+        comfyui_direct_output=options.comfyui_direct_output,
+    )
+    log_operation(
+        logger,
+        logging.INFO,
+        feature="章节缓存查询",
+        parameters={
+            "work_key": work.key,
+            "work_title": work.title,
+            "chapter_id": chapter.chapter_id,
+            "chapter_title": chapter.title,
+            "page_index": options.page_index,
+            "page_number": options.page_index + 1,
+            "mode": options.mode.value,
+        },
+        result={"status": "hit", "cache_key": job["cache_key"][:12]},
+        elapsed_ms=(time.perf_counter() - started) * 1000,
+    )
+    return result
 
 
 @router.get("/v1/pregeneration/jobs/{job_id}", response_model=PregenerationJob)

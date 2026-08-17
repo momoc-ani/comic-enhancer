@@ -55,6 +55,21 @@ def test_store_prioritizes_and_recovers_processing_jobs(tmp_path: Path):
     assert store.get(current["job_id"])["status"] == "queued"
 
 
+# 方法说明：验证失败页 manifest 不声明不存在的章节结果文件。
+def test_failed_page_manifest_keeps_result_path_empty(tmp_path: Path):
+    store = PregenerationStore(tmp_path / "pregeneration")
+    queued = store.enqueue(**enqueue_values(priority=100, page_index=0))
+    claimed = store.claim_next()
+    assert claimed is not None
+    failed = store.fail(queued["job_id"], "test_error", max_attempts=1)
+
+    manifest_path = next((tmp_path / "chapter-cache").rglob("manifest.json"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert failed["status"] == "failed"
+    assert manifest["pages"][0]["status"] == "failed"
+    assert manifest["pages"][0]["result_path"] == ""
+
+
 # 方法说明：验证可见页优先级会在 GPU 空闲时抢在后台预生成任务之前。
 def test_priority_inference_gate_prefers_visible_page():
     async def scenario():
@@ -102,7 +117,7 @@ def test_pregeneration_api_persists_and_completes_job(tmp_path: Path):
     headers = {"Authorization": "Bearer test-token"}
     request = {
         "data": {
-            "work_json": '{"source":"copy_manga","source_work_id":"work"}',
+            "work_json": '{"source":"copy_manga","source_work_id":"work","title":"测试漫画"}',
             "chapter_json": '{"chapter_id":"chapter-1","title":"第一话"}',
             "options_json": '{"mode":"fast","page_index":0}',
             "page_count": "1",
@@ -141,12 +156,48 @@ def test_pregeneration_api_persists_and_completes_job(tmp_path: Path):
         assert second_completed["status"] == "completed"
         assert completed["result_url"].endswith(".webp")
         assert client.get(completed["result_url"], headers=headers).status_code == 200
+        resolved = client.post(
+            "/v1/pregeneration/cache/resolve",
+            headers=headers,
+            data={
+                "work_json": request["data"]["work_json"],
+                "chapter_json": request["data"]["chapter_json"],
+                "options_json": request["data"]["options_json"],
+            },
+        )
+        assert resolved.status_code == 200
+        assert resolved.json()["cached"] is True
+        assert resolved.json()["cache_key"] == completed["cache_key"]
+        different_mode = client.post(
+            "/v1/pregeneration/cache/resolve",
+            headers=headers,
+            data={
+                "work_json": request["data"]["work_json"],
+                "chapter_json": request["data"]["chapter_json"],
+                "options_json": '{"mode":"quality","page_index":0}',
+            },
+        )
+        assert different_mode.status_code == 404
+        completed_again = client.post(
+            "/v1/pregeneration/pages", headers=headers, **request
+        )
+        assert completed_again.status_code == 202
+        assert completed_again.json()["job_id"] == completed["job_id"]
+        assert completed_again.json()["status"] == "completed"
 
     manifests = list((runtime / "chapter-cache").rglob("manifest.json"))
     assert len(manifests) == 1
+    assert manifests[0].parent.parts[-4:] == (
+        "chapter-cache",
+        "测试漫画",
+        "第一话",
+        "fast",
+    )
     manifest = json.loads(manifests[0].read_text(encoding="utf-8"))
     assert [page["page_index"] for page in manifest["pages"]] == [0, 1]
     assert all(page["status"] == "completed" for page in manifest["pages"])
+    assert (manifests[0].parent / "01.webp").is_file()
+    assert (manifests[0].parent / "02.webp").is_file()
 
 
 # 方法说明：验证结果缓存和提交元数据在服务重启后仍直接命中。

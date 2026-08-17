@@ -237,7 +237,11 @@
       pending.sort(compareTasks);
       logScheduler(
         "页面任务入队",
-        { 页码: index + 1, 类型: "预热", 优先级: priority },
+        chapterLogParameters(this, { chapter, chapterScope }, {
+          页码: index + 1,
+          类型: "预热",
+          优先级: priority,
+        }),
         { 待处理数: pending.length },
       );
       this.drain();
@@ -271,7 +275,7 @@
       markState(task.image, "processing");
       logScheduler(
         "页面处理开始",
-        { 页码: task.index + 1, 类型: "显示" },
+        chapterLogParameters(this, task, { 页码: task.index + 1, 类型: "显示" }),
         { 待处理数: pending.length },
       );
       try {
@@ -284,8 +288,12 @@
         warmedUrls.add(task.imageUrl);
         logScheduler(
           "页面处理完成",
-          { 页码: task.index + 1, 类型: "显示" },
-          { 状态: "已显示" },
+          chapterLogParameters(this, task, { 页码: task.index + 1, 类型: "显示" }),
+          {
+            状态: "已显示",
+            缓存: response.result?.cached ? "命中" : "新生成",
+            模型: response.result?.model_profile || "",
+          },
           Date.now() - startedAt,
         );
       } catch (error) {
@@ -293,7 +301,7 @@
         entry.state = "failed";
         logScheduler(
           "页面处理失败",
-          { 页码: task.index + 1, 类型: "显示" },
+          chapterLogParameters(this, task, { 页码: task.index + 1, 类型: "显示" }),
           { 错误: error instanceof Error ? error.message : String(error) },
           Date.now() - startedAt,
         );
@@ -310,13 +318,17 @@
       const startedAt = Date.now();
       try {
         if (warmedUrls.has(task.imageUrl)) return;
-        await this.requestProcessing(task, true);
+        const response = await this.requestProcessing(task, true);
         if (task.settingsVersion === settingsVersion) {
           warmedUrls.add(task.imageUrl);
           logScheduler(
             "页面预热完成",
-            { 页码: task.index + 1, 话别: task.chapterScope },
-            { 状态: "服务端已缓存" },
+            chapterLogParameters(this, task, { 页码: task.index + 1 }),
+            {
+              状态: "服务端已缓存",
+              缓存: response.result?.cached ? "命中" : "新生成",
+              任务: response.result?.job_id || "",
+            },
             Date.now() - startedAt,
           );
         }
@@ -324,7 +336,7 @@
         if (task.settingsVersion !== settingsVersion) return;
         logScheduler(
           "页面预热失败",
-          { 页码: task.index + 1, 话别: task.chapterScope },
+          chapterLogParameters(this, task, { 页码: task.index + 1 }),
           { 错误: error instanceof Error ? error.message : String(error) },
           Date.now() - startedAt,
         );
@@ -364,6 +376,22 @@
       if (!response?.ok) throw new Error(response?.error || "Unknown error");
       return response;
     }
+  }
+
+  // 方法说明：统一生成包含当前/后续话序、章节标题和页码的调度日志参数。
+  function chapterLogParameters(schedulerInstance, task, extra = {}) {
+    const chapter = task.chapter || schedulerInstance.chapter || {};
+    const chapterScope = task.chapterScope || "current";
+    const chapterOrder = chapterScope === "current"
+      ? "当前话"
+      : `后续第${chapterScope.replace(/^next-/, "")}话`;
+    return {
+      作品: schedulerInstance.work?.title || schedulerInstance.work?.source_work_id || "",
+      章节序号: chapterOrder,
+      章节标题: chapter.title || "",
+      章节ID: chapter.chapter_id || "",
+      ...extra,
+    };
   }
 
   // 方法说明：按任务层级、页码和入队顺序稳定排列处理任务。

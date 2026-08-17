@@ -82,25 +82,60 @@ class PregenerationStore:
         connection.execute("PRAGMA busy_timeout=30000")
         return connection
 
-    # 方法说明：将外部作品、章节标识转换为安全且稳定的目录片段。
+    # 方法说明：保留中文标题并移除文件系统不允许的字符。
     @staticmethod
-    def _safe_component(value: str, fallback: str) -> str:
-        normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value)).strip("._")
-        return (normalized[:80] or fallback) + "-" + hashlib.sha1(
-            str(value).encode("utf-8")
-        ).hexdigest()[:10]
+    def _display_component(value: str, fallback: str) -> str:
+        normalized = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", str(value)).strip(" .")
+        if normalized in {"", ".", ".."}:
+            normalized = fallback
+        return normalized[:120]
+
+    # 方法说明：从任务行提取可读的作品标题和章节标题。
+    @classmethod
+    def _row_display_names(cls, row: sqlite3.Row) -> tuple[str, str]:
+        try:
+            work = json.loads(row["work_json"])
+        except (json.JSONDecodeError, TypeError):
+            work = {}
+        work_title = str(work.get("title") or row["work_key"])
+        chapter_title = str(row["chapter_title"] or row["chapter_id"])
+        return (
+            cls._display_component(work_title, "未命名作品"),
+            cls._display_component(chapter_title, str(row["chapter_id"])),
+        )
 
     # 方法说明：返回指定作品、章节和档位的持久化缓存目录。
-    def chapter_directory(self, work_key: str, chapter_id: str, mode: str) -> Path:
-        path = self.chapter_root / self._safe_component(work_key, "work") / self._safe_component(
-            chapter_id, "chapter"
-        ) / self._safe_component(mode, "mode")
+    def chapter_directory(
+        self,
+        work_key: str,
+        chapter_id: str,
+        mode: str,
+        work_title: str = "",
+        chapter_title: str = "",
+    ) -> Path:
+        path = self.chapter_root / self._display_component(
+            work_title or work_key, "未命名作品"
+        ) / self._display_component(chapter_title or chapter_id, chapter_id) / self._display_component(
+            mode, "mode"
+        )
         path.mkdir(parents=True, exist_ok=True)
         return path
 
     # 方法说明：原子写入章节缓存 manifest，避免重启读取半份 JSON。
-    def _write_manifest(self, rows: list[sqlite3.Row], work_key: str, chapter_id: str, mode: str) -> None:
-        directory = self.chapter_directory(work_key, chapter_id, mode)
+    def _write_manifest(
+        self,
+        rows: list[sqlite3.Row],
+        work_key: str,
+        chapter_id: str,
+        mode: str,
+    ) -> None:
+        work_title, chapter_title = self._row_display_names(rows[0]) if rows else (
+            work_key,
+            chapter_id,
+        )
+        directory = self.chapter_directory(
+            work_key, chapter_id, mode, work_title, chapter_title
+        )
         payload = {
             "version": 1,
             "work_key": work_key,
@@ -113,7 +148,11 @@ class PregenerationStore:
                     "page_count": row["page_count"],
                     "status": row["status"],
                     "cache_key": row["cache_key"],
-                    "result_path": row["result_path"],
+                    "result_path": (
+                        f"{int(row['page_index']) + 1:02d}.webp"
+                        if row["status"] == "completed" and row["cache_key"]
+                        else ""
+                    ),
                     "error": row["error"],
                 }
                 for row in rows
@@ -124,13 +163,21 @@ class PregenerationStore:
         temporary.replace(directory / "manifest.json")
 
     # 方法说明：把单页原图写入章节源文件目录并返回哈希和路径。
-    def _persist_source(self, work_key: str, chapter_id: str, page_index: int, image_bytes: bytes) -> tuple[str, Path]:
+    def _persist_source(
+        self,
+        work_key: str,
+        chapter_id: str,
+        page_index: int,
+        image_bytes: bytes,
+        work_title: str = "",
+        chapter_title: str = "",
+    ) -> tuple[str, Path]:
         digest = hashlib.sha256(image_bytes).hexdigest()
-        directory = self.source_root / self._safe_component(work_key, "work") / self._safe_component(
-            chapter_id, "chapter"
-        )
+        directory = self.source_root / self._display_component(
+            work_title or work_key, "未命名作品"
+        ) / self._display_component(chapter_title or chapter_id, chapter_id)
         directory.mkdir(parents=True, exist_ok=True)
-        path = directory / f"page-{page_index + 1:04d}-{digest[:16]}.img"
+        path = directory / f"{page_index + 1:02d}-{digest[:16]}.img"
         valid_existing = False
         if path.is_file():
             try:
@@ -157,7 +204,15 @@ class PregenerationStore:
         priority: int,
         image_bytes: bytes,
     ) -> dict[str, Any]:
-        source_sha256, source_path = self._persist_source(work_key, chapter_id, page_index, image_bytes)
+        work_title = str(work_json.get("title") or work_key)
+        source_sha256, source_path = self._persist_source(
+            work_key,
+            chapter_id,
+            page_index,
+            image_bytes,
+            work_title,
+            chapter_title,
+        )
         options_text = json.dumps(options_json, ensure_ascii=False, sort_keys=True)
         dedupe_key = hashlib.sha256(
             "|".join(
@@ -201,7 +256,11 @@ class PregenerationStore:
                 )
             else:
                 job_id = row["job_id"]
-                reset = row["status"] in {"failed", "completed"}
+                completed_result_missing = (
+                    row["status"] == "completed"
+                    and not Path(row["result_path"]).is_file()
+                )
+                reset = row["status"] == "failed" or completed_result_missing
                 connection.execute(
                     """UPDATE jobs SET
                         chapter_title=?, page_count=?, source_path=?, source_sha256=?,
@@ -257,7 +316,49 @@ class PregenerationStore:
                         (time.time(), row["job_id"]),
                     )
                     repaired += 1
+        completed = []
+        with self._connect() as connection:
+            completed = connection.execute(
+                "SELECT * FROM jobs WHERE status='completed' ORDER BY work_key, chapter_id, mode, page_index"
+            ).fetchall()
+        groups: dict[tuple[str, str, str], list[sqlite3.Row]] = {}
+        for row in completed:
+            groups.setdefault((row["work_key"], row["chapter_id"], row["mode"]), []).append(row)
+        for (work_key, chapter_id, mode), group in groups.items():
+            for row in group:
+                if row["cache_key"] and cache.is_complete(row["cache_key"]):
+                    self._link_chapter_result(row, cache.result_path(row["cache_key"]), mode)
+            # 先确保所有结果文件已落盘，再原子发布 manifest，避免恢复中途出现半份章节缓存。
+            self._write_manifest(group, work_key, chapter_id, mode)
         return {"processing_reset": reset, "cache_requeued": repaired}
+
+    # 方法说明：按作品、章节、页码和完整处理选项查询已完成缓存。
+    def resolve_completed(
+        self,
+        work_key: str,
+        chapter_id: str,
+        page_index: int,
+        options_json: dict[str, Any],
+        cache: Any,
+    ) -> dict[str, Any] | None:
+        options_text = json.dumps(options_json, ensure_ascii=False, sort_keys=True)
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT * FROM jobs
+                WHERE work_key=? AND chapter_id=? AND page_index=?
+                  AND options_json=? AND status='completed'
+                ORDER BY completed_at DESC LIMIT 1""",
+                (work_key, chapter_id, page_index, options_text),
+            ).fetchone()
+            if row is None:
+                return None
+            if not row["cache_key"] or not cache.is_complete(row["cache_key"]):
+                connection.execute(
+                    "UPDATE jobs SET status='queued', cache_key='', result_path='', completed_at=NULL, updated_at=? WHERE job_id=?",
+                    (time.time(), row["job_id"]),
+                )
+                return None
+            return self._row_to_dict(row)
 
     # 方法说明：按优先级和入队序号领取一个任务并标记为处理中。
     def claim_next(self) -> dict[str, Any] | None:
@@ -331,14 +432,17 @@ class PregenerationStore:
 
     # 方法说明：将结果链接到章节档位目录，失败时退化为复制。
     def _link_chapter_result(self, row: sqlite3.Row, result_path: Path, mode: str) -> None:
-        directory = self.chapter_directory(row["work_key"], row["chapter_id"], mode)
-        target = directory / f"page-{int(row['page_index']) + 1:04d}-{row['cache_key'][:16]}.webp"
-        if target.exists():
-            return
+        work_title, chapter_title = self._row_display_names(row)
+        directory = self.chapter_directory(
+            row["work_key"], row["chapter_id"], mode, work_title, chapter_title
+        )
+        target = directory / f"{int(row['page_index']) + 1:02d}.webp"
+        temporary = directory / f".{target.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
         try:
-            os.link(result_path, target)
+            os.link(result_path, temporary)
         except OSError:
-            shutil.copy2(result_path, target)
+            shutil.copy2(result_path, temporary)
+        temporary.replace(target)
 
     # 方法说明：把 SQLite 行转换成不含内部连接对象的任务字典。
     @staticmethod
