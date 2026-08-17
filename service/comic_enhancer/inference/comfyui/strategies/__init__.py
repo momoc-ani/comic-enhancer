@@ -19,6 +19,10 @@ from .flux2_4b_source import (
     FLUX2_4B_SOURCE_PROCESSING_REVISION,
     Flux24BSourceModeStrategy,
 )
+from .flux2_4b_color import (
+    FLUX2_4B_COLOR_PROCESSING_REVISION,
+    Flux24BColorModeStrategy,
+)
 from .preset import PresetModeStrategy
 from .quality import QualityModeStrategy
 
@@ -38,6 +42,8 @@ __all__ = [
     "Flux29BLoraModeStrategy",
     "FLUX2_4B_SOURCE_PROCESSING_REVISION",
     "Flux24BSourceModeStrategy",
+    "FLUX2_4B_COLOR_PROCESSING_REVISION",
+    "Flux24BColorModeStrategy",
     "PresetModeStrategy",
     "QualityModeStrategy",
 ]

@@ -174,6 +174,10 @@ def test_new_flux2_acceptance_modes_are_valid():
         ProcessOptions(mode="flux2_4b_source").mode
         == ProcessingMode.FLUX2_4B_SOURCE
     )
+    assert (
+        ProcessOptions(mode="flux2_4b_color").mode
+        == ProcessingMode.FLUX2_4B_COLOR
+    )
 
 
 @pytest.mark.parametrize(
@@ -181,6 +185,7 @@ def test_new_flux2_acceptance_modes_are_valid():
     [
         ("flux2_9b_lora", "9B LoRA"),
         ("flux2_4b_source", "4B 结构稳定"),
+        ("flux2_4b_color", "4B 色彩增强"),
     ],
 )
 # 方法说明：验证新增档位默认关闭时在准备参考图之前明确返回 409。
@@ -217,6 +222,11 @@ def test_new_flux2_modes_reject_when_disabled(tmp_path, mode, detail):
             "flux2_4b_source",
             "flux2_4b_source_available",
             "flux2_4b_source_profile_ready",
+        ),
+        (
+            "flux2_4b_color",
+            "flux2_4b_color_available",
+            "flux2_4b_color_profile_ready",
         ),
     ],
 )

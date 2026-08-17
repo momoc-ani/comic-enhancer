@@ -49,6 +49,12 @@ COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
   --manifest benchmarks/works/exiled-reincarnated-heavy-knight.json \
   --mode flux2_4b_source --phase warm \
   --resource-ssh-host holopix@192.168.38.226
+
+COMIC_ENHANCER_TOKEN=... uv run python scripts/benchmark_api.py \
+  --base-url http://192.168.38.226:8765 \
+  --manifest benchmarks/works/exiled-reincarnated-heavy-knight.json \
+  --mode flux2_4b_color --phase warm \
+  --resource-ssh-host holopix@192.168.38.226
 ```
 
 结果写入 `runtime/benchmarks/api/`，包括每页输出和 `report.json`。报告不包含 Token。`phase` 必须显式区分冷启动、热模型和缓存，脚本不会为了制造冷启动数据而擅自重启模型服务：

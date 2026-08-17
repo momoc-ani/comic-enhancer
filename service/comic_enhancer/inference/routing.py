@@ -78,6 +78,13 @@ class RoutedInferenceBackend(InferenceBackend):
             and self.upscale_profile_ready()
         )
 
+    # 方法说明：检查 4B 色彩增强档及其 Real-CUGAN 二阶段是否可用。
+    def flux2_4b_color_profile_ready(self) -> bool:
+        return (
+            self.backend.flux2_4b_color_profile_ready()
+            and self.upscale_profile_ready()
+        )
+
     # 方法说明：检查 Real-CUGAN 放大档位是否可用。
     def upscale_profile_ready(self) -> bool:
         return self.upscaler.available()
@@ -98,6 +105,7 @@ class RoutedInferenceBackend(InferenceBackend):
             ProcessingMode.FLUX2_CHARACTER_LINEART,
             ProcessingMode.FLUX2_9B_LORA,
             ProcessingMode.FLUX2_4B_SOURCE,
+            ProcessingMode.FLUX2_4B_COLOR,
         }:
             return f"{revision}:post-upscale:{self.upscaler.cache_revision()}"
         return revision if self.name == self.backend.name else f"{self.name}:{revision}"
@@ -118,6 +126,7 @@ class RoutedInferenceBackend(InferenceBackend):
             ProcessingMode.FLUX2_CHARACTER_LINEART,
             ProcessingMode.FLUX2_9B_LORA,
             ProcessingMode.FLUX2_4B_SOURCE,
+            ProcessingMode.FLUX2_4B_COLOR,
         }:
             return self._process_flux2_pipeline(assets, output_path, options)
         return self.backend.process(assets, output_path, options)

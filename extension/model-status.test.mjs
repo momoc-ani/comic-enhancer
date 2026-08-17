@@ -154,3 +154,31 @@ test("shows new FLUX.2 acceptance modes independently", () => {
   assert.equal(actual.title, "9B LoRA 画质档 · 角色参考");
   assert.match(actual.detail, /FLUX\.2 Klein 9B LoRA · Real-CUGAN 2x/);
 });
+
+
+// 方法说明：验证 4B 色彩增强档按独立能力字段和真实模型展示。
+test("shows 4B color mode independently", () => {
+  const colorSettings = {
+    ...settings,
+    profile: "remote-flux2_4b_color",
+    mode: "flux2_4b_color",
+  };
+  const unavailable = describeModelTier(colorSettings, null, {
+    ready: true,
+    flux2_4b_color_available: false,
+  });
+  assert.equal(unavailable.title, "4B 色彩增强档");
+  assert.match(unavailable.detail, /未启用 4B 色彩增强档/);
+
+  const execution = buildModelExecution(
+    {
+      model_profile: "flux2-klein-4b-color+realcugan-se-2x",
+      reference_applied: true,
+      elapsed_ms: 6500,
+    },
+    colorSettings,
+  );
+  const actual = describeModelTier(colorSettings, execution);
+  assert.equal(actual.title, "4B 色彩增强档 · 角色参考");
+  assert.match(actual.detail, /FLUX\.2 Klein 4B 色彩增强 · Real-CUGAN 2x/);
+});

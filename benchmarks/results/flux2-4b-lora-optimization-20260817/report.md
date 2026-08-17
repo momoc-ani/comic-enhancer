@@ -189,5 +189,6 @@ LoRA `0.6` 一致性较强，但平均饱和色覆盖从无 LoRA 的 `35.17%` �
 - 默认画质优先：9B LoRA，4 步。
 - 需要更快且优先减少新增内容：4B LoRA，source latent，`denoise=0.65`，4 步。
 - 可直接导入的 4B source latent 工作流：`workflows/flux2-klein-4b-source-latent-colorize.json`。
+- 需要更高颜色覆盖且仍保留 source latent：使用独立 `flux2_4b_color` 档，LoRA 0.25；原 `flux2_4b_source` 档保持 LoRA 0.35 不变。
 - 4B 空 latent 只用于可接受少量重绘、强调色彩覆盖的实验场景。
 - Qwen Image Edit 2511、Anima Base 和 Anima 2.9B 均不进入默认路由。

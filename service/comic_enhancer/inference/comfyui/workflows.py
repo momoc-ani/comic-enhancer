@@ -46,6 +46,10 @@ class WorkflowLoader(ABC):
     def supports_flux2_4b_source(self) -> bool:
         return False
 
+    # 方法说明：判断工作流加载器是否支持 4B 色彩增强档。
+    def supports_flux2_4b_color(self) -> bool:
+        return False
+
     # 方法说明：加载指定档位对应的完整工作流。
     @abstractmethod
     def load(self, options: ProcessOptions) -> LoadedWorkflow:
@@ -72,6 +76,7 @@ class PresetWorkflowLoader(WorkflowLoader):
         flux2_character_lineart_workflow: Path | None = None,
         flux2_9b_lora_workflow: Path | None = None,
         flux2_4b_source_workflow: Path | None = None,
+        flux2_4b_color_workflow: Path | None = None,
     ):
         self.fast_workflow = fast_workflow.resolve()
         self.quality_workflow = quality_workflow.resolve()
@@ -101,6 +106,11 @@ class PresetWorkflowLoader(WorkflowLoader):
         self.flux2_4b_source_workflow = (
             flux2_4b_source_workflow.resolve()
             if flux2_4b_source_workflow is not None
+            else None
+        )
+        self.flux2_4b_color_workflow = (
+            flux2_4b_color_workflow.resolve()
+            if flux2_4b_color_workflow is not None
             else None
         )
 
@@ -140,6 +150,13 @@ class PresetWorkflowLoader(WorkflowLoader):
         return bool(
             self.flux2_4b_source_workflow
             and self.flux2_4b_source_workflow.is_file()
+        )
+
+    # 方法说明：判断 4B 色彩增强档完整工作流文件是否存在。
+    def supports_flux2_4b_color(self) -> bool:
+        return bool(
+            self.flux2_4b_color_workflow
+            and self.flux2_4b_color_workflow.is_file()
         )
 
     # 方法说明：加载指定处理档位对应的完整工作流。
@@ -202,5 +219,9 @@ class PresetWorkflowLoader(WorkflowLoader):
             if self.flux2_4b_source_workflow is None:
                 raise RuntimeError("FLUX.2 Klein 4B source latent 工作流未配置")
             return self.flux2_4b_source_workflow, "flux2-klein-4b-source"
+        if mode == "flux2_4b_color":
+            if self.flux2_4b_color_workflow is None:
+                raise RuntimeError("FLUX.2 Klein 4B 色彩增强工作流未配置")
+            return self.flux2_4b_color_workflow, "flux2-klein-4b-color"
         path = self.quality_workflow if mode == "quality" else self.fast_workflow
         return path, "sd15-colorize"

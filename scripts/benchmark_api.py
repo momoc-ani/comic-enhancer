@@ -581,6 +581,7 @@ def main() -> None:
             "flux2_quant",
             "flux2_9b_lora",
             "flux2_4b_source",
+            "flux2_4b_color",
         ),
         required=True,
     )

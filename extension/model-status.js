@@ -14,6 +14,9 @@ const PROFILE_LABELS = Object.freeze({
   "flux2-klein-4b-source": "FLUX.2 Klein 4B source latent",
   "flux2-klein-4b-source+realcugan-se-2x":
     "FLUX.2 Klein 4B source latent · Real-CUGAN 2x",
+  "flux2-klein-4b-color": "FLUX.2 Klein 4B 色彩增强",
+  "flux2-klein-4b-color+realcugan-se-2x":
+    "FLUX.2 Klein 4B 色彩增强 · Real-CUGAN 2x",
   passthrough: "开发透传后端",
 });
 
@@ -27,6 +30,7 @@ const MODE_TITLES = Object.freeze({
   flux2_character_lineart: "角色线稿保真档",
   flux2_9b_lora: "9B LoRA 画质档",
   flux2_4b_source: "4B 结构稳定档",
+  flux2_4b_color: "4B 色彩增强档",
 });
 
 // 方法说明：记录最近一次真实模型执行信息。
@@ -63,7 +67,9 @@ export function describeModelTier(settings, execution, capabilities = null) {
           (mode === "flux2_9b_lora" &&
             capabilities.flux2_9b_lora_available === false) ||
           (mode === "flux2_4b_source" &&
-            capabilities.flux2_4b_source_available === false)),
+            capabilities.flux2_4b_source_available === false) ||
+          (mode === "flux2_4b_color" &&
+            capabilities.flux2_4b_color_available === false)),
     );
     return {
       title: configuredTitle,
@@ -132,6 +138,7 @@ function normalizeMode(value) {
     "flux2_character_lineart",
     "flux2_9b_lora",
     "flux2_4b_source",
+    "flux2_4b_color",
   ].includes(value)
     ? value
     : "fast";

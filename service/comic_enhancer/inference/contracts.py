@@ -42,6 +42,10 @@ class InferenceBackend(ABC):
     def flux2_4b_source_profile_ready(self) -> bool:
         return False
 
+    # 方法说明：检查 FLUX.2 Klein 4B 色彩增强档是否可用。
+    def flux2_4b_color_profile_ready(self) -> bool:
+        return False
+
     # 方法说明：检查 Real-CUGAN 放大档位是否可用。
     def upscale_profile_ready(self) -> bool:
         return False

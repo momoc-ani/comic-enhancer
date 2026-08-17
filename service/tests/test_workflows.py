@@ -12,6 +12,7 @@ from comic_enhancer.inference.comfyui import (
     bind_io,
 )
 from comic_enhancer.inference.comfyui.strategies import (
+    FLUX2_4B_COLOR_PROCESSING_REVISION,
     FLUX2_4B_SOURCE_PROCESSING_REVISION,
     FLUX2_9B_LORA_PROCESSING_REVISION,
     FLUX2_PROCESSING_REVISION,
@@ -21,6 +22,7 @@ from comic_enhancer.inference.comfyui.strategies import (
     Flux2CharacterLineartModeStrategy,
     Flux2QuantModeStrategy,
     Flux24BSourceModeStrategy,
+    Flux24BColorModeStrategy,
     Flux29BLoraModeStrategy,
     QualityModeStrategy,
 )
@@ -108,6 +110,7 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
         "flux2_character_lineart": Flux2CharacterLineartModeStrategy,
         "flux2_9b_lora": Flux29BLoraModeStrategy,
         "flux2_4b_source": Flux24BSourceModeStrategy,
+        "flux2_4b_color": Flux24BColorModeStrategy,
     }
     for mode, strategy_type in expected.items():
         strategy = backend.mode_strategy(mode)
@@ -116,17 +119,28 @@ def test_comfyui_backend_registers_one_strategy_implementation_per_mode(tmp_path
 
 
 @pytest.mark.parametrize(
-    ("name", "model_profile", "revision"),
+    ("name", "mode", "loader_field", "model_profile", "revision"),
     [
         (
             "flux2-klein-9b-lora-colorize.json",
+            "flux2_9b_lora",
+            "flux2_9b_lora_workflow",
             "flux2-klein-9b-lora",
             FLUX2_9B_LORA_PROCESSING_REVISION,
         ),
         (
             "flux2-klein-4b-source-latent-colorize.json",
+            "flux2_4b_source",
+            "flux2_4b_source_workflow",
             "flux2-klein-4b-source",
             FLUX2_4B_SOURCE_PROCESSING_REVISION,
+        ),
+        (
+            "flux2-klein-4b-color-colorize.json",
+            "flux2_4b_color",
+            "flux2_4b_color_workflow",
+            "flux2-klein-4b-color",
+            FLUX2_4B_COLOR_PROCESSING_REVISION,
         ),
     ],
 )
@@ -135,6 +149,8 @@ def test_new_flux2_modes_use_independent_workflow_contracts(
     tmp_path,
     monkeypatch,
     name,
+    mode,
+    loader_field,
     model_profile,
     revision,
 ):
@@ -146,13 +162,8 @@ def test_new_flux2_modes_use_independent_workflow_contracts(
     loader_options = {
         "fast_workflow": fast,
         "quality_workflow": quality,
-        (
-            "flux2_9b_lora_workflow"
-            if "9b" in name
-            else "flux2_4b_source_workflow"
-        ): workflow_path,
+        loader_field: workflow_path,
     }
-    mode = "flux2_9b_lora" if "9b" in name else "flux2_4b_source"
     backend_options = {
         f"{mode}_enabled": True,
         f"{mode}_workflow": workflow_path,
@@ -232,6 +243,29 @@ def test_shipped_flux2_4b_source_workflow_has_structure_contract():
     assert workflow["30"]["inputs"]["images"] == ["29", 0]
     assert workflow["29"]["inputs"]["width"] == ["28", 0]
     assert workflow["29"]["inputs"]["height"] == ["28", 1]
+
+
+# 方法说明：验证 4B 色彩增强工作流只调整 LoRA 强度且保留结构参数。
+def test_shipped_flux2_4b_color_workflow_has_color_contract():
+    workflow = json.loads(
+        (
+            PROJECT_ROOT / "workflows" / "flux2-klein-4b-color-colorize.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert workflow["31"]["inputs"]["lora_name"] == (
+        "f2k_4B_consist_20260314.safetensors"
+    )
+    assert workflow["31"]["inputs"]["strength_model"] == 0.25
+    assert workflow["26"]["inputs"]["latent_image"] == ["11", 0]
+    assert workflow["26"]["inputs"]["steps"] == 4
+    assert workflow["26"]["inputs"]["cfg"] == 1.3
+    assert workflow["26"]["inputs"]["denoise"] == 0.65
+    assert [workflow[str(node)]["inputs"]["megapixels"] for node in (14, 18, 22)] == [
+        0.15,
+        0.15,
+        0.15,
+    ]
 
 
 # 方法说明：验证线稿保真工作流保持 0.85MP 四步生成并在末端恢复原图尺寸。
