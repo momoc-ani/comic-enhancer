@@ -16,3 +16,4 @@ extension/*.zip
 config/settings.json
 
 /test/waifu2x-ncnn-vulkan/
+/.tmp/
