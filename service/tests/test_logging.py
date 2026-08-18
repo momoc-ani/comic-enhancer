@@ -7,7 +7,7 @@ from PIL import Image
 
 from comic_enhancer.api.app import _configure_application_logging
 from comic_enhancer.inference.comfyui.transport import ComfyUITransport
-from comic_enhancer.logging_utils import log_operation
+from comic_enhancer.logging_utils import exception_log_fields, log_operation
 
 
 class FakeResponse:
@@ -135,6 +135,21 @@ def png_bytes(size=(8, 12)) -> bytes:
     stream = BytesIO()
     Image.new("RGB", size, (80, 120, 200)).save(stream, format="PNG")
     return stream.getvalue()
+
+
+# 方法说明：验证本地系统异常只展开 errno、系统信息和文件路径。
+def test_exception_log_fields_exposes_safe_os_error_context():
+    missing = FileNotFoundError(2, "No such file or directory", "/tmp/missing")
+
+    assert exception_log_fields(missing) == {
+        "error": "FileNotFoundError",
+        "error_errno": 2,
+        "error_detail": "No such file or directory",
+        "error_path": "/tmp/missing",
+    }
+    assert exception_log_fields(RuntimeError("protected detail")) == {
+        "error": "RuntimeError"
+    }
 
 
 # 方法说明：验证统一日志包含功能、参数、结果和关键耗时并自动脱敏。

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..domain import ProcessOptions, WorkIdentity
-from ..logging_utils import log_operation
+from ..logging_utils import exception_log_fields, log_operation
 from .page_processing import process_page_with_references
 
 
@@ -153,7 +153,7 @@ class PregenerationService:
                 parameters=parameters,
                 result={
                     "status": failed["status"],
-                    "error": type(error).__name__,
+                    **exception_log_fields(error),
                 },
                 elapsed_ms=(time.perf_counter() - started) * 1000,
             )

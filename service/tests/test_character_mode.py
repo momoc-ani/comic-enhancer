@@ -2,6 +2,7 @@ from io import BytesIO
 import json
 import logging
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from PIL import Image
 import pytest
@@ -42,6 +43,26 @@ def png_bytes(color="white", size=(16, 24)) -> bytes:
     output = BytesIO()
     Image.new("RGB", size, color).save(output, format="PNG")
     return output.getvalue()
+
+
+# 方法说明：验证角色档案查询结束后显式关闭 SQLite 连接。
+def test_character_repository_closes_connection_after_profile_query(
+    tmp_path,
+    monkeypatch,
+):
+    repository = CharacterLibraryRepository(tmp_path / "library")
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    connection.execute.return_value.fetchone.return_value = None
+
+    # 方法说明：返回可追踪关闭调用的测试连接。
+    def connect():
+        return connection
+
+    monkeypatch.setattr(repository, "_connect", connect)
+
+    assert repository.load_profile("missing") is None
+    connection.close.assert_called_once_with()
 
 
 class FakeAnalyzer:

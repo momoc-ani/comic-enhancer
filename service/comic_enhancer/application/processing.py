@@ -11,7 +11,7 @@ from pathlib import Path
 from ..character_library import CharacterReferenceAsset
 from ..domain import ProcessOptions, ProcessResult, WorkIdentity
 from ..inference import InferenceAssets, InferenceBackend
-from ..logging_utils import log_operation
+from ..logging_utils import exception_log_fields, log_operation
 from ..storage import ResultCache
 
 
@@ -107,7 +107,7 @@ class ProcessingService:
                 result={
                     "status": "failed",
                     "stage": "cache_revision",
-                    "error": type(error).__name__,
+                    **exception_log_fields(error),
                 },
                 elapsed_ms=(time.perf_counter() - started) * 1000,
             )
@@ -166,7 +166,7 @@ class ProcessingService:
                         result={
                             "status": "failed",
                             "stage": "inference",
-                            "error": type(error).__name__,
+                            **exception_log_fields(error),
                         },
                         elapsed_ms=(time.perf_counter() - started) * 1000,
                     )

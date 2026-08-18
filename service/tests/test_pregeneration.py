@@ -5,6 +5,7 @@ import asyncio
 import json
 from pathlib import Path
 import time
+from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -35,6 +36,23 @@ def enqueue_values(priority: int, page_index: int = 0) -> dict:
         "priority": priority,
         "image_bytes": png_bytes("white" if page_index == 0 else "black"),
     }
+
+
+# 方法说明：验证任务状态查询结束后显式关闭 SQLite 连接。
+def test_store_closes_connection_after_status_query(tmp_path: Path, monkeypatch):
+    store = PregenerationStore(tmp_path / "pregeneration")
+    connection = MagicMock()
+    connection.__enter__.return_value = connection
+    connection.execute.return_value.fetchall.return_value = []
+
+    # 方法说明：返回可追踪关闭调用的测试连接。
+    def connect():
+        return connection
+
+    monkeypatch.setattr(store, "_connect", connect)
+
+    assert store.list_work("copy_manga:missing") == []
+    connection.close.assert_called_once_with()
 
 
 # 方法说明：验证 SQLite 队列按优先级领取并在重启时恢复处理中任务。

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from array import array
+from collections.abc import Iterator
+from contextlib import contextmanager
 import hashlib
 import json
 from pathlib import Path
@@ -25,7 +27,7 @@ class CharacterLibraryRepository:
 
     # 方法说明：创建角色档案、页面计划和向量表。
     def _initialize(self) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS character_profiles (
@@ -62,6 +64,16 @@ class CharacterLibraryRepository:
         connection.row_factory = sqlite3.Row
         return connection
 
+    # 方法说明：提供保留事务语义且退出时必定关闭的 SQLite 连接。
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        connection = self._connect()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     # 方法说明：保存规范化参考图并返回其内容摘要。
     def store_reference(self, reference: CharacterReferenceAsset) -> str:
         normalized = normalize_reference_image(reference.image_bytes)
@@ -76,7 +88,7 @@ class CharacterLibraryRepository:
 
     # 方法说明：读取指定键的缓存角色档案。
     def load_profile(self, cache_key: str) -> CharacterProfile | None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 "SELECT profile_json FROM character_profiles WHERE cache_key = ?",
                 (cache_key,),
@@ -85,7 +97,7 @@ class CharacterLibraryRepository:
 
     # 方法说明：原子写入角色档案缓存。
     def save_profile(self, cache_key: str, profile: CharacterProfile) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 INSERT OR REPLACE INTO character_profiles
@@ -104,7 +116,7 @@ class CharacterLibraryRepository:
 
     # 方法说明：读取指定键的缓存页面角色计划。
     def load_page_plan(self, cache_key: str) -> CharacterPageAnalysis | None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 "SELECT plan_json FROM page_plans WHERE cache_key = ?",
                 (cache_key,),
@@ -118,7 +130,7 @@ class CharacterLibraryRepository:
         work_key: str,
         plan: CharacterPageAnalysis,
     ) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 INSERT OR REPLACE INTO page_plans
@@ -139,7 +151,7 @@ class CharacterLibraryRepository:
         vector: tuple[float, ...],
     ) -> None:
         payload = array("f", vector).tobytes()
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 INSERT OR REPLACE INTO character_embeddings
@@ -162,7 +174,7 @@ class CharacterLibraryRepository:
         work_key: str,
         revision: str,
     ) -> list[tuple[str, str, tuple[float, ...]]]:
-        with self._connect() as connection:
+        with self._connection() as connection:
             rows = connection.execute(
                 """
                 SELECT character_id, reference_sha256, dimensions, vector

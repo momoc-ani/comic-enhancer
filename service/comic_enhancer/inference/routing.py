@@ -8,7 +8,7 @@ import time
 from PIL import Image
 
 from ..domain import ProcessingMode, ProcessOptions
-from ..logging_utils import log_operation
+from ..logging_utils import exception_log_fields, log_operation
 from .contracts import (
     InferenceAssets,
     InferenceBackend,
@@ -160,15 +160,18 @@ class RoutedInferenceBackend(InferenceBackend):
         if not self.upscale_profile_ready():
             raise RuntimeError("FLUX.2 二阶段放大资源未就绪")
         stage_path = output_path.with_name(f"{output_path.stem}.flux2-stage.webp")
-        stage = "flux2"
+        stage = "flux2_inference"
         primary_elapsed_ms = 0
         secondary_elapsed_ms = 0
+        primary_started: float | None = None
+        secondary_started: float | None = None
         try:
             primary_started = time.perf_counter()
             primary = self.backend.process(assets, stage_path, options)
             primary_elapsed_ms = round(
                 (time.perf_counter() - primary_started) * 1000
             )
+            stage = "flux2_stage_output"
             stage_bytes = stage_path.read_bytes()
             with Image.open(BytesIO(stage_bytes)) as stage_image:
                 stage_size = stage_image.size
@@ -250,6 +253,11 @@ class RoutedInferenceBackend(InferenceBackend):
             )
             return outcome
         except Exception as error:
+            failed_at = time.perf_counter()
+            if stage == "flux2_inference" and primary_started is not None:
+                primary_elapsed_ms = round((failed_at - primary_started) * 1000)
+            elif stage == "realcugan" and secondary_started is not None:
+                secondary_elapsed_ms = round((failed_at - secondary_started) * 1000)
             log_operation(
                 logger,
                 logging.ERROR,
@@ -261,7 +269,7 @@ class RoutedInferenceBackend(InferenceBackend):
                 result={
                     "status": "failed",
                     "stage": stage,
-                    "error": type(error).__name__,
+                    **exception_log_fields(error),
                     "primary_elapsed_ms": primary_elapsed_ms,
                     "secondary_elapsed_ms": secondary_elapsed_ms,
                 },

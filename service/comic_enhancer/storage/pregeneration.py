@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -28,7 +30,7 @@ class PregenerationStore:
 
     # 方法说明：创建任务表和保证排序稳定的索引。
     def _initialize(self) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.executescript(
                 """
                 PRAGMA journal_mode=WAL;
@@ -81,6 +83,16 @@ class PregenerationStore:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA busy_timeout=30000")
         return connection
+
+    # 方法说明：提供保留事务语义且退出时必定关闭的 SQLite 连接。
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        connection = self._connect()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     # 方法说明：保留中文标题并移除文件系统不允许的字符。
     @staticmethod
@@ -220,7 +232,7 @@ class PregenerationStore:
             ).encode("utf-8")
         ).hexdigest()
         now = time.time()
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 "SELECT * FROM jobs WHERE dedupe_key = ?", (dedupe_key,)
             ).fetchone()
@@ -292,7 +304,7 @@ class PregenerationStore:
     def recover(self, cache: Any) -> dict[str, int]:
         reset = 0
         repaired = 0
-        with self._connect() as connection:
+        with self._connection() as connection:
             rows = connection.execute("SELECT * FROM jobs").fetchall()
             for row in rows:
                 source_exists = Path(row["source_path"]).is_file()
@@ -317,7 +329,7 @@ class PregenerationStore:
                     )
                     repaired += 1
         completed = []
-        with self._connect() as connection:
+        with self._connection() as connection:
             completed = connection.execute(
                 "SELECT * FROM jobs WHERE status='completed' ORDER BY work_key, chapter_id, mode, page_index"
             ).fetchall()
@@ -342,7 +354,7 @@ class PregenerationStore:
         cache: Any,
     ) -> dict[str, Any] | None:
         options_text = json.dumps(options_json, ensure_ascii=False, sort_keys=True)
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 """SELECT * FROM jobs
                 WHERE work_key=? AND chapter_id=? AND page_index=?
@@ -362,7 +374,7 @@ class PregenerationStore:
 
     # 方法说明：按优先级和入队序号领取一个任务并标记为处理中。
     def claim_next(self) -> dict[str, Any] | None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT * FROM jobs WHERE status='queued' ORDER BY priority ASC, sequence ASC LIMIT 1"
@@ -379,7 +391,7 @@ class PregenerationStore:
 
     # 方法说明：将成功推理结果写入任务并刷新章节 manifest。
     def complete(self, job_id: str, cache_key: str, result_path: Path, mode: str) -> dict[str, Any]:
-        with self._connect() as connection:
+        with self._connection() as connection:
             now = time.time()
             connection.execute(
                 "UPDATE jobs SET status='completed', cache_key=?, result_path=?, error='', completed_at=?, updated_at=? WHERE job_id=?",
@@ -397,7 +409,7 @@ class PregenerationStore:
 
     # 方法说明：记录失败原因并按重试次数决定继续排队还是终止。
     def fail(self, job_id: str, error: str, max_attempts: int = 3) -> dict[str, Any]:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
             if row is None:
                 raise KeyError(job_id)
@@ -417,13 +429,13 @@ class PregenerationStore:
 
     # 方法说明：查询单个任务的持久化状态。
     def get(self, job_id: str) -> dict[str, Any] | None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
             return self._row_to_dict(row) if row else None
 
     # 方法说明：按作品查询章节预生成状态，供插件恢复和进度展示。
     def list_work(self, work_key: str) -> list[dict[str, Any]]:
-        with self._connect() as connection:
+        with self._connection() as connection:
             rows = connection.execute(
                 "SELECT * FROM jobs WHERE work_key=? ORDER BY chapter_id, page_index",
                 (work_key,),

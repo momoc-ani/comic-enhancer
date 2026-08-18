@@ -14,6 +14,21 @@ SENSITIVE_KEYS = {
 }
 
 
+# 方法说明：提取适合日志记录的异常类型及本地系统错误信息。
+def exception_log_fields(error: BaseException) -> dict[str, Any]:
+    fields: dict[str, Any] = {"error": type(error).__name__}
+    if not isinstance(error, OSError):
+        return fields
+    if error.errno is not None:
+        fields["error_errno"] = error.errno
+    fields["error_detail"] = error.strerror or str(error)
+    if error.filename is not None:
+        fields["error_path"] = str(error.filename)
+    if error.filename2 is not None:
+        fields["error_path_secondary"] = str(error.filename2)
+    return fields
+
+
 # 方法说明：按统一格式记录安全日志，并允许显式字段保留完整文本。
 def log_operation(
     target_logger: logging.Logger,

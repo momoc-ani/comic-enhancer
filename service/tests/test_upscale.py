@@ -1,5 +1,6 @@
 import subprocess
 from io import BytesIO
+import logging
 from pathlib import Path
 
 import pytest
@@ -298,6 +299,41 @@ def test_flux2_upscale_failure_does_not_fallback(tmp_path, monkeypatch):
             ProcessOptions(mode="flux2"),
         )
     assert calls == ["flux2"]
+
+
+# 方法说明：验证 FLUX.2 首阶段文件错误会记录准确步骤和安全路径。
+def test_flux2_inference_failure_logs_stage_and_missing_path(
+    tmp_path,
+    monkeypatch,
+    caplog,
+):
+    backend = PassthroughBackend()
+    upscaler = create_realcugan_resources(tmp_path / "resource" / "realcugan")
+    routed = RoutedInferenceBackend(backend, upscaler)
+    missing_path = tmp_path / "missing-workflow.json"
+
+    # 方法说明：模拟 FLUX.2 首阶段读取缺失工作流。
+    def fail_flux2(*_args, **_kwargs):
+        raise FileNotFoundError(2, "No such file or directory", missing_path)
+
+    monkeypatch.setattr(backend, "process", fail_flux2)
+
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(FileNotFoundError):
+            routed.process(
+                InferenceAssets(image_bytes=png_bytes((8, 12))),
+                tmp_path / "failed.webp",
+                ProcessOptions(mode="flux2"),
+            )
+
+    message = next(
+        record.getMessage()
+        for record in caplog.records
+        if "功能=FLUX.2二阶段处理" in record.getMessage()
+    )
+    assert '"stage":"flux2_inference"' in message
+    assert '"error":"FileNotFoundError"' in message
+    assert f'"error_path":"{missing_path}"' in message
 
 
 # 方法说明：验证未启用放大资源时处理接口明确拒绝请求。
