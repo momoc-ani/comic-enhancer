@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from io import BytesIO
+from math import ceil, floor
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageFilter, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps, ImageStat
 
 
 CHARACTER_CHROMA_GAIN = 1.8
@@ -202,6 +203,96 @@ def protect_source_ink_only(
         )
     )
     return Image.composite(source, colorized, dark_mask)
+
+
+# 方法说明：仅在 OCR 多边形内回贴原图文字笔画，避免覆盖框内生成背景。
+def protect_source_text_regions(
+    source_bytes: bytes,
+    generated: Image.Image,
+    regions: tuple[tuple[tuple[float, float], ...], ...],
+    *,
+    padding: int = 4,
+    feather_radius: float = 1.5,
+) -> Image.Image:
+    if padding < 0:
+        raise ValueError("padding must not be negative")
+    if feather_radius < 0:
+        raise ValueError("feather_radius must not be negative")
+    with Image.open(BytesIO(source_bytes)) as source_file:
+        source = ImageOps.exif_transpose(source_file).convert("RGB")
+    source_width, source_height = source.size
+    generated = generated.convert("RGB")
+    if not regions:
+        return generated
+
+    scale_x = generated.width / source_width
+    scale_y = generated.height / source_height
+    source = source.resize(generated.size, Image.Resampling.LANCZOS)
+    source_y = source.convert("YCbCr").getchannel("Y")
+    mask = Image.new("L", generated.size, 0)
+    for region in regions:
+        if len(region) < 3:
+            continue
+        polygon = [
+            (point_x * scale_x, point_y * scale_y)
+            for point_x, point_y in region
+        ]
+        left = max(0, floor(min(point[0] for point in polygon)) - padding)
+        top = max(0, floor(min(point[1] for point in polygon)) - padding)
+        right = min(
+            generated.width,
+            ceil(max(point[0] for point in polygon)) + padding + 1,
+        )
+        bottom = min(
+            generated.height,
+            ceil(max(point[1] for point in polygon)) + padding + 1,
+        )
+        if right <= left or bottom <= top:
+            continue
+        region_box = (left, top, right, bottom)
+        local_polygon = [
+            (point_x - left, point_y - top)
+            for point_x, point_y in polygon
+        ]
+        region_mask = Image.new("L", (right - left, bottom - top), 0)
+        ImageDraw.Draw(region_mask).polygon(local_polygon, fill=255)
+        if padding:
+            region_mask = region_mask.filter(
+                ImageFilter.MaxFilter(padding * 2 + 1)
+            )
+        source_region = source_y.crop(region_box)
+        ink_mask = _text_ink_mask(source_region, region_mask)
+        protected_region = ImageChops.multiply(region_mask, ink_mask)
+        mask.paste(
+            ImageChops.lighter(mask.crop(region_box), protected_region),
+            (left, top),
+        )
+    if feather_radius:
+        mask = mask.filter(ImageFilter.GaussianBlur(feather_radius))
+    return Image.composite(source, generated, mask)
+
+
+# 方法说明：按文字框背景明暗选择黑字或白字笔画蒙版。
+def _text_ink_mask(
+    source_luminance: Image.Image,
+    region_mask: Image.Image,
+) -> Image.Image:
+    median = ImageStat.Stat(source_luminance, mask=region_mask).median[0]
+    if median < 128:
+        return source_luminance.point(
+            lambda value: (
+                255
+                if value >= 192
+                else max(0, min(255, round((value - 96) * 255 / 96)))
+            )
+        )
+    return source_luminance.point(
+        lambda value: (
+            255
+            if value <= 96
+            else max(0, min(255, round((192 - value) * 255 / 96)))
+        )
+    )
 
 
 # 方法说明：保留原图高频结构，并融合生成图低频明度和色彩层次。

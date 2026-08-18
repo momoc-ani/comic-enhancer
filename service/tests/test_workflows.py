@@ -1,6 +1,7 @@
 import json
 from io import BytesIO
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from PIL import Image
@@ -10,6 +11,9 @@ from comic_enhancer.inference.comfyui import (
     ComfyUIBackend,
     PresetWorkflowLoader,
     bind_io,
+)
+from comic_enhancer.inference.comfyui.ocr_text_processing import (
+    OCR_TEXT_PROCESSING_REVISION,
 )
 from comic_enhancer.inference.comfyui.strategies import (
     FLUX2_4B_COLOR_PROCESSING_REVISION,
@@ -30,6 +34,7 @@ from comic_enhancer.inference.comfyui.strategies import (
     Flux29BFastLowresModeStrategy,
     QualityModeStrategy,
 )
+from comic_enhancer.inference.comfyui.text_regions import OCRDetection
 from comic_enhancer.models import ProcessOptions
 
 
@@ -553,6 +558,128 @@ def test_flux2_backend_uses_three_references_and_restores_source_size(
         pixel = result.getpixel((4, 6))
         assert pixel[0] > 180
         assert pixel[2] > 90
+
+
+# 方法说明：验证 9B 快速档会在保存前按 OCR 多边形恢复原图文字。
+def test_flux2_9b_fast_restores_only_ocr_text_regions(tmp_path, monkeypatch):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    flux2_fast = tmp_path / "flux2-fast.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    write_workflow(
+        flux2_fast,
+        marker="flux2-fast",
+        load_nodes=4,
+        source_size_output=True,
+    )
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=PresetWorkflowLoader(
+            fast_workflow=fast,
+            quality_workflow=quality,
+            flux2_9b_fast_workflow=flux2_fast,
+        ),
+        flux2_9b_fast_enabled=True,
+        flux2_9b_fast_workflow=flux2_fast,
+    )
+    strategy = backend.mode_strategy("flux2_9b_fast")
+    monkeypatch.setattr(strategy, "available", lambda: True)
+    strategy.image_processor.detector = Mock()
+    strategy.image_processor.detector.detect.return_value = OCRDetection(
+        regions=(((18.0, 28.0), (30.0, 28.0), (30.0, 40.0), (18.0, 40.0)),),
+        cache_hit=False,
+        initialized_now=True,
+        initialization_ms=12.0,
+        inference_ms=24.0,
+    )
+
+    source = Image.new("RGB", (64, 96), "white")
+    for y in range(28, 41):
+        for x in range(18, 31):
+            source.putpixel((x, y), (0, 0, 0))
+    generated = Image.new("RGB", source.size, (40, 130, 220))
+    monkeypatch.setattr(backend.transport, "run", lambda *_args, **_kwargs: generated)
+    assets = InferenceAssets(
+        image_bytes=png_bytes(source),
+        character_references={
+            "character": png_bytes(Image.new("RGB", (8, 12), "red"))
+        },
+    )
+    output_path = tmp_path / "flux2-fast.webp"
+
+    outcome = backend.process(
+        assets,
+        output_path,
+        ProcessOptions(mode="flux2_9b_fast"),
+    )
+
+    assert outcome.model_profile == "flux2-klein-9b-fast"
+    assert OCR_TEXT_PROCESSING_REVISION in backend.cache_revision(
+        ProcessOptions(mode="flux2_9b_fast"),
+        assets,
+    )
+    with Image.open(output_path) as result:
+        assert result.size == source.size
+        assert max(result.getpixel((24, 34))) < 30
+        outside = result.getpixel((52, 70))
+        assert outside[2] > outside[0] + 100
+
+
+# 方法说明：验证 9B 快速档 OCR 失败时保留原 FLUX.2 生成图。
+def test_flux2_9b_fast_ocr_failure_falls_back_to_generated(
+    tmp_path,
+    monkeypatch,
+    caplog,
+):
+    fast = tmp_path / "fast.json"
+    quality = tmp_path / "quality.json"
+    flux2_fast = tmp_path / "flux2-fast.json"
+    write_workflow(fast, marker="fast")
+    write_workflow(quality, marker="quality")
+    write_workflow(
+        flux2_fast,
+        marker="flux2-fast",
+        load_nodes=4,
+        source_size_output=True,
+    )
+    backend = ComfyUIBackend(
+        base_url="http://comfy",
+        timeout_seconds=10,
+        poll_interval_seconds=0.01,
+        workflow_loader=PresetWorkflowLoader(
+            fast_workflow=fast,
+            quality_workflow=quality,
+            flux2_9b_fast_workflow=flux2_fast,
+        ),
+        flux2_9b_fast_enabled=True,
+        flux2_9b_fast_workflow=flux2_fast,
+    )
+    strategy = backend.mode_strategy("flux2_9b_fast")
+    strategy.image_processor.detector = Mock()
+    strategy.image_processor.detector.detect.side_effect = RuntimeError("OCR failed")
+    monkeypatch.setattr(strategy, "available", lambda: True)
+    generated = Image.new("RGB", (32, 48), (40, 130, 220))
+    monkeypatch.setattr(backend.transport, "run", lambda *_args, **_kwargs: generated)
+    assets = InferenceAssets(
+        image_bytes=png_bytes(Image.new("RGB", generated.size, "white")),
+        character_references={
+            "character": png_bytes(Image.new("RGB", (8, 12), "red"))
+        },
+    )
+    output_path = tmp_path / "ocr-fallback.webp"
+
+    backend.process(
+        assets,
+        output_path,
+        ProcessOptions(mode="flux2_9b_fast"),
+    )
+    with Image.open(output_path) as result:
+        pixel = result.getpixel((16, 24))
+        assert pixel[2] > pixel[0] + 100
+    assert "fallback_generated" in caplog.text
 
 
 # 方法说明：验证加载器会选择快速档和质量档的独立完整工作流。

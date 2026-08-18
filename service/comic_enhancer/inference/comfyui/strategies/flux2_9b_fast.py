@@ -36,7 +36,9 @@ class Flux29BFastModeStrategy(Flux2StrategyBase):
             options,
             assets,
         )
-        return f"{revision}:{FLUX2_9B_FAST_PROCESSING_REVISION}"
+        return self._with_image_processing_revision(
+            f"{revision}:{FLUX2_9B_FAST_PROCESSING_REVISION}"
+        )
 
     # 方法说明：执行 9B FP8 快速计算工作流并输出原图尺寸的一阶段结果。
     def process(

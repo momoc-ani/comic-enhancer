@@ -16,6 +16,7 @@ from .image_ops import (
     protect_source_structure,
     restore_geometry,
 )
+from .ocr_text_processing import OCRTextProtectionProcessor
 from .strategies import (
     ComfyUIModeStrategy,
     FastModeStrategy,
@@ -141,6 +142,7 @@ class ComfyUIBackend(InferenceBackend):
                 enabled=flux2_9b_fast_enabled,
                 workflow_path=flux2_9b_fast_workflow,
                 reference_limit=flux2_reference_limit,
+                image_processor=OCRTextProtectionProcessor(),
                 **shared_options,
             ),
             Flux29BFastLowresModeStrategy(

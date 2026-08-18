@@ -2,14 +2,18 @@
 name = "comic-enhancer"
 version = "0.1.0"
 description = "Local-first manga colorization and enhancement service"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 license = { text = "Apache-2.0" }
 dependencies = [
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
+  "numpy>=2.2.6,<2.3",
+  "onnxruntime>=1.23.2,<1.24",
+  "opencv-python>=4.12.0.88,<4.13",
   "pillow>=11,<12",
   "pydantic>=2.10,<3",
   "python-multipart>=0.0.20,<1",
+  "rapidocr-onnxruntime>=1.4.4,<2",
   "uvicorn[standard]>=0.34,<1",
 ]
 

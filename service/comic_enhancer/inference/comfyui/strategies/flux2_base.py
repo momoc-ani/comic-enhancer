@@ -3,14 +3,19 @@ from __future__ import annotations
 from io import BytesIO
 import logging
 from pathlib import Path
+from time import perf_counter
 import uuid
 
 from PIL import Image, ImageOps
 
 from ....domain import ProcessOptions
-from ....logging_utils import log_operation
+from ....logging_utils import exception_log_fields, log_operation
 from ...contracts import InferenceAssets, InferenceOutcome
 from ..image_ops import restore_geometry, save_output
+from ..workflow_processing import (
+    WorkflowImagePreparation,
+    WorkflowImageProcessor,
+)
 from .base import (
     ComfyUIModeStrategy,
     reference_cache_revision,
@@ -38,12 +43,20 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
         enabled: bool,
         workflow_path: Path | None,
         reference_limit: int,
+        image_processor: WorkflowImageProcessor | None = None,
         **options,
     ):
         super().__init__(**options)
         self.enabled = enabled
         self.workflow_path = workflow_path
         self.reference_limit = max(1, min(3, reference_limit))
+        self.image_processor = image_processor
+
+    # 方法说明：将可插拔图像加工策略版本加入当前档位缓存标识。
+    def _with_image_processing_revision(self, revision: str) -> str:
+        if self.image_processor is None:
+            return revision
+        return f"{revision}:{self.image_processor.cache_revision}"
 
     # 方法说明：生成包含工作流、参考图和 FLUX.2 处理版本的缓存标识。
     def _flux2_cache_revision(
@@ -66,7 +79,90 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
                 f"{FLUX2_SOURCE_SIZE_OUTPUT_REVISION}"
             )
         )
-        return f"{revision}:{suffix}"
+        return self._with_image_processing_revision(f"{revision}:{suffix}")
+
+    # 方法说明：安全执行工作流前图像分析，失败时禁用本页后处理。
+    def _prepare_image_processing(
+        self,
+        assets: InferenceAssets,
+        options: ProcessOptions,
+    ) -> tuple[WorkflowImagePreparation, float] | None:
+        if self.image_processor is None:
+            return None
+        started = perf_counter()
+        try:
+            preparation = self.image_processor.prepare(assets.image_bytes)
+        except Exception as error:
+            log_operation(
+                logger,
+                logging.WARNING,
+                feature="FLUX.2工作流图像加工",
+                parameters={
+                    "mode": str(options.mode),
+                    "processor": self.image_processor.name,
+                    "phase": "before_workflow",
+                },
+                result={
+                    "status": "fallback_generated",
+                    **exception_log_fields(error),
+                },
+                elapsed_ms=(perf_counter() - started) * 1000,
+            )
+            return None
+        return preparation, (perf_counter() - started) * 1000
+
+    # 方法说明：安全执行工作流后图像加工，失败时保留原生成图。
+    def _apply_image_processing(
+        self,
+        assets: InferenceAssets,
+        generated: Image.Image,
+        options: ProcessOptions,
+        prepared: tuple[WorkflowImagePreparation, float] | None,
+    ) -> Image.Image:
+        if self.image_processor is None or prepared is None:
+            return generated
+        preparation, preparation_ms = prepared
+        started = perf_counter()
+        try:
+            outcome = self.image_processor.process(
+                assets.image_bytes,
+                generated,
+                preparation,
+            )
+        except Exception as error:
+            log_operation(
+                logger,
+                logging.WARNING,
+                feature="FLUX.2工作流图像加工",
+                parameters={
+                    "mode": str(options.mode),
+                    "processor": self.image_processor.name,
+                    "phase": "after_workflow",
+                },
+                result={
+                    "status": "fallback_generated",
+                    **preparation.metrics,
+                    **exception_log_fields(error),
+                },
+                elapsed_ms=preparation_ms + (perf_counter() - started) * 1000,
+            )
+            return generated
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="FLUX.2工作流图像加工",
+            parameters={
+                "mode": str(options.mode),
+                "processor": self.image_processor.name,
+            },
+            result={
+                "status": outcome.status,
+                **preparation.metrics,
+                **outcome.metrics,
+            },
+            elapsed_ms=preparation_ms + (perf_counter() - started) * 1000,
+        )
+        return outcome.image
 
     # 方法说明：执行当前 FLUX.2 工作流并按档位完成独立的输出尺寸处理。
     def _process_flux2(
@@ -84,6 +180,7 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
             raise RuntimeError("FLUX.2 需要至少一张角色参考图")
         if self.workflow_path is None:
             raise RuntimeError("FLUX.2 工作流未配置")
+        prepared_image_processing = self._prepare_image_processing(assets, options)
         loaded_workflow = self.workflow_loader.load(options)
         workflow_revision = self.workflow_loader.revision(options)
         log_operation(
@@ -141,6 +238,12 @@ class Flux2StrategyBase(ComfyUIModeStrategy):
             )
             output_scale = FLUX2_OUTPUT_SCALE
             geometry_handler = "service-pillow"
+        generated = self._apply_image_processing(
+            assets,
+            generated,
+            options,
+            prepared_image_processing,
+        )
         save_output(generated, output_path)
         log_operation(
             logger,

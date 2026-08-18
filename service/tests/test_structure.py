@@ -8,6 +8,7 @@ from comic_enhancer.inference.comfyui.image_ops import (
     protect_source_ink_only,
     protect_source_luminance_and_ink,
     protect_source_structure,
+    protect_source_text_regions,
     restore_geometry,
 )
 
@@ -74,6 +75,72 @@ def test_ink_only_protection_keeps_generated_bright_background():
     assert max(ink_pixel) <= 16
     assert background_pixel[2] > background_pixel[0]
     assert background_pixel[2] > 180
+
+
+# 方法说明：验证 OCR 保护只恢复文字框内的原图像素且保持输出尺寸不变。
+def test_text_region_protection_only_restores_detected_polygon():
+    source = Image.new("RGB", (20, 20), "white")
+    for y in range(7, 13):
+        for x in range(7, 13):
+            source.putpixel((x, y), (0, 0, 0))
+    generated = Image.new("RGB", (40, 40), (40, 130, 220))
+    regions = (((6.0, 6.0), (14.0, 6.0), (14.0, 14.0), (6.0, 14.0)),)
+
+    result = protect_source_text_regions(
+        image_bytes(source),
+        generated,
+        regions,
+        padding=2,
+        feather_radius=1.0,
+    )
+
+    assert result.size == generated.size
+    assert max(result.getpixel((20, 20))) <= 8
+    assert result.getpixel((2, 2)) == generated.getpixel((2, 2))
+
+
+# 方法说明：验证 OCR 文字框内的非笔画背景仍使用生成图像素。
+def test_text_region_protection_does_not_restore_box_background():
+    source = Image.new("RGB", (20, 20), "white")
+    for y in range(6, 15):
+        source.putpixel((10, y), (0, 0, 0))
+    generated = Image.new("RGB", (40, 40), (40, 130, 220))
+    regions = (((5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 15.0)),)
+
+    result = protect_source_text_regions(
+        image_bytes(source),
+        generated,
+        regions,
+        padding=2,
+        feather_radius=1.0,
+    )
+
+    ink = result.getpixel((20, 20))
+    assert max(ink) < 100
+    background = result.getpixel((12, 12))
+    assert background[2] > background[0] + 150
+
+
+# 方法说明：验证深色背景上的浅色文字也能按文字框恢复。
+def test_text_region_protection_restores_light_strokes_on_dark_background():
+    source = Image.new("RGB", (20, 20), (10, 10, 10))
+    for y in range(6, 15):
+        source.putpixel((10, y), (250, 250, 250))
+    generated = Image.new("RGB", (40, 40), (40, 130, 220))
+    regions = (((5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 15.0)),)
+
+    result = protect_source_text_regions(
+        image_bytes(source),
+        generated,
+        regions,
+        padding=2,
+        feather_radius=1.0,
+    )
+
+    ink = result.getpixel((20, 20))
+    assert min(ink) > 150
+    background = result.getpixel((12, 12))
+    assert background[2] > background[0] + 150
 
 
 # 方法说明：验证高频结构保护不会丢失墨线，同时允许生成图低频提亮背景。
