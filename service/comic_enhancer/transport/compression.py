@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from starlette.datastructures import MutableHeaders
+from starlette.datastructures import Headers, MutableHeaders
 
 
 ASGIMessage = dict[str, object]
@@ -117,7 +117,7 @@ class GZipRequestMiddleware:
 
 
 class GZipResponseMiddleware:
-    """为 FileResponse 的 ASGI path-send 分支提供可选 gzip 压缩。"""
+    """只压缩 JSON 和确有收益的图片文件响应。"""
 
     def __init__(self, app, *, minimum_size: int = 256, compresslevel: int = 6) -> None:
         """初始化响应文件大小和 gzip 压缩级别阈值。"""
@@ -125,7 +125,7 @@ class GZipResponseMiddleware:
         self.minimum_size = minimum_size
         self.compresslevel = compresslevel
 
-    # 方法说明：捕获 path-send 文件消息，在不改变文件字节语义的前提下压缩响应。
+    # 方法说明：捕获 JSON 与 path-send 文件消息，在压缩有效时替换响应体。
     async def __call__(
         self,
         scope: dict[str, object],
@@ -140,23 +140,48 @@ class GZipResponseMiddleware:
             return
 
         initial: ASGIMessage | None = None
+        body_chunks: list[bytes] = []
 
         # 方法说明：拦截 FileResponse 的 path-send 消息并在必要时转换为压缩字节。
         async def send_response(message: ASGIMessage) -> None:
-            nonlocal initial
+            nonlocal initial, body_chunks
             message_type = message.get("type")
             if message_type == "http.response.start":
                 initial = message
+                body_chunks = []
                 return
             if initial is None:
                 await send(message)
                 return
             if message_type == "http.response.body":
+                headers = Headers(raw=initial.get("headers", []))
+                content_type = headers.get("content-type", "").lower()
+                if not content_type.startswith("application/json"):
+                    await send(initial)
+                    initial = None
+                    await send(message)
+                    return
+                body_chunks.append(bytes(message.get("body", b"")))
+                if message.get("more_body", False):
+                    return
+                await _send_json_response(
+                    initial,
+                    b"".join(body_chunks),
+                    send,
+                    minimum_size=self.minimum_size,
+                    compresslevel=self.compresslevel,
+                )
+                initial = None
+                body_chunks = []
+                return
+            if message_type != "http.response.pathsend":
                 await send(initial)
                 initial = None
                 await send(message)
                 return
-            if message_type != "http.response.pathsend":
+
+            headers = Headers(raw=initial.get("headers", []))
+            if not headers.get("content-type", "").lower().startswith("image/"):
                 await send(initial)
                 initial = None
                 await send(message)
@@ -193,6 +218,46 @@ class GZipResponseMiddleware:
             await send({"type": "http.response.body", "body": compressed, "more_body": False})
 
         await self.app(scope, receive, send_response)
+
+
+# 方法说明：按压缩后大小决定 JSON 是否使用 gzip，避免小响应反而变大。
+async def _send_json_response(
+    initial: ASGIMessage,
+    body: bytes,
+    send: ASGISend,
+    *,
+    minimum_size: int,
+    compresslevel: int,
+) -> None:
+    """发送 JSON 响应；压缩无收益时保持原始字节。"""
+    headers = Headers(raw=initial.get("headers", []))
+    if (
+        len(body) < minimum_size
+        or headers.get("content-encoding")
+        or int(initial.get("status", 200)) in {204, 304}
+    ):
+        await send(initial)
+        await send({"type": "http.response.body", "body": body, "more_body": False})
+        return
+
+    compressed = gzip_compress(body, compresslevel=compresslevel)
+    if len(compressed) >= len(body):
+        await send(initial)
+        await send({"type": "http.response.body", "body": body, "more_body": False})
+        return
+
+    response_headers = MutableHeaders(raw=initial["headers"])
+    response_headers.add_vary_header("Accept-Encoding")
+    response_headers["Content-Encoding"] = "gzip"
+    response_headers["Content-Length"] = str(len(compressed))
+    await send(initial)
+    await send(
+        {
+            "type": "http.response.body",
+            "body": compressed,
+            "more_body": False,
+        }
+    )
 
 
 # 方法说明：读取 ASGI 请求体并限制压缩字节总量。

@@ -147,3 +147,46 @@ def test_path_send_image_response_is_compressed(tmp_path):
     headers = dict(sent[0]["headers"])
     assert headers[b"content-encoding"] == b"gzip"
     assert gzip.decompress(sent[1]["body"]) == image_bytes
+
+
+# 方法说明：验证图片 gzip 无收益时保留 FileResponse 的原始 path-send。
+def test_path_send_image_skips_gzip_without_gain(tmp_path):
+    image_path = tmp_path / "already-compressed.webp"
+    image_bytes = bytes(range(256))
+    image_path.write_bytes(image_bytes)
+    sent: list[dict] = []
+
+    async def app(_scope, _receive, send):
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [
+                    (b"content-type", b"image/webp"),
+                    (b"content-length", str(len(image_bytes)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.pathsend", "path": str(image_path)})
+
+    async def receive():
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        sent.append(message)
+
+    asyncio.run(
+        GZipResponseMiddleware(app)(
+            {"type": "http", "headers": [(b"accept-encoding", b"gzip")]},
+            receive,
+            send,
+        )
+    )
+
+    assert [message["type"] for message in sent] == [
+        "http.response.start",
+        "http.response.pathsend",
+    ]
+    headers = dict(sent[0]["headers"])
+    assert b"content-encoding" not in headers
+    assert sent[1]["path"] == str(image_path)

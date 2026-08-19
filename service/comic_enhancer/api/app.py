@@ -6,7 +6,6 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.gzip import GZipMiddleware
 
 from .. import __version__
 from ..character_library import CharacterLibraryBuilder, CharacterLibraryRepository
@@ -304,7 +303,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "X-Comic-Enhancer-Transport",
         ],
     )
-    app.add_middleware(GZipMiddleware, minimum_size=256, compresslevel=6)
     app.add_middleware(GZipRequestMiddleware)
     app.add_middleware(GZipResponseMiddleware, minimum_size=256, compresslevel=6)
     app.include_router(system_router)
