@@ -67,6 +67,7 @@ class Settings:
     qwen_vl_max_image_edge: int = 2048
     character_min_confidence: float = 0.75
     character_library_root: Path | None = None
+    source_cache_max_bytes: int = 20 * 1024 * 1024 * 1024
     comfyui_workflow_fast: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-fast.json"
     comfyui_workflow_quality: Path = PROJECT_ROOT / "workflows" / "sd15-colorize-quality.json"
     runtime_dir: Path = PROJECT_ROOT / "runtime"
@@ -240,6 +241,7 @@ def load_settings() -> Settings:
             float,
         ),
         "COMIC_ENHANCER_CHARACTER_LIBRARY_ROOT": ("character_library_root", Path),
+        "COMIC_ENHANCER_SOURCE_CACHE_MAX_BYTES": ("source_cache_max_bytes", int),
         "COMIC_ENHANCER_WORKFLOW_FAST": ("comfyui_workflow_fast", Path),
         "COMIC_ENHANCER_WORKFLOW_QUALITY": ("comfyui_workflow_quality", Path),
     }

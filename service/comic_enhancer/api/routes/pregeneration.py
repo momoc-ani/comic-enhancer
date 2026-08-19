@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from pathlib import Path
 import time
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 
 from ...domain import (
     ChapterIdentity,
@@ -13,6 +15,7 @@ from ...domain import (
     ProcessingMode,
     ProcessOptions,
     ProcessResult,
+    SourceCacheResult,
     WorkIdentity,
 )
 from ...logging_utils import log_operation
@@ -84,11 +87,17 @@ async def enqueue_page(
         work = context.identities.enrich(WorkIdentity.model_validate(json.loads(work_json)))
         chapter = ChapterIdentity.model_validate(json.loads(chapter_json))
         options = ProcessOptions.model_validate(json.loads(options_json))
+        if options.mode == ProcessingMode.FLUX2_CHARACTER_LINEART:
+            options = options.model_copy(update={"comfyui_direct_output": False})
     except (json.JSONDecodeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     if not chapter.chapter_id:
         raise HTTPException(status_code=422, detail="chapter_id is required")
     _ensure_profile_available(context, options.mode)
+    mode_revision = await asyncio.to_thread(
+        context.processor.base_cache_revision,
+        options,
+    )
     if not 1 <= page_count <= 5000:
         raise HTTPException(status_code=422, detail="page_count must be between 1 and 5000")
     image_bytes = await image.read()
@@ -106,6 +115,7 @@ async def enqueue_page(
         options_json=options.model_dump(mode="json"),
         priority=max(0, min(int(priority), 10000)),
         image_bytes=image_bytes,
+        mode_revision=mode_revision,
     )
     log_operation(
         logger,
@@ -144,6 +154,8 @@ async def resolve_cache(
         work = context.identities.enrich(WorkIdentity.model_validate(json.loads(work_json)))
         chapter = ChapterIdentity.model_validate(json.loads(chapter_json))
         options = ProcessOptions.model_validate(json.loads(options_json))
+        if options.mode == ProcessingMode.FLUX2_CHARACTER_LINEART:
+            options = options.model_copy(update={"comfyui_direct_output": False})
     except (json.JSONDecodeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     job = await asyncio.to_thread(
@@ -153,6 +165,10 @@ async def resolve_cache(
         options.page_index,
         options.model_dump(mode="json"),
         context.cache,
+        mode_revision=await asyncio.to_thread(
+            context.processor.base_cache_revision,
+            options,
+        ),
     )
     if job is None:
         log_operation(
@@ -203,6 +219,96 @@ async def resolve_cache(
         elapsed_ms=(time.perf_counter() - started) * 1000,
     )
     return result
+
+
+@router.post(
+    "/v1/pregeneration/source/resolve",
+    response_model=SourceCacheResult,
+)
+async def resolve_source(
+    request: Request,
+    work_json: str = Form(),
+    chapter_json: str = Form(),
+    page_index: int = Form(ge=0),
+    _: None = Depends(authorize),
+) -> SourceCacheResult:
+    """按作品、章节和页码返回可读取的本地原图缓存。"""
+    started = time.perf_counter()
+    try:
+        context = get_context(request)
+        work = context.identities.enrich(
+            WorkIdentity.model_validate(json.loads(work_json))
+        )
+        chapter = ChapterIdentity.model_validate(json.loads(chapter_json))
+    except (json.JSONDecodeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    if not chapter.chapter_id:
+        raise HTTPException(status_code=422, detail="chapter_id is required")
+    entry = await asyncio.to_thread(
+        context.pregeneration_store.resolve_source,
+        work.key,
+        chapter.chapter_id,
+        page_index,
+    )
+    parameters = {
+        "work_key": work.key,
+        "chapter_id": chapter.chapter_id,
+        "page_index": page_index,
+        "page_number": page_index + 1,
+    }
+    if entry is None:
+        log_operation(
+            logger,
+            logging.INFO,
+            feature="章节原图缓存查询",
+            parameters=parameters,
+            result={"status": "miss"},
+            elapsed_ms=(time.perf_counter() - started) * 1000,
+        )
+        raise HTTPException(status_code=404, detail="chapter source cache not found")
+    result = SourceCacheResult(
+        source_id=str(entry["source_id"]),
+        work_key=work.key,
+        chapter_id=chapter.chapter_id,
+        page_index=page_index,
+        source_sha256=str(entry["source_sha256"]),
+        source_bytes=int(entry["source_bytes"]),
+        media_type=str(entry["media_type"]),
+        source_url=f"/v1/pregeneration/source/{entry['source_id']}",
+    )
+    log_operation(
+        logger,
+        logging.INFO,
+        feature="章节原图缓存查询",
+        parameters=parameters,
+        result={
+            "status": "hit",
+            "source_sha256": result.source_sha256[:12],
+            "bytes": result.source_bytes,
+        },
+        elapsed_ms=(time.perf_counter() - started) * 1000,
+    )
+    return result
+
+
+@router.get("/v1/pregeneration/source/{source_id}")
+async def source_image(
+    request: Request,
+    source_id: str,
+    _: None = Depends(authorize),
+) -> FileResponse:
+    """鉴权并返回完整性校验通过的本地章节原图。"""
+    entry = await asyncio.to_thread(
+        get_context(request).pregeneration_store.get_source,
+        source_id,
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="chapter source not found")
+    return FileResponse(
+        Path(str(entry["source_path"])),
+        media_type=str(entry["media_type"]),
+        filename=f"page-{int(entry['page_index']) + 1}.img",
+    )
 
 
 @router.get("/v1/pregeneration/jobs/{job_id}", response_model=PregenerationJob)

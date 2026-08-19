@@ -129,6 +129,68 @@ test("decrypts ordered CopyManga chapter image URLs", async () => {
   ]);
 });
 
+// 方法说明：验证未产生自然尺寸的懒加载图片仍能按内容区域被发现。
+test("discovers unloaded chapter images with real lazy-load URLs", async () => {
+  const image = {
+    dataset: { src: "/images/unloaded.webp" },
+    naturalWidth: 0,
+    naturalHeight: 0,
+    complete: false,
+    classList: { contains() { return false; } },
+    // 方法说明：模拟尚未设置尺寸属性的懒加载图片。
+    getAttribute() { return null; },
+    // 方法说明：模拟尚未参与布局的图片。
+    getBoundingClientRect() { return { width: 0, height: 0 }; },
+  };
+  const document = {
+    // 方法说明：只在漫画内容容器选择器中返回测试图片。
+    querySelectorAll(selector) {
+      return selector === ".comicContent-list img" ? [image] : [];
+    },
+  };
+  const adapter = new CopyMangaAdapter(
+    document,
+    new URL("https://www.mangacopy.com/comic/work/chapter/current"),
+  );
+
+  assert.deepEqual(await adapter.getChapterImageUrls(), [
+    "https://www.mangacopy.com/images/unloaded.webp",
+  ]);
+});
+
+// 方法说明：验证章节容器中的站点广告图不会被误识别为漫画页。
+test("filters CopyManga advertisement images from chapter pages", async () => {
+  const comicImage = {
+    dataset: { src: "/images/page-1.webp" },
+    naturalWidth: 1125,
+    naturalHeight: 1600,
+    complete: true,
+    classList: { contains() { return false; } },
+    getAttribute() { return null; },
+    getBoundingClientRect() { return { width: 1125, height: 1600 }; },
+  };
+  const adImage = {
+    dataset: { src: "https://s3.mangafunb.fun/static/ads/tsugumomo800_130.jpg" },
+    naturalWidth: 800,
+    naturalHeight: 130,
+    complete: true,
+    classList: { contains() { return false; } },
+    getAttribute() { return null; },
+    getBoundingClientRect() { return { width: 800, height: 130 }; },
+  };
+  const document = {
+    querySelectorAll(selector) {
+      return selector === ".comicContent-list img" ? [comicImage, adImage] : [];
+    },
+  };
+  const adapter = new CopyMangaAdapter(
+    document,
+    new URL("https://www.mangacopy.com/comic/work/chapter/current"),
+  );
+
+  assert.deepEqual(adapter.findImages(), [comicImage]);
+});
+
 // 方法说明：验证密文与密钥可以位于不同的章节内联脚本中。
 test("extracts CopyManga encrypted chapter fields", () => {
   const document = scriptDocument(
@@ -282,6 +344,51 @@ test("loads multiple following CopyManga chapters", async () => {
   assert.deepEqual(chapters.map((entry) => entry.chapter.chapter_id), [
     "chapter-2",
     "chapter-3",
+  ]);
+});
+
+// 方法说明：验证下一话首次返回空图片列表时会短暂重试并恢复。
+test("retries a following chapter when images are temporarily missing", async () => {
+  const emptyDocument = {
+    title: "chapter-2",
+    // 方法说明：返回章节标题且没有下一话链接。
+    querySelector(selector) {
+      if (selector.includes("[class*='chapter']")) {
+        return { textContent: "chapter-2" };
+      }
+      return null;
+    },
+    // 方法说明：模拟暂时缺少图片和章节脚本的响应。
+    querySelectorAll() { return []; },
+  };
+  const readyDocument = chapterDocument("chapter-2");
+  globalThis.DOMParser = class {
+    // 方法说明：根据响应正文返回空页面或完整章节。
+    parseFromString(value) {
+      return value === "empty" ? emptyDocument : readyDocument;
+    }
+  };
+  let attempts = 0;
+  globalThis.fetch = async (url) => {
+    attempts += 1;
+    return {
+      ok: true,
+      status: 200,
+      url: String(url),
+      // 方法说明：第一次缺图，第二次返回完整章节。
+      async text() { return attempts === 1 ? "empty" : "ready"; },
+    };
+  };
+  const adapter = new CopyMangaAdapter(
+    chapterDocument("chapter-1", "/comic/work/chapter/chapter-2"),
+    new URL("https://www.mangacopy.com/comic/work/chapter/chapter-1"),
+  );
+
+  const chapters = await adapter.loadFollowingChapters(1);
+
+  assert.equal(attempts, 2);
+  assert.deepEqual(chapters[0].imageUrls, [
+    "https://www.mangacopy.com/images/chapter-2.webp",
   ]);
 });
 

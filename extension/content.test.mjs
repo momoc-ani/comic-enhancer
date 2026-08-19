@@ -60,6 +60,7 @@ class FakeImage {
     this.className = "lazyload";
     this.parentElement = null;
     this.alt = "";
+    this.style = {};
   }
 
   // 方法说明：读取测试图片的指定属性。
@@ -100,12 +101,12 @@ test("result overlay sizing overrides generic page image sizing", () => {
   assert.match(css, /visibility:\s*hidden/);
   assert.match(css, /width:\s*100%\s*!important/);
   assert.match(css, /height:\s*100%\s*!important/);
-  assert.match(css, /object-fit:\s*contain\s*!important/);
+  assert.match(css, /background-size:\s*100%\s*100%/);
   assert.doesNotMatch(css, /object-fit:\s*fill/);
 });
 
-// 方法说明：验证设置变化后会使用真实懒加载地址重试失败页面。
-test("retries failed pages with the real lazy-load URL after settings change", async () => {
+// 方法说明：验证重试仍使用真实地址，并可用本地原图替换网页懒加载内容。
+test("retries failed pages and displays a cached local source image", async () => {
   const image = new FakeImage();
   const runtimeListeners = [];
   const processUrls = [];
@@ -168,6 +169,7 @@ test("retries failed pages with the real lazy-load URL after settings change", a
             ok: true,
             result: {
               image_data_url: "data:image/webp;base64,AA==",
+              source_image_data_url: "data:image/webp;base64,AQ==",
               reference_applied: false,
               processed_panels: 0,
               model_profile: "sd15-colorize",
@@ -212,7 +214,11 @@ test("retries failed pages with the real lazy-load URL after settings change", a
     "https://img.example/page-1.webp",
     "https://img.example/page-1.webp",
   ]);
-  assert.equal(image.src, "https://img.example/page-1.webp");
+  assert.equal(image.src, "data:image/webp;base64,AQ==");
+  assert.equal(
+    image.dataset.comicEnhancerSourceUrl,
+    "https://img.example/page-1.webp",
+  );
   assert.equal(image.dataset.src, undefined);
   assert.equal(image.classList.contains("lazyload"), false);
   assert.equal(image.parentElement.dataset.state, "completed");

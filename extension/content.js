@@ -21,6 +21,7 @@
   const minimumRetainedPagesAhead = 3;
   const currentChapterPrefetchPriority = 100;
   const nextChapterPrefetchPriorityStep = 100;
+  const prefetchRetryDelays = [500, 1500];
 
   class Scheduler {
     // 方法说明：初始化当前对象及其运行状态。
@@ -29,6 +30,9 @@
       this.work = work;
       this.chapter = chapter;
       this.prefetchVersion = -1;
+      this.prefetchInFlightVersion = -1;
+      this.prefetchScheduleAttempt = 0;
+      this.discoverQueued = false;
       this.observer = new IntersectionObserver(
         (observations) => {
           for (const observation of observations) {
@@ -59,16 +63,34 @@
 
     // 方法说明：为当前设置版本启动当前话和多话后续章节的顺序缓存预热。
     startOrderedPrefetch() {
-      if (this.prefetchVersion === settingsVersion) return;
+      if (
+        this.prefetchVersion === settingsVersion ||
+        this.prefetchInFlightVersion === settingsVersion
+      ) return;
       const version = settingsVersion;
-      this.prefetchVersion = version;
-      this.scheduleOrderedPrefetch(version).catch((error) => {
-        if (version !== settingsVersion) return;
-        console.warn(
-          "Comic Enhancer 顺序预生成失败:",
-          error instanceof Error ? error.message : String(error),
-        );
-      });
+      const attempt = this.prefetchScheduleAttempt;
+      this.prefetchInFlightVersion = version;
+      this.scheduleOrderedPrefetch(version).then(
+        () => {
+          if (version !== settingsVersion) return;
+          this.prefetchVersion = version;
+          this.prefetchInFlightVersion = -1;
+          this.prefetchScheduleAttempt = 0;
+        },
+        (error) => {
+          if (version !== settingsVersion) return;
+          this.prefetchInFlightVersion = -1;
+          console.warn(
+            "Comic Enhancer 顺序预生成失败:",
+            error instanceof Error ? error.message : String(error),
+          );
+          if (attempt >= prefetchRetryDelays.length) return;
+          this.prefetchScheduleAttempt = attempt + 1;
+          setTimeout(() => {
+            if (version === settingsVersion) this.startOrderedPrefetch();
+          }, prefetchRetryDelays[attempt]);
+        },
+      );
     }
 
     // 方法说明：先上传当前话，再按章节距离和页码上传后续章节。
@@ -170,6 +192,8 @@
       warmedUrls.clear();
       queuedPrefetchUrls.clear();
       this.prefetchVersion = -1;
+      this.prefetchInFlightVersion = -1;
+      this.prefetchScheduleAttempt = 0;
       for (const image of this.adapter.findImages()) {
         const entry = entriesByImage.get(image);
         if (!entry) continue;
@@ -189,6 +213,8 @@
       warmedUrls.clear();
       queuedPrefetchUrls.clear();
       this.prefetchVersion = -1;
+      this.prefetchInFlightVersion = -1;
+      this.prefetchScheduleAttempt = 0;
     }
 
     // 方法说明：按优先级将漫画页加入处理队列。
@@ -218,7 +244,15 @@
     }
 
     // 方法说明：将无页面覆盖层的缓存预热任务加入统一优先级队列。
-    enqueuePrefetch(imageUrl, index, chapter, priority, chapterScope, pageCount) {
+    enqueuePrefetch(
+      imageUrl,
+      index,
+      chapter,
+      priority,
+      chapterScope,
+      pageCount,
+      attempt = 0,
+    ) {
       if (!imageUrl || warmedUrls.has(imageUrl) || queuedPrefetchUrls.has(imageUrl)) return;
       const displayEntry = entriesByUrl.get(imageUrl);
       if (displayEntry && displayEntry.state !== "idle") return;
@@ -231,6 +265,7 @@
         chapter,
         chapterScope,
         pageCount,
+        attempt,
         sequence: sequence++,
         settingsVersion,
       });
@@ -281,7 +316,11 @@
       try {
         const response = await this.requestProcessing(task, false);
         if (task.settingsVersion !== settingsVersion) return;
-        await ensureSourceImageLoaded(task.image, task.imageUrl);
+        await ensureSourceImageLoaded(
+          task.image,
+          task.imageUrl,
+          response.result.source_image_data_url,
+        );
         if (task.settingsVersion !== settingsVersion) return;
         await showResult(task.image, response.result);
         entry.state = "completed";
@@ -334,6 +373,25 @@
         }
       } catch (error) {
         if (task.settingsVersion !== settingsVersion) return;
+        const retryable =
+          task.attempt < prefetchRetryDelays.length &&
+          isRetryablePrefetchError(error);
+        if (retryable) {
+          queuedPrefetchUrls.delete(task.imageUrl);
+          const retryDelay = prefetchRetryDelays[task.attempt];
+          setTimeout(() => {
+            if (task.settingsVersion !== settingsVersion) return;
+            this.enqueuePrefetch(
+              task.imageUrl,
+              task.index,
+              task.chapter,
+              task.priority,
+              task.chapterScope,
+              task.pageCount,
+              task.attempt + 1,
+            );
+          }, retryDelay);
+        }
         logScheduler(
           "页面预热失败",
           chapterLogParameters(this, task, { 页码: task.index + 1 }),
@@ -411,16 +469,45 @@
     );
   }
 
+  // 方法说明：判断预生成错误是否值得进行有限次重试。
+  function isRetryablePrefetchError(error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/设置已变化|401|403|409|422|缺少漫画图片域名权限/.test(message)) {
+      return false;
+    }
+    return /网络|fetch|超时|下一话|图片|50[234]|429|503/i.test(message);
+  }
+
+  // 方法说明：合并懒加载属性变化触发的重复页面扫描。
+  function scheduleDiscover() {
+    if (!scheduler || scheduler.discoverQueued) return;
+    scheduler.discoverQueued = true;
+    queueMicrotask(() => {
+      scheduler.discoverQueued = false;
+      scheduler?.discover();
+    });
+  }
+
   // 方法说明：确保真实漫画原图已经加载完成。
-  async function ensureSourceImageLoaded(image, imageUrl) {
+  async function ensureSourceImageLoaded(image, imageUrl, localImageUrl = "") {
+    const displayUrl = localImageUrl || imageUrl;
     const currentUrl = image.currentSrc || image.src;
-    if (
+    const hasRemoteSource =
       currentUrl === imageUrl &&
+      image.complete &&
+      image.naturalWidth > 0 &&
+      image.naturalHeight > 0;
+    if (hasRemoteSource) {
+      image.dataset.comicEnhancerSourceUrl = imageUrl;
+      return;
+    }
+    if (
+      currentUrl === displayUrl &&
       image.complete &&
       image.naturalWidth > 0 &&
       image.naturalHeight > 0
     ) {
-      pinSourceImage(image, imageUrl);
+      pinSourceImage(image, imageUrl, displayUrl);
       return;
     }
     await new Promise((resolve, reject) => {
@@ -438,12 +525,13 @@
         complete(() => reject(new Error("漫画原图加载失败"))),
         { once: true },
       );
-      pinSourceImage(image, imageUrl);
+      pinSourceImage(image, imageUrl, displayUrl);
     });
   }
 
   // 方法说明：移除懒加载属性并固定真实原图地址。
-  function pinSourceImage(image, imageUrl) {
+  function pinSourceImage(image, imageUrl, displayUrl = imageUrl) {
+    image.dataset.comicEnhancerSourceUrl = imageUrl;
     for (const attribute of [
       "data-src",
       "data-original",
@@ -454,37 +542,46 @@
       image.removeAttribute(attribute);
     }
     image.classList.remove("lazyload", "lazyloading");
-    image.src = imageUrl;
+    image.src = displayUrl;
   }
 
   // 方法说明：加载增强结果并覆盖显示在原图上方。
   async function showResult(image, result) {
     const wrapper = ensureWrapper(image);
     let overlay = wrapper.querySelector(":scope > .comic-enhancer-result");
-    if (!overlay) {
-      overlay = document.createElement("img");
+    if (!overlay || overlay.tagName === "IMG") {
+      overlay?.remove?.();
+      overlay = document.createElement("span");
       overlay.className = "comic-enhancer-result";
-      overlay.alt = image.alt || "Enhanced manga page";
+      overlay.role = "img";
+      overlay.ariaLabel = image.alt || "Enhanced manga page";
       wrapper.append(overlay);
     }
     // 结果图先完成加载，再切换可见状态，避免站点 lazy-load/响应式样式
     // 在加载中途改变叠加层的几何尺寸。
+    const loader = document.createElement("img");
     const loaded = new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error("增强结果加载超时")), 15000);
-      overlay.addEventListener("load", () => {
+      loader.addEventListener("load", () => {
         clearTimeout(timeout);
         resolve();
       }, { once: true });
-      overlay.addEventListener("error", () => {
+      loader.addEventListener("error", () => {
         clearTimeout(timeout);
         reject(new Error("增强结果加载失败"));
       }, { once: true });
     });
-    overlay.src = result.image_data_url;
+    loader.src = result.image_data_url;
+    await loaded;
+    overlay.style.backgroundImage = `url(${JSON.stringify(result.image_data_url)})`;
+    overlay.style.backgroundSize = "100% 100%";
+    overlay.style.backgroundPosition = "center";
+    overlay.style.backgroundRepeat = "no-repeat";
+    overlay.dataset.resultWidth = String(loader.naturalWidth || 0);
+    overlay.dataset.resultHeight = String(loader.naturalHeight || 0);
     overlay.dataset.modelProfile = result.model_profile || "unknown";
     overlay.dataset.referenceApplied = String(result.reference_applied);
     overlay.dataset.processedPanels = String(result.processed_panels || 0);
-    await loaded;
     markState(image, "completed");
   }
 
@@ -532,9 +629,22 @@
     scheduler.discover();
     scheduler.startOrderedPrefetch();
 
-    const mutations = new MutationObserver(() => scheduler.discover());
-    mutations.observe(document.documentElement, { childList: true, subtree: true });
-    window.addEventListener("scroll", () => scheduler.discover(), { passive: true });
+    const mutations = new MutationObserver(scheduleDiscover);
+    mutations.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: [
+        "src",
+        "srcset",
+        "data-src",
+        "data-original",
+        "data-lazy-src",
+        "data-srcset",
+        "class",
+      ],
+    });
+    window.addEventListener("scroll", scheduleDiscover, { passive: true });
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

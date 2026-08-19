@@ -546,6 +546,7 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.setenv("COMIC_ENHANCER_CONFIG", str(config))
+    monkeypatch.setenv("COMIC_ENHANCER_SOURCE_CACHE_MAX_BYTES", "12345")
 
     settings = load_settings()
 
@@ -556,6 +557,7 @@ def test_json_config_converts_path_fields(tmp_path, monkeypatch):
     assert settings.realcugan_enabled is False
     assert settings.flux2_reference_limit == 3
     assert settings.work_identity_index == Path("identities.json")
+    assert settings.source_cache_max_bytes == 12345
 
 
 # 方法说明：验证外部 ID 精确匹配的元数据具有角色优先级。

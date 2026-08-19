@@ -202,7 +202,10 @@ def _create_context(settings: Settings) -> ApplicationContext:
         inference_gate=PriorityInferenceGate(settings.max_parallel_inference),
     )
     reference_bank = ReferenceBankService(references, identities)
-    pregeneration_store = PregenerationStore(settings.runtime_dir / "pregeneration")
+    pregeneration_store = PregenerationStore(
+        settings.runtime_dir / "pregeneration",
+        source_cache_max_bytes=settings.source_cache_max_bytes,
+    )
     pregeneration = PregenerationService(
         store=pregeneration_store,
         cache=cache,

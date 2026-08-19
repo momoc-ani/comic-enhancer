@@ -69,6 +69,10 @@ class ProcessingService:
     semaphore: asyncio.Semaphore
     inference_gate: PriorityInferenceGate | None = None
 
+    # 方法说明：返回不包含运行时角色参考图的当前档位缓存修订。
+    def base_cache_revision(self, options: ProcessOptions) -> str:
+        return self.backend.cache_revision(options, None)
+
     async def process(
         self,
         image_bytes: bytes,

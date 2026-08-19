@@ -14,6 +14,7 @@ from .processing import (
     ProcessOptions,
     ProcessResult,
     PregenerationJob,
+    SourceCacheResult,
 )
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     "ProcessOptions",
     "ProcessResult",
     "PregenerationJob",
+    "SourceCacheResult",
     "WorkIdentity",
     "WorkMetadata",
 ]

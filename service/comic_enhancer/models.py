@@ -10,6 +10,7 @@ from .domain import (
     ProcessingModeOption,
     ProcessOptions,
     ProcessResult,
+    SourceCacheResult,
     WorkIdentity,
     WorkMetadata,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "ProcessingModeOption",
     "ProcessOptions",
     "ProcessResult",
+    "SourceCacheResult",
     "WorkIdentity",
     "WorkMetadata",
 ]

@@ -110,6 +110,10 @@ class PregenerationService:
             options = ProcessOptions.model_validate(job["options_json"])
             if str(options.mode) == "flux2_character_lineart":
                 options = options.model_copy(update={"comfyui_direct_output": False})
+            mode_revision = await asyncio.to_thread(
+                self.processor.base_cache_revision,
+                options,
+            )
             result = await process_page_with_references(
                 processor=self.processor,
                 metadata=self.metadata,
@@ -127,6 +131,7 @@ class PregenerationService:
                 result.cache_key,
                 result_path,
                 str(options.mode),
+                mode_revision,
             )
             log_operation(
                 logger,

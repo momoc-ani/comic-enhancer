@@ -41,6 +41,7 @@
   "qwen_vl_max_image_edge": 2048,
   "character_min_confidence": 0.85,
   "character_library_root": "runtime/character-library",
+  "source_cache_max_bytes": 21474836480,
   "comfyui_workflow_fast": "workflows/sd15-colorize-fast.json",
   "comfyui_workflow_quality": "workflows/sd15-colorize-quality.json",
   "runtime_dir": "runtime",

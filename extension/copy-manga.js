@@ -108,28 +108,44 @@
       };
     }
 
-    // 方法说明：查找并去重当前 DOM 中已经加载的有效漫画图片。
-    findImages() {
-      const candidates = [
-        ...this.pageDocument.querySelectorAll(CHAPTER_IMAGE_SELECTORS.join(",")),
-      ];
+    // 方法说明：查找并去重当前章节中已加载或已声明真实地址的漫画图片。
+    findImages({ includeUnloaded = true } = {}) {
+      const candidates = [];
+      CHAPTER_IMAGE_SELECTORS.forEach((selector, selectorIndex) => {
+        for (const image of this.pageDocument.querySelectorAll(selector)) {
+          candidates.push({ image, selectorIndex });
+        }
+      });
       const bestByUrl = new Map();
-      for (const image of candidates) {
+      for (const { image, selectorIndex } of candidates) {
         const url = this.imageUrl(image);
         const width = image.naturalWidth || Number(image.getAttribute("width")) || 0;
         const height = image.naturalHeight || Number(image.getAttribute("height")) || 0;
-        if (!url || !(height >= 500 || height > width * 1.1)) continue;
+        const hasDimensions = height >= 500 || height > width * 1.1;
+        const knownChapterContainer = selectorIndex < CHAPTER_IMAGE_SELECTORS.length - 1;
+        if (
+          !url ||
+          isPlaceholderImage(image, url) ||
+          (!hasDimensions && (!includeUnloaded || !knownChapterContainer))
+        ) {
+          continue;
+        }
         const previous = bestByUrl.get(url);
-        if (!previous || imageScore(image) > imageScore(previous)) {
-          bestByUrl.set(url, image);
+        const score = imageScore(image) + (knownChapterContainer ? 2 : 0);
+        const previousScore = previous
+          ? imageScore(previous.image) + (previous.knownChapterContainer ? 2 : 0)
+          : -Infinity;
+        if (!previous || score > previousScore) {
+          bestByUrl.set(url, { image, knownChapterContainer });
         }
       }
-      return [...bestByUrl.values()];
+      return [...bestByUrl.values()].map((entry) => entry.image);
     }
 
     // 方法说明：解析图片真实地址并过滤占位数据。
     imageUrl(image) {
       const raw =
+        image.dataset.comicEnhancerSourceUrl ||
         image.dataset.src ||
         image.dataset.original ||
         image.getAttribute("data-lazy-src") ||
@@ -149,7 +165,9 @@
           this.pageLocation.href,
         );
       }
-      return this.findImages().map((image) => this.imageUrl(image)).filter(Boolean);
+      return this.findImages({ includeUnloaded: true })
+        .map((image) => this.imageUrl(image))
+        .filter(Boolean);
     }
 
     // 方法说明：查找拷贝漫画页面声明的紧邻下一话地址。
@@ -184,33 +202,53 @@
           throw new Error("下一话链接跨域，已停止预生成");
         }
         if (visitedUrls.has(requestedUrl.href)) break;
-        const response = await fetch(requestedUrl.href, {
-          credentials: "include",
-          cache: "no-cache",
-        });
-        if (!response.ok) {
-          throw new Error(`下一话页面下载失败：${response.status}`);
-        }
-        const resolvedUrl = new URL(response.url || requestedUrl.href);
-        if (resolvedUrl.origin !== initialUrl.origin) {
-          throw new Error("下一话响应跨域，已停止预生成");
-        }
+        const next = await this.loadFollowingChapterWithRetry(
+          requestedUrl,
+          initialUrl.origin,
+        );
+        const { resolvedUrl, chapter, imageUrls } = next;
         if (visitedUrls.has(resolvedUrl.href)) break;
-        const parser = new DOMParser();
-        const nextDocument = parser.parseFromString(await response.text(), "text/html");
-        const nextAdapter = new CopyMangaAdapter(nextDocument, resolvedUrl);
-        const chapter = nextAdapter.getChapter();
         if (visitedChapters.has(chapter.chapter_id)) break;
-        const imageUrls = await nextAdapter.getChapterImageUrls();
-        if (imageUrls.length === 0) {
-          throw new Error("下一话页面没有可预生成的漫画图片");
-        }
         chapters.push({ url: resolvedUrl.href, chapter, imageUrls });
         visitedUrls.add(resolvedUrl.href);
         visitedChapters.add(chapter.chapter_id);
-        currentAdapter = nextAdapter;
+        currentAdapter = next.adapter;
       }
       return chapters;
+    }
+
+    // 方法说明：短暂网络错误或懒加载响应异常时重试下一话解析。
+    async loadFollowingChapterWithRetry(requestedUrl, initialOrigin) {
+      let lastError = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const response = await fetch(requestedUrl.href, {
+            credentials: "include",
+            cache: "no-cache",
+          });
+          if (!response.ok) {
+            throw new Error(`下一话页面下载失败：${response.status}`);
+          }
+          const resolvedUrl = new URL(response.url || requestedUrl.href);
+          if (resolvedUrl.origin !== initialOrigin) {
+            throw new Error("下一话响应跨域，已停止预生成");
+          }
+          const parser = new DOMParser();
+          const nextDocument = parser.parseFromString(await response.text(), "text/html");
+          const adapter = new CopyMangaAdapter(nextDocument, resolvedUrl);
+          const chapter = adapter.getChapter();
+          const imageUrls = await adapter.getChapterImageUrls();
+          if (imageUrls.length === 0) {
+            throw new Error("下一话页面没有可预生成的漫画图片");
+          }
+          return { adapter, chapter, imageUrls, resolvedUrl };
+        } catch (error) {
+          lastError = error;
+          if (attempt >= 2) break;
+          await delay((attempt + 1) * 250);
+        }
+      }
+      throw lastError || new Error("下一话解析失败");
     }
 
     // 方法说明：读取当前页面指定元标签的内容。
@@ -369,12 +407,23 @@
 
   // 方法说明：计算候选漫画图片的选择分数。
   function imageScore(image) {
-    const box = image.getBoundingClientRect();
+    const box = image.getBoundingClientRect?.() || { width: 0, height: 0 };
     return (
       (image.classList.contains("blank") ? -1000 : 0) +
       (box.width > 0 && box.height > 0 ? 100 : 0) +
       (image.complete && image.naturalWidth > 0 ? 10 : 0)
     );
+  }
+
+  // 方法说明：过滤明显的空白图、占位图和加载图。
+  function isPlaceholderImage(image, url) {
+    if (image.classList?.contains("blank")) return true;
+    return /(?:blank|placeholder|loading|spacer)(?:[._/-]|$)|\/(?:static\/)?ads?(?:[._/-]|$)|(?:banner|promotion)(?:[._/-]|$)/i.test(url);
+  }
+
+  // 方法说明：等待懒加载器或网络请求完成一次短暂重试间隔。
+  function delay(milliseconds) {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
 
   globalThis.ComicEnhancerCopyManga = Object.freeze({

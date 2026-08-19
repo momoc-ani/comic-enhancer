@@ -90,6 +90,9 @@ test("prefetch processing skips result image download", async () => {
     if (String(url) === "http://127.0.0.1:8765/v1/pregeneration/cache/resolve") {
       return new Response("not found", { status: 404 });
     }
+    if (String(url) === "http://127.0.0.1:8765/v1/pregeneration/source/resolve") {
+      return new Response("not found", { status: 404 });
+    }
     if (String(url) === "http://127.0.0.1:8765/v1/pregeneration/pages") {
       return new Response(
         JSON.stringify({
@@ -116,6 +119,7 @@ test("prefetch processing skips result image download", async () => {
     requests.map((request) => request.url),
     [
       "http://127.0.0.1:8765/v1/pregeneration/cache/resolve",
+      "http://127.0.0.1:8765/v1/pregeneration/source/resolve",
       "https://img.example/page-1.webp",
       "http://127.0.0.1:8765/v1/pregeneration/pages",
     ],
@@ -123,8 +127,8 @@ test("prefetch processing skips result image download", async () => {
   assert.equal(storageWrites.length, 0);
 });
 
-// 方法说明：验证章节缓存命中时跳过原图上传和重新推理。
-test("uses completed chapter cache before downloading source image", async () => {
+// 方法说明：验证章节缓存命中时同时使用本地原图且不访问漫画图片域名。
+test("uses completed chapter and source caches without remote image access", async () => {
   storedSettings = {
     enabled: true,
     deployment: "local",
@@ -148,6 +152,18 @@ test("uses completed chapter cache before downloading source image", async () =>
         { status: 200, headers: { "content-type": "application/json" } },
       );
     }
+    if (String(url).endsWith("/v1/pregeneration/source/resolve")) {
+      return new Response(
+        JSON.stringify({ source_url: "/v1/pregeneration/source/source-id" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    if (String(url).endsWith("/v1/pregeneration/source/source-id")) {
+      return new Response(new Uint8Array([9, 8, 7]), {
+        status: 200,
+        headers: { "content-type": "image/webp" },
+      });
+    }
     if (String(url).endsWith("/v1/results/chapter-cache.webp")) {
       return new Response(new Uint8Array([1, 2, 3]), {
         status: 200,
@@ -166,9 +182,74 @@ test("uses completed chapter cache before downloading source image", async () =>
   });
 
   assert.equal(result.cached, true);
+  assert.match(result.source_image_data_url, /^data:image\/webp;base64,/);
   assert.deepEqual(requests, [
     "http://127.0.0.1:8765/v1/pregeneration/cache/resolve",
+    "http://127.0.0.1:8765/v1/pregeneration/source/resolve",
+    "http://127.0.0.1:8765/v1/pregeneration/source/source-id",
     "http://127.0.0.1:8765/v1/results/chapter-cache.webp",
   ]);
   assert.equal(storageWrites.length, 1);
+});
+
+// 方法说明：验证增强缓存失效时会用本地原图重新推理而不访问图片 CDN。
+test("reprocesses a local source cache when the result cache misses", async () => {
+  storedSettings = {
+    enabled: true,
+    deployment: "local",
+    localApiBaseUrl: "http://127.0.0.1:8765",
+    localApiToken: "test-token",
+    localMode: "quality",
+  };
+  storageWrites.length = 0;
+  const requests = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const value = String(url);
+    requests.push(value);
+    if (value.endsWith("/v1/pregeneration/cache/resolve")) {
+      return new Response("not found", { status: 404 });
+    }
+    if (value.endsWith("/v1/pregeneration/source/resolve")) {
+      return new Response(
+        JSON.stringify({ source_url: "/v1/pregeneration/source/source-id" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    if (value.endsWith("/v1/pregeneration/source/source-id")) {
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { "content-type": "image/webp" },
+      });
+    }
+    if (value.endsWith("/v1/pages/process")) {
+      assert.equal(options.body.get("chapter_json"), '{"chapter_id":"chapter-1"}');
+      return new Response(
+        JSON.stringify({
+          result_url: "/v1/results/reprocessed.webp",
+          model_profile: "passthrough",
+          cached: false,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    if (value.endsWith("/v1/results/reprocessed.webp")) {
+      return new Response(new Uint8Array([4, 5, 6]), {
+        status: 200,
+        headers: { "content-type": "image/webp" },
+      });
+    }
+    throw new Error(`不应访问漫画图片域名：${url}`);
+  };
+
+  const result = await processPage({
+    imageUrl: "https://img.example/page-1.webp",
+    work: { source: "copy_manga", source_work_id: "work" },
+    chapter: { chapter_id: "chapter-1" },
+    options: { page_index: 0, palette_version: "default" },
+    prefetchOnly: false,
+  });
+
+  assert.equal(result.cached, false);
+  assert.match(result.source_image_data_url, /^data:image\/webp;base64,/);
+  assert.equal(requests.includes("https://img.example/page-1.webp"), false);
 });

@@ -145,31 +145,35 @@ async function processPage(payload) {
   }
   if (cachedResult) {
     if (payload.prefetchOnly) return cachedResult;
-    return downloadResult(cachedResult, settings);
+    const cachedSource = await resolveSourceCacheSafely(payload, settings);
+    return downloadResult(cachedResult, settings, cachedSource);
   }
 
-  const imageOrigin = new URL(payload.imageUrl).origin;
-  const hasImageAccess = await chrome.permissions.contains({
-    origins: [`${imageOrigin}/*`],
-  });
-  if (!hasImageAccess) {
-    throw new Error("缺少漫画图片域名权限，请打开插件并保存设置");
+  let sourceBlob = await resolveSourceCacheSafely(payload, settings);
+  if (!sourceBlob) {
+    const imageOrigin = new URL(payload.imageUrl).origin;
+    const hasImageAccess = await chrome.permissions.contains({
+      origins: [`${imageOrigin}/*`],
+    });
+    if (!hasImageAccess) {
+      throw new Error("缺少漫画图片域名权限，请打开插件并保存设置");
+    }
+
+    const sourceResponse = await fetch(payload.imageUrl, {
+      credentials: "include",
+      cache: "force-cache",
+    });
+    if (!sourceResponse.ok) {
+      throw new Error(`原图下载失败：${sourceResponse.status}`);
+    }
+    sourceBlob = await sourceResponse.blob();
   }
 
-  const sourceResponse = await fetch(payload.imageUrl, {
-    credentials: "include",
-    cache: "force-cache",
-  });
-  if (!sourceResponse.ok) {
-    throw new Error(`原图下载失败：${sourceResponse.status}`);
-  }
-
-  const sourceBlob = await sourceResponse.blob();
   const form = new FormData();
   form.append("image", sourceBlob, `page-${payload.options.page_index}.img`);
   form.append("work_json", JSON.stringify(payload.work));
+  form.append("chapter_json", JSON.stringify(payload.chapter || {}));
   if (payload.prefetchOnly) {
-    form.append("chapter_json", JSON.stringify(payload.chapter || {}));
     form.append("page_count", String(payload.pageCount || 1));
     form.append("priority", String(payload.priority ?? 100));
   }
@@ -195,7 +199,7 @@ async function processPage(payload) {
   const result = await response.json();
   if (payload.prefetchOnly) return result;
 
-  return downloadResult(result, settings);
+  return downloadResult(result, settings, sourceBlob);
 }
 
 // 方法说明：按作品、章节、页码和模式查询服务端已完成缓存。
@@ -223,6 +227,48 @@ async function resolveChapterCache(payload, options, settings) {
   return result;
 }
 
+// 方法说明：查询并下载服务端已持久化的章节原图，失败时允许网页回源。
+async function resolveSourceCacheSafely(payload, settings) {
+  if (!payload.chapter?.chapter_id) return null;
+  const started = performance.now();
+  try {
+    const form = new FormData();
+    form.append("work_json", JSON.stringify(payload.work));
+    form.append("chapter_json", JSON.stringify(payload.chapter));
+    form.append("page_index", String(payload.options.page_index));
+    const apiBaseUrl = settings.apiBaseUrl.replace(/\/$/, "");
+    const response = await fetch(`${apiBaseUrl}/v1/pregeneration/source/resolve`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${settings.apiToken}` },
+      body: form,
+    });
+    if (response.status === 404) {
+      logSourceCacheLookup(payload, "未命中", performance.now() - started);
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(`原图缓存服务失败：${response.status}`);
+    }
+    const source = await response.json();
+    const sourceResponse = await fetch(`${apiBaseUrl}${source.source_url}`, {
+      headers: { Authorization: `Bearer ${settings.apiToken}` },
+    });
+    if (!sourceResponse.ok) {
+      throw new Error(`原图缓存下载失败：${sourceResponse.status}`);
+    }
+    logSourceCacheLookup(payload, "命中", performance.now() - started);
+    return sourceResponse.blob();
+  } catch (error) {
+    logSourceCacheLookup(
+      payload,
+      "回退网页",
+      performance.now() - started,
+      normalizeError(error),
+    );
+    return null;
+  }
+}
+
 // 方法说明：输出不包含图片地址和令牌的缓存查询日志。
 function logCacheLookup(payload, options, status, elapsedMs) {
   console.info(
@@ -235,8 +281,19 @@ function logCacheLookup(payload, options, status, elapsedMs) {
   );
 }
 
+// 方法说明：输出不包含原图地址和令牌的本地原图缓存查询日志。
+function logSourceCacheLookup(payload, status, elapsedMs, error = "") {
+  console.info(
+    `功能=章节原图缓存查询 参数=${JSON.stringify({
+      章节: payload.chapter?.chapter_id || "",
+      页码: Number(payload.options.page_index) + 1,
+    })} 结果=${JSON.stringify({ 状态: status, ...(error ? { 错误: error } : {}) })}` +
+      ` 耗时_ms=${Math.round(elapsedMs)}`,
+  );
+}
+
 // 方法说明：鉴权下载命中的增强结果并转换为页面可显示的数据地址。
-async function downloadResult(result, settings) {
+async function downloadResult(result, settings, sourceBlob = null) {
   const apiBaseUrl = settings.apiBaseUrl.replace(/\/$/, "");
 
   const imageResponse = await fetch(`${apiBaseUrl}${result.result_url}`, {
@@ -253,18 +310,24 @@ async function downloadResult(result, settings) {
   return {
     ...result,
     image_data_url: await responseToDataUrl(imageResponse),
+    source_image_data_url: sourceBlob ? await blobToDataUrl(sourceBlob) : "",
   };
 }
 
 // 方法说明：将鉴权响应转换为页面可用的数据地址。
 async function responseToDataUrl(response) {
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  return blobToDataUrl(await response.blob());
+}
+
+// 方法说明：将图片二进制转换为内容脚本可直接显示的数据地址。
+async function blobToDataUrl(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
   const chunkSize = 0x8000;
   let binary = "";
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
   }
-  return `data:${response.headers.get("content-type") || "image/webp"};base64,${btoa(binary)}`;
+  return `data:${blob.type || "image/webp"};base64,${btoa(binary)}`;
 }
 
 // 方法说明：将未知异常规范化为可展示消息。

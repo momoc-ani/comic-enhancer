@@ -56,6 +56,19 @@ class PregenerationJob(BaseModel):
     error: str = ""
 
 
+class SourceCacheResult(BaseModel):
+    """返回可鉴权读取的本地章节原图缓存信息。"""
+
+    source_id: str
+    work_key: str
+    chapter_id: str
+    page_index: int
+    source_sha256: str
+    source_bytes: int
+    media_type: str
+    source_url: str
+
+
 class ProcessingModeOption(BaseModel):
     value: ProcessingMode
     label: str

@@ -73,6 +73,100 @@ def test_store_prioritizes_and_recovers_processing_jobs(tmp_path: Path):
     assert store.get(current["job_id"])["status"] == "queued"
 
 
+# 方法说明：验证原图缓存独立于处理档位，并拒绝内容损坏的缓存文件。
+def test_store_resolves_valid_source_cache_and_rejects_corruption(tmp_path: Path):
+    store = PregenerationStore(tmp_path / "pregeneration")
+    store.enqueue(**enqueue_values(priority=100, page_index=0))
+
+    source = store.resolve_source("copy_manga:work", "chapter-1", 0)
+
+    assert source is not None
+    assert source["media_type"] == "image/png"
+    assert source["source_bytes"] == len(png_bytes())
+    assert store.get_source(source["source_id"])["source_sha256"] == source["source_sha256"]
+
+    Path(source["source_path"]).write_bytes(b"corrupted")
+    assert store.resolve_source("copy_manga:work", "chapter-1", 0) is None
+
+
+# 方法说明：验证原图缓存按最近访问时间淘汰未被任务占用的旧文件。
+def test_source_cache_evicts_old_unprotected_entries(tmp_path: Path):
+    first = png_bytes("white")
+    second = png_bytes("black")
+    third = png_bytes("red")
+    store = PregenerationStore(
+        tmp_path / "pregeneration",
+        source_cache_max_bytes=len(first) + len(third),
+    )
+    store.persist_source(
+        work_key="copy_manga:work",
+        chapter_id="chapter-1",
+        page_index=0,
+        image_bytes=first,
+    )
+    store.persist_source(
+        work_key="copy_manga:work",
+        chapter_id="chapter-1",
+        page_index=1,
+        image_bytes=second,
+    )
+    assert store.resolve_source("copy_manga:work", "chapter-1", 0) is not None
+
+    store.persist_source(
+        work_key="copy_manga:work",
+        chapter_id="chapter-1",
+        page_index=2,
+        image_bytes=third,
+    )
+
+    assert store.resolve_source("copy_manga:work", "chapter-1", 0) is not None
+    assert store.resolve_source("copy_manga:work", "chapter-1", 1) is None
+    assert store.resolve_source("copy_manga:work", "chapter-1", 2) is not None
+
+
+# 方法说明：验证处理档位修订变化不会继续命中旧章节增强结果。
+def test_resolve_completed_requires_current_mode_revision(tmp_path: Path):
+    store = PregenerationStore(tmp_path / "pregeneration")
+    cache = ResultCache(tmp_path / "results")
+    queued = store.enqueue(**enqueue_values(priority=100), mode_revision="revision-v1")
+    claimed = store.claim_next()
+    assert claimed is not None
+    output = cache.temporary_result_path("a" * 64)
+    output.write_bytes(b"result")
+    result_path = cache.commit_result("a" * 64, output)
+    cache.save_metadata("a" * 64, {})
+    store.complete(
+        queued["job_id"],
+        "a" * 64,
+        result_path,
+        "fast",
+        "revision-v1",
+    )
+
+    assert (
+        store.resolve_completed(
+            "copy_manga:work",
+            "chapter-1",
+            0,
+            enqueue_values(priority=100)["options_json"],
+            cache,
+            mode_revision="revision-v1",
+        )
+        is not None
+    )
+    assert (
+        store.resolve_completed(
+            "copy_manga:work",
+            "chapter-1",
+            0,
+            enqueue_values(priority=100)["options_json"],
+            cache,
+            mode_revision="revision-v2",
+        )
+        is None
+    )
+
+
 # 方法说明：验证失败页 manifest 不声明不存在的章节结果文件。
 def test_failed_page_manifest_keeps_result_path_empty(tmp_path: Path):
     store = PregenerationStore(tmp_path / "pregeneration")
@@ -186,6 +280,20 @@ def test_pregeneration_api_persists_and_completes_job(tmp_path: Path):
         assert resolved.status_code == 200
         assert resolved.json()["cached"] is True
         assert resolved.json()["cache_key"] == completed["cache_key"]
+        source = client.post(
+            "/v1/pregeneration/source/resolve",
+            headers=headers,
+            data={
+                "work_json": request["data"]["work_json"],
+                "chapter_json": request["data"]["chapter_json"],
+                "page_index": "0",
+            },
+        )
+        assert source.status_code == 200
+        assert source.json()["media_type"] == "image/png"
+        source_image = client.get(source.json()["source_url"], headers=headers)
+        assert source_image.status_code == 200
+        assert source_image.content == png_bytes()
         different_mode = client.post(
             "/v1/pregeneration/cache/resolve",
             headers=headers,
@@ -216,6 +324,39 @@ def test_pregeneration_api_persists_and_completes_job(tmp_path: Path):
     assert all(page["status"] == "completed" for page in manifest["pages"])
     assert (manifests[0].parent / "01.webp").is_file()
     assert (manifests[0].parent / "02.webp").is_file()
+
+
+# 方法说明：验证普通可见页处理也会写入可供后续档位复用的原图缓存。
+def test_visible_page_process_persists_source_cache(tmp_path: Path):
+    settings = Settings(api_token="test-token", runtime_dir=tmp_path / "runtime")
+    headers = {"Authorization": "Bearer test-token"}
+    work_json = '{"source":"copy_manga","source_work_id":"work"}'
+    chapter_json = '{"chapter_id":"chapter-visible","title":"可见页"}'
+
+    with TestClient(create_app(settings)) as client:
+        processed = client.post(
+            "/v1/pages/process",
+            headers=headers,
+            data={
+                "work_json": work_json,
+                "chapter_json": chapter_json,
+                "options_json": '{"mode":"fast","page_index":3}',
+            },
+            files={"image": ("page.png", png_bytes(), "image/png")},
+        )
+        source = client.post(
+            "/v1/pregeneration/source/resolve",
+            headers=headers,
+            data={
+                "work_json": work_json,
+                "chapter_json": chapter_json,
+                "page_index": "3",
+            },
+        )
+
+    assert processed.status_code == 200
+    assert source.status_code == 200
+    assert source.json()["source_bytes"] == len(png_bytes())
 
 
 # 方法说明：验证结果缓存和提交元数据在服务重启后仍直接命中。

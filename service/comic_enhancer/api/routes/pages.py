@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -7,8 +8,14 @@ import time
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from ...application import process_page_with_references
-from ...domain import ProcessingMode, ProcessOptions, ProcessResult, WorkIdentity
-from ...logging_utils import log_operation
+from ...domain import (
+    ChapterIdentity,
+    ProcessingMode,
+    ProcessOptions,
+    ProcessResult,
+    WorkIdentity,
+)
+from ...logging_utils import exception_log_fields, log_operation
 from ..dependencies import authorize, get_context
 
 router = APIRouter()
@@ -19,6 +26,7 @@ async def process_page(
     request: Request,
     image: UploadFile = File(),
     work_json: str = Form(),
+    chapter_json: str = Form(default="{}"),
     options_json: str = Form(default="{}"),
     _: None = Depends(authorize),
 ) -> ProcessResult:
@@ -29,6 +37,7 @@ async def process_page(
         work = context.identities.enrich(
             WorkIdentity.model_validate(json.loads(work_json))
         )
+        chapter = ChapterIdentity.model_validate(json.loads(chapter_json))
         options = ProcessOptions.model_validate(json.loads(options_json))
         if options.mode == ProcessingMode.FLUX2_CHARACTER_LINEART:
             options = options.model_copy(update={"comfyui_direct_output": False})
@@ -40,6 +49,30 @@ async def process_page(
         raise HTTPException(status_code=422, detail="empty image")
     if len(image_bytes) > 30 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="image exceeds 30 MiB")
+
+    if chapter.chapter_id:
+        try:
+            await asyncio.to_thread(
+                context.pregeneration_store.persist_source,
+                work_key=work.key,
+                chapter_id=chapter.chapter_id,
+                page_index=options.page_index,
+                image_bytes=image_bytes,
+                work_title=work.title,
+                chapter_title=chapter.title,
+            )
+        except Exception as error:
+            log_operation(
+                logger,
+                logging.WARNING,
+                feature="页面原图缓存写入",
+                parameters={
+                    "work_key": work.key,
+                    "chapter_id": chapter.chapter_id,
+                    "page_index": options.page_index,
+                },
+                result={"status": "skipped", **exception_log_fields(error)},
+            )
 
     request_parameters = {
         "work": {
@@ -53,6 +86,7 @@ async def process_page(
             "has_cover_url": bool(work.cover_url),
         },
         "options": options.model_dump(mode="json"),
+        "chapter": chapter.model_dump(mode="json"),
         "image": {
             "filename": image.filename or "",
             "content_type": image.content_type or "",
