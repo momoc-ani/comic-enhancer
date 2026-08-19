@@ -1,5 +1,6 @@
 import { buildModelExecution } from "./model-status.js";
 import { DEFAULT_SETTINGS, migrateSettings } from "./settings.js";
+import { postMultipart } from "./transport.js";
 
 const SUPPORTED_PAGE_PATTERNS = Object.freeze([
   "*://*.copymanga.com/comic/*/chapter/*",
@@ -186,10 +187,8 @@ async function processPage(payload) {
   const endpoint = payload.prefetchOnly
     ? "/v1/pregeneration/pages"
     : "/v1/pages/process";
-  const response = await fetch(`${apiBaseUrl}${endpoint}`, {
-    method: "POST",
+  const response = await postMultipart(`${apiBaseUrl}${endpoint}`, form, {
     headers: { Authorization: `Bearer ${settings.apiToken}` },
-    body: form,
   });
   if (!response.ok) {
     const detail = await response.text();
@@ -210,11 +209,13 @@ async function resolveChapterCache(payload, options, settings) {
   form.append("chapter_json", JSON.stringify(payload.chapter || {}));
   form.append("options_json", JSON.stringify(options));
   const apiBaseUrl = settings.apiBaseUrl.replace(/\/$/, "");
-  const response = await fetch(`${apiBaseUrl}/v1/pregeneration/cache/resolve`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${settings.apiToken}` },
-    body: form,
-  });
+  const response = await postMultipart(
+    `${apiBaseUrl}/v1/pregeneration/cache/resolve`,
+    form,
+    {
+      headers: { Authorization: `Bearer ${settings.apiToken}` },
+    },
+  );
   if (response.status === 404) {
     logCacheLookup(payload, options, "未命中", performance.now() - started);
     return null;
@@ -237,11 +238,13 @@ async function resolveSourceCacheSafely(payload, settings) {
     form.append("chapter_json", JSON.stringify(payload.chapter));
     form.append("page_index", String(payload.options.page_index));
     const apiBaseUrl = settings.apiBaseUrl.replace(/\/$/, "");
-    const response = await fetch(`${apiBaseUrl}/v1/pregeneration/source/resolve`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${settings.apiToken}` },
-      body: form,
-    });
+    const response = await postMultipart(
+      `${apiBaseUrl}/v1/pregeneration/source/resolve`,
+      form,
+      {
+        headers: { Authorization: `Bearer ${settings.apiToken}` },
+      },
+    );
     if (response.status === 404) {
       logSourceCacheLookup(payload, "未命中", performance.now() - started);
       return null;

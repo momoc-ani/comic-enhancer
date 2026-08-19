@@ -28,6 +28,8 @@
 
 浏览器插件只访问漫画增强 API。快速、质量和 FLUX.2 都是同一个 ComfyUI 容器中的预设工作流；放大档由 API 进程调用当前平台的 Real-CUGAN 可执行程序。FLUX.2 输出还会进入 UPSCALE 二阶段。后端只配置一个 `comfyui_url`，Real-CUGAN 使用本地资源目录而不是第二个推理地址。
 
+插件与 API 之间的图片传输由独立传输层负责：插件把 multipart 请求序列化后使用浏览器原生 `CompressionStream("gzip")` 压缩，并在 gzip 无收益或浏览器不支持时回退普通 multipart；服务端在 FastAPI 路由前透明解压并限制压缩体和解压体大小。API 响应使用 gzip 传输，增强结果和章节原图缓存的 `FileResponse` path-send 分支也由传输层处理。压缩只改变 HTTP 传输表示，不重新编码图片；服务端解压后的图片字节与插件上传字节完全一致，浏览器收到响应后自动还原原始响应字节。
+
 ## 档位策略边界
 
 API 先通过 `RoutedInferenceBackend` 区分平台原生档位与主推理后端；ComfyUI 后端再通过 `ComfyUIModeStrategy` 注册上色档位。每个档位独立实现可用性、缓存版本、适配器策略和处理逻辑：

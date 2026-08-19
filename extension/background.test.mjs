@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { gunzipSync } from "node:zlib";
 
 const listeners = {};
 let storedSettings = {};
@@ -222,7 +223,13 @@ test("reprocesses a local source cache when the result cache misses", async () =
       });
     }
     if (value.endsWith("/v1/pages/process")) {
-      assert.equal(options.body.get("chapter_json"), '{"chapter_id":"chapter-1"}');
+      assert.equal(options.headers.get("Content-Encoding"), "gzip");
+      const requestText = new TextDecoder().decode(
+        gunzipSync(
+          Buffer.from(await new Response(options.body).arrayBuffer()),
+        ),
+      );
+      assert.match(requestText, /\{"chapter_id":"chapter-1"\}/);
       return new Response(
         JSON.stringify({
           result_url: "/v1/results/reprocessed.webp",
